@@ -1,0 +1,41 @@
+{
+  "name": "hadjitron3000",
+  "productName": "Hadjitron 3000",
+  "version": "0.1.0",
+  "description": "A small retro music machine: build sounds in the Factory, put them on the Track grid.",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "start": "vite build && electron .",
+    "dev": "node scripts/dev.mjs",
+    "web": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --project unit",
+    "test:browser": "vitest run --project browser",
+    "test:e2e": "playwright test",
+    "dist": "vite build && electron-builder --mac"
+  },
+  "dependencies": {
+    "idb-keyval": "^6.3.0",
+    "immer": "^11.2.10",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "wasm-media-encoders": "^0.7.0",
+    "zustand": "^5.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "@vitest/browser-playwright": "^5.1.0",
+    "electron": "^45.3.1",
+    "electron-builder": "^26.18.0",
+    "playwright": "^1.65.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  }
+}

@@ -1,0 +1,85 @@
+/* Hadjitron 3000 design tokens. See docs/DESIGN.md. */
+
+@font-face {
+  font-family: 'Fusion Pixel 12';
+  src: url('./fonts/fusion-pixel-12.woff2') format('woff2');
+  font-display: block;
+}
+@font-face {
+  font-family: 'Fusion Pixel 10';
+  src: url('./fonts/fusion-pixel-10.woff2') format('woff2');
+  font-display: block;
+}
+@font-face {
+  font-family: 'Departure Mono';
+  src: url('./fonts/departure-mono.woff2') format('woff2');
+  font-display: block;
+}
+
+:root {
+  /* Putty: the plastic every surface is made of. */
+  --face: #d8d0be;
+  --face-hi: #ebe5d5;
+  --face-lo: #c2b9a5;
+  --hi: #fffdf4;
+  --lo: #948b78;
+  --ink: #2b251d;
+  --ink-soft: #5d5546;
+
+  /* Paper: lists and text fields. */
+  --paper: #fbf6e7;
+
+  /* Desk: what shows behind the window. */
+  --desk: #4a8a84;
+  --desk-2: #3f7c77;
+
+  /* Teal: title bars and selection. */
+  --title-a: #1f5a5e;
+  --title-b: #63a596;
+  --title-off-a: #948b78;
+  --title-off-b: #b9b09c;
+  --title-ink: #fffdf4;
+  --sel: #1f5a5e;
+  --sel-ink: #fffdf4;
+
+  /* Amber phosphor: every display. */
+  --crt: #1d150b;
+  --amber: #ffb43a;
+  --amber-mid: #c27f22;
+  --amber-dim: #6b4514;
+  --amber-glow: 0 0 5px rgba(255, 160, 40, 0.55);
+
+  /* Lamps. */
+  --red: #e0553d;
+  --red-off: #6e2f24;
+  --green: #86c35c;
+  --green-off: #3d5a2b;
+
+  /* Channel colours, index 0..7. */
+  --c0: #d9573f;
+  --c1: #e8943a;
+  --c2: #dcb944;
+  --c3: #86a552;
+  --c4: #4a9a8f;
+  --c5: #5d8fc2;
+  --c6: #8f64a8;
+  --c7: #d27a94;
+
+  /* Type. Pixel fonts stay sharp only at these exact sizes (or whole multiples). */
+  --font-ui: 12px/16px 'Fusion Pixel 12', sans-serif;
+  --font-small: 10px/12px 'Fusion Pixel 10', sans-serif;
+  --font-mono: 11px/14px 'Departure Mono', monospace;
+  --font-lcd: 22px/24px 'Departure Mono', monospace;
+
+  /* Bevels: 2px of light and shade drawn with inset shadows. */
+  --bevel-raised: inset -1px -1px var(--ink), inset 1px 1px var(--hi), inset -2px -2px var(--lo), inset 2px 2px var(--face-hi);
+  --bevel-window: inset -1px -1px var(--ink), inset 1px 1px var(--face-hi), inset -2px -2px var(--lo), inset 2px 2px var(--hi);
+  --bevel-pressed: inset 1px 1px var(--ink), inset -1px -1px var(--hi), inset 2px 2px var(--lo), inset -2px -2px var(--face-hi);
+  --bevel-sunken: inset -1px -1px var(--hi), inset 1px 1px var(--lo), inset -2px -2px var(--face-hi), inset 2px 2px var(--ink);
+  --bevel-well: inset -1px -1px var(--hi), inset 1px 1px var(--lo);
+  --bevel-ridge: inset 1px 1px var(--lo), inset -1px -1px var(--hi), inset 2px 2px var(--hi), inset -2px -2px var(--lo);
+
+  /* A 2x2 checkerboard of --hi over --face: pressed toggles and scrollbar tracks. */
+  --dither: linear-gradient(45deg, var(--hi) 25%, transparent 25%, transparent 75%, var(--hi) 75%) 0 0 / 2px 2px,
+    linear-gradient(45deg, var(--hi) 25%, transparent 25%, transparent 75%, var(--hi) 75%) 1px 1px / 2px 2px;
+}

@@ -1,0 +1,54 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 1,
+  "sound": {
+    "name": "Bell",
+    "source": {
+      "id": "source",
+      "type": "fm",
+      "params": {
+        "ratio": 3.5,
+        "amount": 1.6
+      }
+    },
+    "amp": {
+      "attack": 0.001,
+      "decay": 2.6,
+      "sustain": 0,
+      "release": 1.5
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "reverb",
+        "params": {
+          "size": 3.5,
+          "tone": 8000,
+          "mix": 0.3
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 1.2,
+          "sustain": 0,
+          "release": 0.5
+        },
+        "target": {
+          "module": "source",
+          "param": "amount"
+        },
+        "amount": 0.2
+      }
+    ],
+    "out": {
+      "level": -11,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

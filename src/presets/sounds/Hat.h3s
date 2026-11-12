@@ -1,0 +1,37 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 1,
+  "sound": {
+    "name": "Hat",
+    "source": {
+      "id": "source",
+      "type": "noise",
+      "params": {
+        "color": "white"
+      }
+    },
+    "amp": {
+      "attack": 0.001,
+      "decay": 0.06,
+      "sustain": 0,
+      "release": 0.03
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "filter",
+        "params": {
+          "mode": "highpass",
+          "cutoff": 7500,
+          "reso": 0.2
+        }
+      }
+    ],
+    "mods": [],
+    "out": {
+      "level": -11,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

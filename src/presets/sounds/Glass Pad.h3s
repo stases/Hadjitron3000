@@ -1,0 +1,63 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 1,
+  "sound": {
+    "name": "Glass Pad",
+    "source": {
+      "id": "source",
+      "type": "fm",
+      "params": {
+        "ratio": 2,
+        "amount": 0.7
+      }
+    },
+    "amp": {
+      "attack": 0.9,
+      "decay": 1.5,
+      "sustain": 0.75,
+      "release": 2.0
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "delay",
+        "params": {
+          "sync": "1/4",
+          "feedback": 0.45,
+          "tone": 3500,
+          "mix": 0.2,
+          "pingpong": true
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "reverb",
+        "params": {
+          "size": 5,
+          "tone": 6500,
+          "mix": 0.4
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "lfo",
+        "params": {
+          "wave": "triangle",
+          "rate": 0.2
+        },
+        "target": {
+          "module": "source",
+          "param": "amount"
+        },
+        "amount": 0.04
+      }
+    ],
+    "out": {
+      "level": -12,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

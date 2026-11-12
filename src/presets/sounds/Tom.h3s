@@ -1,0 +1,44 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 1,
+  "sound": {
+    "name": "Tom",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sine",
+        "pitch": -7
+      }
+    },
+    "amp": {
+      "attack": 0.001,
+      "decay": 0.3,
+      "sustain": 0,
+      "release": 0.12
+    },
+    "chain": [],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.06,
+          "sustain": 0,
+          "release": 0.05
+        },
+        "target": {
+          "module": "source",
+          "param": "pitch"
+        },
+        "amount": 0.22
+      }
+    ],
+    "out": {
+      "level": -6,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

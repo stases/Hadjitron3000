@@ -1,0 +1,61 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 1,
+  "sound": {
+    "name": "Square Lead",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "square"
+      }
+    },
+    "amp": {
+      "attack": 0.004,
+      "decay": 0.3,
+      "sustain": 0.8,
+      "release": 0.15
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "filter",
+        "params": {
+          "mode": "lowpass",
+          "cutoff": 2200,
+          "reso": 0.3
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "delay",
+        "params": {
+          "sync": "1/8",
+          "feedback": 0.3,
+          "tone": 3000,
+          "mix": 0.18
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "lfo",
+        "params": {
+          "wave": "sine",
+          "rate": 5.5
+        },
+        "target": {
+          "module": "source",
+          "param": "pitch"
+        },
+        "amount": 0.004
+      }
+    ],
+    "out": {
+      "level": -12,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

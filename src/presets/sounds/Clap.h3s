@@ -1,0 +1,57 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 1,
+  "sound": {
+    "name": "Clap",
+    "source": {
+      "id": "source",
+      "type": "noise",
+      "params": {
+        "color": "white"
+      }
+    },
+    "amp": {
+      "attack": 0.002,
+      "decay": 0.2,
+      "sustain": 0,
+      "release": 0.12
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "filter",
+        "params": {
+          "mode": "bandpass",
+          "cutoff": 1300,
+          "reso": 0.3
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "delay",
+        "params": {
+          "sync": "free",
+          "time": 0.012,
+          "feedback": 0.55,
+          "tone": 9000,
+          "mix": 0.7
+        }
+      },
+      {
+        "id": "fx3",
+        "type": "reverb",
+        "params": {
+          "size": 0.9,
+          "tone": 6000,
+          "mix": 0.18
+        }
+      }
+    ],
+    "mods": [],
+    "out": {
+      "level": -5,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

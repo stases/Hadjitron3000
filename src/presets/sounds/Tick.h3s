@@ -1,0 +1,45 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 1,
+  "sound": {
+    "name": "Tick",
+    "source": {
+      "id": "source",
+      "type": "fm",
+      "params": {
+        "pitch": 12,
+        "ratio": 1.41,
+        "amount": 3
+      }
+    },
+    "amp": {
+      "attack": 0.001,
+      "decay": 0.07,
+      "sustain": 0,
+      "release": 0.04
+    },
+    "chain": [],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.03,
+          "sustain": 0,
+          "release": 0.03
+        },
+        "target": {
+          "module": "source",
+          "param": "amount"
+        },
+        "amount": 0.3
+      }
+    ],
+    "out": {
+      "level": -10,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

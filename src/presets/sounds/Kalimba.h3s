@@ -1,0 +1,54 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 1,
+  "sound": {
+    "name": "Kalimba",
+    "source": {
+      "id": "source",
+      "type": "fm",
+      "params": {
+        "ratio": 7,
+        "amount": 0.4
+      }
+    },
+    "amp": {
+      "attack": 0.001,
+      "decay": 1.0,
+      "sustain": 0,
+      "release": 0.4
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "reverb",
+        "params": {
+          "size": 1.8,
+          "tone": 7000,
+          "mix": 0.18
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.09,
+          "sustain": 0,
+          "release": 0.05
+        },
+        "target": {
+          "module": "source",
+          "param": "amount"
+        },
+        "amount": 0.3
+      }
+    ],
+    "out": {
+      "level": -8,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

@@ -1,0 +1,38 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 1,
+  "sound": {
+    "name": "Sub Bass",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sine",
+        "pitch": -24
+      }
+    },
+    "amp": {
+      "attack": 0.005,
+      "decay": 0.3,
+      "sustain": 0.85,
+      "release": 0.12
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "drive",
+        "params": {
+          "shape": "soft",
+          "amount": 0.15,
+          "tone": 4000
+        }
+      }
+    ],
+    "mods": [],
+    "out": {
+      "level": -5,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

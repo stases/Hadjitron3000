@@ -1,0 +1,54 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 1,
+  "sound": {
+    "name": "Round Bass",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sawtooth",
+        "pitch": -24
+      }
+    },
+    "amp": {
+      "attack": 0.003,
+      "decay": 0.3,
+      "sustain": 0.7,
+      "release": 0.1
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "filter",
+        "params": {
+          "mode": "lowpass",
+          "cutoff": 320,
+          "reso": 0.22
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.22,
+          "sustain": 0,
+          "release": 0.1
+        },
+        "target": {
+          "module": "fx1",
+          "param": "cutoff"
+        },
+        "amount": 0.32
+      }
+    ],
+    "out": {
+      "level": -7,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

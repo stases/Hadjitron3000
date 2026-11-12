@@ -1,0 +1,67 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 1,
+  "sound": {
+    "name": "Pluck",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sawtooth",
+        "voices": 2,
+        "spread": 8,
+        "width": 0.4
+      }
+    },
+    "amp": {
+      "attack": 0.001,
+      "decay": 0.4,
+      "sustain": 0,
+      "release": 0.25
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "filter",
+        "params": {
+          "mode": "lowpass",
+          "cutoff": 700,
+          "reso": 0.25
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "delay",
+        "params": {
+          "sync": "1/8d",
+          "feedback": 0.35,
+          "tone": 3500,
+          "mix": 0.22,
+          "pingpong": true
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.2,
+          "sustain": 0,
+          "release": 0.1
+        },
+        "target": {
+          "module": "fx1",
+          "param": "cutoff"
+        },
+        "amount": 0.5
+      }
+    ],
+    "out": {
+      "level": -9,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

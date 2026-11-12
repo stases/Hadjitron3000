@@ -1,0 +1,63 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 1,
+  "sound": {
+    "name": "Warm Pad",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sawtooth",
+        "voices": 5,
+        "spread": 22,
+        "width": 0.8
+      }
+    },
+    "amp": {
+      "attack": 0.6,
+      "decay": 1.0,
+      "sustain": 0.8,
+      "release": 1.6
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "filter",
+        "params": {
+          "mode": "lowpass",
+          "cutoff": 1100,
+          "reso": 0.1
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "reverb",
+        "params": {
+          "size": 4,
+          "tone": 5000,
+          "mix": 0.35
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "lfo",
+        "params": {
+          "wave": "sine",
+          "rate": 0.15
+        },
+        "target": {
+          "module": "fx1",
+          "param": "cutoff"
+        },
+        "amount": 0.12
+      }
+    ],
+    "out": {
+      "level": -13,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

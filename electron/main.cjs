@@ -56,7 +56,7 @@ async function deliverFiles() {
 function queueArguments(argv, cwd = process.cwd()) {
   if (process.platform === 'darwin') return;
   for (const arg of argv.slice(process.defaultApp ? 2 : 1)) {
-    if (!arg.startsWith('-') && /\.(h3k|h3s)$/i.test(arg)) pendingFiles.push(path.resolve(cwd, arg));
+    if (!arg.startsWith('-') && /\.(h3k|h3s|h3b)$/i.test(arg)) pendingFiles.push(path.resolve(cwd, arg));
   }
   void deliverFiles();
 }
@@ -88,12 +88,6 @@ function handle(channel, count, handler) {
   });
 }
 
-async function libraryDirectory() {
-  const directory = path.join(app.getPath('documents'), 'Hadjitron 3000', 'Sounds');
-  await fs.mkdir(directory, { recursive: true });
-  return directory;
-}
-
 async function dialogDirectory() {
   if (lastDirectory) return lastDirectory;
   const directory = path.join(app.getPath('documents'), 'Hadjitron 3000');
@@ -101,9 +95,32 @@ async function dialogDirectory() {
   return directory;
 }
 
-async function libraryFile(name) {
-  validateLibraryName(name);
-  return path.join(await libraryDirectory(), name + '.h3s');
+function registerLibrary(channel, folder, extension) {
+  async function directory() {
+    const dir = path.join(app.getPath('documents'), 'Hadjitron 3000', folder);
+    await fs.mkdir(dir, { recursive: true });
+    return dir;
+  }
+  async function file(name) {
+    validateLibraryName(name);
+    return path.join(await directory(), name + extension);
+  }
+  handle(`${channel}-list`, 0, async () => {
+    const entries = await fs.readdir(await directory(), { withFileTypes: true });
+    return entries.filter((entry) => entry.isFile() && entry.name.endsWith(extension))
+      .map((entry) => entry.name.slice(0, -extension.length))
+      .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  });
+  handle(`${channel}-read`, 1, async (name) => new Uint8Array(await fs.readFile(await file(name))));
+  handle(`${channel}-write`, 2, async (name, bytes) => {
+    assert(bytes instanceof Uint8Array);
+    await fs.writeFile(await file(name), bytes);
+  });
+  handle(`${channel}-remove`, 1, async (name) => { await fs.unlink(await file(name)); });
+  handle(`${channel}-reveal`, 0, async () => {
+    const error = await shell.openPath(await directory());
+    if (error) throw new Error(error);
+  });
 }
 
 function registerRequests() {
@@ -141,22 +158,8 @@ function registerRequests() {
     if (opts.path == null) lastDirectory = path.dirname(file);
     return { name: path.basename(file), path: file };
   });
-  handle('library-list', 0, async () => {
-    const entries = await fs.readdir(await libraryDirectory(), { withFileTypes: true });
-    return entries.filter((entry) => entry.isFile() && entry.name.endsWith('.h3s'))
-      .map((entry) => entry.name.slice(0, -4))
-      .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-  });
-  handle('library-read', 1, async (name) => new Uint8Array(await fs.readFile(await libraryFile(name))));
-  handle('library-write', 2, async (name, bytes) => {
-    assert(bytes instanceof Uint8Array);
-    await fs.writeFile(await libraryFile(name), bytes);
-  });
-  handle('library-remove', 1, async (name) => { await fs.unlink(await libraryFile(name)); });
-  handle('library-reveal', 0, async () => {
-    const error = await shell.openPath(await libraryDirectory());
-    if (error) throw new Error(error);
-  });
+  registerLibrary('library', 'Sounds', '.h3s');
+  registerLibrary('blocks', 'Blocks', '.h3b');
   handle('window-minimize', 0, () => win.minimize());
   handle('window-toggle-maximize', 0, () => win.isMaximized() ? win.unmaximize() : win.maximize());
   handle('window-close', 0, () => win.close());

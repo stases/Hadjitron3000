@@ -20,4 +20,6 @@ mac:
       name: Hadjitron 3000 Project
     - ext: h3s
       name: Hadjitron 3000 Sound
+    - ext: h3b
+      name: Hadjitron 3000 Block
 publish: null

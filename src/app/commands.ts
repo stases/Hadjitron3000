@@ -234,7 +234,7 @@ export async function saveSoundToLibrary(channelId: string): Promise<void> {
     }
     await platform.library.write(name, utf8(serializeSound(channel.sound, useApp.getState().project.samples)));
   } catch (error) {
-    await fail(error instanceof Error && /Invalid sound name/.test(error.message)
+    await fail(error instanceof Error && /Invalid library name/.test(error.message)
       ? `"${name}" cannot be used as a file name. Rename the sound and try again.`
       : `The sound could not be saved to your library${reason(error)}.`);
   }
@@ -279,3 +279,12 @@ export function showAbout(): void {
 export function showShortcuts(): void {
   openDialog({ kind: 'shortcuts' });
 }
+
+/** Open the Block Library to add a block to the project. */
+export function addBlock(): void {}
+
+/** Save a block, with the sounds it plays, into the user's block library under its name. */
+export async function saveBlockToLibrary(_patternId: string): Promise<void> {}
+
+/** Save a block, with the sounds it plays, as a .h3b file anywhere. */
+export async function saveBlockAs(_patternId: string): Promise<void> {}

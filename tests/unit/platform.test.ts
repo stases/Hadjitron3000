@@ -1,7 +1,25 @@
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
+import { browserPlatform } from '../../src/platform/browser';
+
+const databases = vi.hoisted(() => new Map<string, Map<string, Uint8Array>>());
+vi.mock('idb-keyval', () => ({
+  createStore: (database: string, name: string) => {
+    const store = new Map<string, Uint8Array>();
+    databases.set(`${database}/${name}`, store);
+    return store;
+  },
+  keys: async (store: Map<string, Uint8Array>) => [...store.keys()],
+  get: async (name: string, store: Map<string, Uint8Array>) => store.get(name),
+  set: async (name: string, bytes: Uint8Array, store: Map<string, Uint8Array>) => { store.set(name, bytes); },
+  del: async (name: string, store: Map<string, Uint8Array>) => { store.delete(name); },
+}));
+
+beforeEach(() => {
+  for (const store of databases.values()) store.clear();
+});
 
 const require = createRequire(import.meta.url);
 const { validateLibraryName, appFilePath, contentType } = require('../../electron/paths.cjs') as {
@@ -26,18 +44,19 @@ test.each([
   ['notes.txt', 'text/plain; charset=utf-8'],
   ['INDEX.HTML', 'text/html; charset=utf-8'],
   ['sound.h3s', 'application/octet-stream'],
+  ['block.h3b', 'application/octet-stream'],
   ['unknown', 'application/octet-stream'],
 ])('serves %s with the correct content type', (file, expected) => {
   expect(contentType(file)).toBe(expected);
 });
 
-test.each(['Bass', 'Warm pad', 'a.b', '音色', 'sound.h3s'])('accepts a library name: %s', (name) => {
+test.each(['Bass', 'Warm pad', 'a.b', '音色', 'sound.h3s', 'block.h3b'])('accepts a library name: %s', (name) => {
   expect(validateLibraryName(name)).toBe(name);
 });
 
 test.each(['', '.', '..', '../bass', 'folder/bass', 'folder\\bass', 'a\0b', null, 1])(
   'rejects an unsafe library name: %s', (name) => {
-    expect(() => validateLibraryName(name)).toThrow('Invalid sound name');
+    expect(() => validateLibraryName(name)).toThrow('Invalid library name');
   },
 );
 
@@ -49,6 +68,51 @@ test.each([
   ['app://hadjitron/factory', 'factory'],
 ])('maps %s inside dist', (url, relative) => {
   expect(appFilePath(url, dist)).toBe(path.join(dist, relative));
+});
+
+test.each(['library', 'blocks'] as const)('the browser %s supports sorted names and file operations', async (kind) => {
+  const library = browserPlatform[kind];
+  const bytes = new Uint8Array([1, 2, 3]);
+  await library.write('zebra', bytes);
+  await library.write('Alpha', bytes);
+  expect(await library.list()).toEqual(['Alpha', 'zebra']);
+  expect(await library.read('zebra')).toEqual(bytes);
+  await library.write('zebra', new Uint8Array([4]));
+  expect(await library.read('zebra')).toEqual(new Uint8Array([4]));
+  await library.remove('zebra');
+  expect(await library.list()).toEqual(['Alpha']);
+  await expect(library.read('zebra')).rejects.toThrow('not found');
+  expect(library.reveal).toBeNull();
+});
+
+test('browser libraries are isolated and existing sounds remain readable', async () => {
+  const sound = new Uint8Array([1]);
+  const block = new Uint8Array([2]);
+  databases.get('hadjitron-library/sounds')!.set('Existing', sound);
+  expect(await browserPlatform.library.read('Existing')).toEqual(sound);
+  expect(await browserPlatform.blocks.list()).toEqual([]);
+  await browserPlatform.blocks.write('Existing', block);
+  expect(await browserPlatform.library.read('Existing')).toEqual(sound);
+  expect(await browserPlatform.blocks.read('Existing')).toEqual(block);
+  await browserPlatform.blocks.remove('Existing');
+  expect(await browserPlatform.library.list()).toEqual(['Existing']);
+  await browserPlatform.blocks.write('Existing', block);
+  await browserPlatform.library.remove('Existing');
+  expect(await browserPlatform.blocks.read('Existing')).toEqual(block);
+});
+
+test.each(['library', 'blocks'] as const)('the browser %s rejects unsafe names', async (kind) => {
+  const library = browserPlatform[kind];
+  for (const name of ['', '.', '..', '../bass', 'folder/bass', 'folder\\bass', 'a\0b', null, 1]) {
+    for (const operation of [
+      () => library.read(name as string),
+      () => library.write(name as string, new Uint8Array([1])),
+      () => library.remove(name as string),
+    ]) {
+      await expect(Promise.resolve().then(async () => { await operation(); })).rejects.toThrow('Invalid library name');
+    }
+  }
+  expect(await library.list()).toEqual([]);
 });
 
 test.each([

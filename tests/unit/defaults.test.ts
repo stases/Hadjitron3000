@@ -26,12 +26,12 @@ test('fresh documents have independent parameter objects', () => {
   expect(second.out.pan).toBe(0);
 });
 
-test('an empty project contains one pattern in its song', () => {
+test('an empty project contains one pattern and an empty song', () => {
   const project = emptyProject();
   expect(project).toEqual({
     name: 'Untitled', bpm: 120, swing: 0, master: 0, channels: [], samples: {},
-    patterns: [{ id: expect.any(String), name: 'A', bars: 1, cells: {} }],
-    song: [project.patterns[0].id],
+    patterns: [{ id: expect.any(String), name: 'A', color: 0, bars: 1, cells: {} }],
+    song: [],
   });
 });
 
@@ -45,7 +45,8 @@ test('module and modulator factories use their definitions', () => {
 });
 
 test('pattern and step factories supply editable defaults', () => {
-  expect(newPattern('B')).toEqual({ id: expect.stringMatching(/^p_/), name: 'B', bars: 1, cells: {} });
+  expect(newPattern('B')).toEqual({ id: expect.stringMatching(/^p_/), name: 'B', color: 0, bars: 1, cells: {} });
+  expect(newPattern('C', 5)).toEqual({ id: expect.stringMatching(/^p_/), name: 'C', color: 5, bars: 1, cells: {} });
   expect(newStep()).toEqual({ note: 60, vel: 0.8, len: 1 });
   expect(newStep(72)).toEqual({ note: 72, vel: 0.8, len: 1 });
 });

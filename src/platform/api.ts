@@ -18,6 +18,15 @@ export interface SavedFile {
   path: string | null;
 }
 
+/** A folder of named files of one kind (~/Documents/Hadjitron 3000/Sounds or /Blocks in Electron). */
+export interface Library {
+  list(): Promise<string[]>; // names without extension, sorted
+  read(name: string): Promise<Uint8Array>;
+  write(name: string, bytes: Uint8Array): Promise<void>;
+  remove(name: string): Promise<void>;
+  reveal: (() => void) | null; // show the folder in Finder; null in the browser
+}
+
 export interface Platform {
   readonly kind: 'electron' | 'browser';
 
@@ -36,14 +45,8 @@ export interface Platform {
     path?: string | null;
   }): Promise<SavedFile | null>;
 
-  /** The user's sound library: named .h3s files (~/Documents/Hadjitron 3000/Sounds in Electron). */
-  library: {
-    list(): Promise<string[]>; // sound names without extension, sorted
-    read(name: string): Promise<Uint8Array>;
-    write(name: string, bytes: Uint8Array): Promise<void>;
-    remove(name: string): Promise<void>;
-    reveal: (() => void) | null; // show the folder in Finder; null in the browser
-  };
+  library: Library; // the user's sounds, .h3s
+  blocks: Library; // the user's blocks, .h3b
 
   /** Window controls for the custom title bar; null when the host draws its own frame. */
   window: { minimize(): void; toggleMaximize(): void; close(): void } | null;

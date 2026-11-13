@@ -21,7 +21,7 @@ function contentType(file) {
 
 function validateLibraryName(name) {
   if (typeof name !== 'string' || !name || name === '.' || name === '..' || /[/\\\0]/.test(name)) {
-    throw new TypeError('Invalid sound name');
+    throw new TypeError('Invalid library name');
   }
   return name;
 }

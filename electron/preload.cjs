@@ -5,6 +5,16 @@ let openHandler;
 const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args);
 const notify = (channel, ...args) => { void invoke(channel, ...args).catch(console.error); };
 
+function library(channel) {
+  return {
+    list: () => invoke(`${channel}-list`),
+    read: (name) => invoke(`${channel}-read`, name),
+    write: (name, bytes) => invoke(`${channel}-write`, name, bytes),
+    remove: (name) => invoke(`${channel}-remove`, name),
+    reveal: () => notify(`${channel}-reveal`),
+  };
+}
+
 ipcRenderer.on('close-request', async (_event, id) => {
   let allowed = false;
   try {
@@ -20,13 +30,8 @@ contextBridge.exposeInMainWorld('hadji', {
   frame: process.argv.includes('--hadjitron-native-frame') ? 'native' : 'custom',
   openFile: (opts) => invoke('file-open', opts),
   saveFile: (opts) => invoke('file-save', opts),
-  library: {
-    list: () => invoke('library-list'),
-    read: (name) => invoke('library-read', name),
-    write: (name, bytes) => invoke('library-write', name, bytes),
-    remove: (name) => invoke('library-remove', name),
-    reveal: () => notify('library-reveal'),
-  },
+  library: library('library'),
+  blocks: library('blocks'),
   window: {
     minimize: () => notify('window-minimize'),
     toggleMaximize: () => notify('window-toggle-maximize'),

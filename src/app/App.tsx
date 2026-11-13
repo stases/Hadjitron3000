@@ -6,6 +6,7 @@ import { playScope, setView, useApp } from '../state/store';
 import type { AppState, View } from '../state/store';
 import { FactoryView } from '../ui/factory';
 import { Icon, MenuBar, Separator, StatusBar, StatusField, TabPage, Tabs, Window, useHintText } from '../ui/kit';
+import { SongView } from '../ui/song';
 import { TrackView } from '../ui/track';
 import { position, sampleRate } from './audio';
 import { documentName, dropFiles } from './commands';
@@ -17,6 +18,7 @@ import './app.css';
 const TABS = [
   { id: 'factory', label: 'Factory' },
   { id: 'track', label: 'Track' },
+  { id: 'song', label: 'Song' },
 ];
 
 function Menus() {
@@ -147,7 +149,7 @@ export function App() {
       <div className="h-app-views">
         <Tabs tabs={TABS} value={view} onChange={(id) => setView(id as View)} />
         <TabPage>
-          <div className="h-app-view">{view === 'factory' ? <FactoryView /> : <TrackView />}</div>
+          <div className="h-app-view">{view === 'factory' ? <FactoryView /> : view === 'track' ? <TrackView /> : <SongView />}</div>
         </TabPage>
         {dropping && (
           <div className="h-app-drop">

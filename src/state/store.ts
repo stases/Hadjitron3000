@@ -2,15 +2,15 @@ import { produce } from 'immer';
 import { create } from 'zustand';
 import type { StoreApi, UseBoundStore } from 'zustand';
 import {
-  CHANNEL_COLORS, MAX_BARS, PATTERN_NAMES, STEPS_PER_BAR,
+  CHANNEL_COLORS, MAX_BARS, MAX_SONG_BARS, PATTERN_NAMES, SONG_LANES, STEPS_PER_BAR,
   emptyProject, newMod, newModule, newPattern, newSound, uid,
 } from '../core/defaults';
 import { MODULES, moduleDef, paramSpec } from '../core/modules';
 import { MAX_NOTE, MIN_NOTE } from '../core/notes';
 import { coerce, defaultParams } from '../core/params';
-import type { Channel, ModTarget, ParamValue, PlayScope, Project, SampleData, Sound, Step } from '../core/types';
+import type { Block, Channel, ModTarget, ParamValue, PlayScope, Project, SampleData, Sound, Step } from '../core/types';
 
-export type View = 'factory' | 'track';
+export type View = 'factory' | 'track' | 'song';
 export interface StepRef { channelId: string; index: number }
 export interface FileRef { name: string; path: string | null }
 
@@ -21,6 +21,7 @@ export interface AppState {
   view: View;
   channelId: string | null;
   patternId: string;
+  placementId: string | null;
   step: StepRef | null;
   scope: 'pattern' | 'song';
   playing: boolean;
@@ -32,7 +33,7 @@ export interface AppState {
 function initialState(project: Project, file: FileRef | null): AppState {
   return {
     project, file, dirty: false, view: 'track', channelId: project.channels[0]?.id ?? null,
-    patternId: project.patterns[0].id, step: null, scope: 'pattern', playing: false,
+    patternId: project.patterns[0].id, placementId: null, step: null, scope: 'pattern', playing: false,
     octave: 3, past: [], future: [],
   };
 }
@@ -65,6 +66,7 @@ function repair(state: AppState): AppState {
       ? state.channelId : state.project.channels[0]?.id ?? null,
     patternId: state.project.patterns.some((p) => p.id === state.patternId)
       ? state.patternId : state.project.patterns[0].id,
+    placementId: state.project.song.some((p) => p.id === state.placementId) ? state.placementId : null,
     step: state.step && hasChannel(state.step.channelId) ? state.step : null,
   };
 }
@@ -72,7 +74,7 @@ function repair(state: AppState): AppState {
 function edit(
   recipe: (project: Project) => void,
   key?: string,
-  selection: Partial<Pick<AppState, 'channelId' | 'patternId' | 'step'>> = {},
+  selection: Partial<Pick<AppState, 'channelId' | 'patternId' | 'placementId' | 'step'>> = {},
 ): void {
   useApp.setState((state) => {
     const project = produce(state.project, recipe);
@@ -94,9 +96,9 @@ function editSound(channelId: string, recipe: (sound: Sound) => void, key?: stri
   }, key);
 }
 
-function nextColor(project: Project): number {
+function nextColor(items: { color: number }[]): number {
   const counts = Array<number>(CHANNEL_COLORS).fill(0);
-  for (const channel of project.channels) counts[channel.color]++;
+  for (const item of items) counts[item.color]++;
   return counts.indexOf(Math.min(...counts));
 }
 
@@ -131,7 +133,7 @@ function mergeSamples(target: Record<string, SampleData>, samples?: Record<strin
 export function addChannel(sound: Sound, samples?: Record<string, SampleData>): string {
   const id = uid('c');
   edit((p) => {
-    p.channels.push({ id, sound, color: nextColor(p), mute: false, solo: false });
+    p.channels.push({ id, sound, color: nextColor(p.channels), mute: false, solo: false });
     mergeSamples(p.samples, samples);
   }, undefined, { channelId: id });
   return id;
@@ -161,7 +163,7 @@ export function duplicateChannel(channelId: string): string | null {
   const copy = structuredClone(state.project.channels[index]);
   copy.id = uid('c');
   copy.sound.name += ' 2';
-  copy.color = nextColor(state.project);
+  copy.color = nextColor(state.project.channels);
   edit((p) => { p.channels.splice(index + 1, 0, copy); }, undefined, { channelId: copy.id });
   return copy.id;
 }
@@ -341,12 +343,30 @@ export function setPatternBars(patternId: string, bars: number): void {
   });
 }
 
+export function renamePattern(patternId: string, name: string): void {
+  const trimmed = name.trim().slice(0, 24).trimEnd();
+  if (!trimmed) return;
+  edit((p) => {
+    const pattern = p.patterns.find((pattern) => pattern.id === patternId);
+    if (pattern) pattern.name = trimmed;
+  }, JSON.stringify(['patternName', patternId]));
+}
+
+export function setPatternColor(patternId: string, color: number): void {
+  if (!Number.isFinite(color)) return;
+  edit((p) => {
+    const pattern = p.patterns.find((pattern) => pattern.id === patternId);
+    if (pattern) pattern.color = clamp(Math.round(color), 0, CHANNEL_COLORS - 1);
+  });
+}
+
 function insertPattern(copyId?: string): string | null {
   const state = useApp.getState();
+  if (state.project.patterns.length >= PATTERN_NAMES.length) return null;
   const name = [...PATTERN_NAMES].find((letter) => !state.project.patterns.some((p) => p.name === letter));
   const source = state.project.patterns.find((p) => p.id === (copyId ?? state.patternId));
   if (!name || !source) return null;
-  const pattern = newPattern(name);
+  const pattern = newPattern(name, copyId === undefined ? nextColor(state.project.patterns) : source.color);
   pattern.bars = source.bars;
   if (copyId !== undefined) pattern.cells = structuredClone(source.cells);
   edit((p) => { p.patterns.push(pattern); }, undefined, { patternId: pattern.id, step: null });
@@ -359,6 +379,30 @@ export function addPattern(): string | null {
 
 export function duplicatePattern(patternId: string): string | null {
   return insertPattern(patternId);
+}
+
+export function insertBlock(block: Block): string | null {
+  if (useApp.getState().project.patterns.length >= PATTERN_NAMES.length) return null;
+  const copy = structuredClone(block);
+  const pattern = newPattern(copy.name, copy.color);
+  pattern.bars = copy.bars;
+  edit((p) => {
+    const used = new Set<string>();
+    for (const track of copy.tracks) {
+      let channel = p.channels.find((c) => !used.has(c.id) && equal(c.sound, track.sound));
+      if (!channel) {
+        channel = { id: uid('c'), sound: track.sound, color: nextColor(p.channels), mute: false, solo: false };
+        p.channels.push(channel);
+      }
+      used.add(channel.id);
+      for (const [index, step] of Object.entries(track.steps)) {
+        if (validIndex(Number(index))) (pattern.cells[channel.id] ??= {})[Number(index)] = normalizeStep(step);
+      }
+    }
+    p.patterns.push(pattern);
+    mergeSamples(p.samples, copy.samples);
+  }, undefined, { patternId: pattern.id, step: null });
+  return pattern.id;
 }
 
 export function removePattern(patternId: string): void {
@@ -376,6 +420,65 @@ export function clearPattern(patternId: string): void {
   edit((p) => {
     const pattern = p.patterns.find((pattern) => pattern.id === patternId);
     if (pattern) pattern.cells = {};
+  });
+}
+
+function validPosition(lane: number, bar: number): boolean {
+  return Number.isInteger(lane) && lane >= 0 && lane < SONG_LANES
+    && Number.isInteger(bar) && bar >= 0 && bar < MAX_SONG_BARS;
+}
+
+function placementRoom(project: Project, lane: number, bar: number, skipId?: string): number {
+  let end = MAX_SONG_BARS;
+  for (const placement of project.song) {
+    if (placement.id === skipId || placement.lane !== lane) continue;
+    if (placement.bar <= bar && bar < placement.bar + placement.bars) return 0;
+    if (placement.bar > bar) end = Math.min(end, placement.bar);
+  }
+  return end - bar;
+}
+
+export function addPlacement(patternId: string, lane: number, bar: number): string | null {
+  lane = Math.round(lane);
+  bar = Math.round(bar);
+  if (!validPosition(lane, bar)) return null;
+  const project = useApp.getState().project;
+  const pattern = project.patterns.find((p) => p.id === patternId);
+  const room = placementRoom(project, lane, bar);
+  if (!pattern || room === 0) return null;
+  const id = uid('s');
+  edit((p) => {
+    p.song.push({ id, pattern: patternId, lane, bar, bars: Math.min(pattern.bars, room) });
+  }, undefined, { placementId: id, patternId, step: null });
+  return id;
+}
+
+export function movePlacement(placementId: string, lane: number, bar: number): void {
+  lane = Math.round(lane);
+  bar = Math.round(bar);
+  if (!validPosition(lane, bar)) return;
+  edit((p) => {
+    const placement = p.song.find((s) => s.id === placementId);
+    if (!placement || placementRoom(p, lane, bar, placementId) < placement.bars) return;
+    placement.lane = lane;
+    placement.bar = bar;
+  }, JSON.stringify(['movePlacement', placementId]));
+}
+
+export function resizePlacement(placementId: string, bars: number): void {
+  if (!Number.isFinite(bars)) return;
+  edit((p) => {
+    const placement = p.song.find((s) => s.id === placementId);
+    if (placement) {
+      placement.bars = clamp(Math.round(bars), 1, placementRoom(p, placement.lane, placement.bar, placementId));
+    }
+  }, JSON.stringify(['resizePlacement', placementId]));
+}
+
+export function removePlacement(placementId: string): void {
+  edit((p) => {
+    const index = p.song.findIndex((s) => s.id === placementId);
+    if (index >= 0) p.song.splice(index, 1);
   });
 }
 
@@ -410,8 +513,10 @@ export function markSaved(file: FileRef): void {
   useApp.setState({ file, dirty: false });
 }
 
+/** Show a view. Play plays what is on screen: the song in the Song view, the current block in the Track view. */
 export function setView(view: View): void {
-  useApp.setState({ view });
+  const { scope } = useApp.getState();
+  useApp.setState({ view, scope: view === 'song' ? 'song' : view === 'track' ? 'pattern' : scope });
 }
 
 export function selectChannel(channelId: string | null): void {
@@ -423,6 +528,14 @@ export function selectChannel(channelId: string | null): void {
 export function selectPattern(patternId: string): void {
   if (useApp.getState().project.patterns.some((p) => p.id === patternId)) {
     useApp.setState({ patternId, step: null });
+  }
+}
+
+export function selectPlacement(placementId: string | null): void {
+  if (placementId === null) useApp.setState({ placementId });
+  else {
+    const placement = useApp.getState().project.song.find((p) => p.id === placementId);
+    if (placement) useApp.setState({ placementId, patternId: placement.pattern, step: null });
   }
 }
 

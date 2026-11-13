@@ -1,15 +1,31 @@
 import { createStore, del, get, keys, set } from 'idb-keyval';
-import type { Platform } from './api';
+import type { Library, Platform } from './api';
 
-const store = createStore('hadjitron-library', 'sounds');
 const beforeUnload = (event: BeforeUnloadEvent) => {
   event.preventDefault();
   event.returnValue = '';
 };
 
 function libraryName(name: string): string {
-  if (!name || name === '.' || name === '..' || /[/\\\0]/.test(name)) throw new TypeError('Invalid sound name');
+  if (typeof name !== 'string' || !name || name === '.' || name === '..' || /[/\\\0]/.test(name)) {
+    throw new TypeError('Invalid library name');
+  }
   return name;
+}
+
+function createLibrary(database: string, storeName: string): Library {
+  const store = createStore(database, storeName);
+  return {
+    list: async () => (await keys<string>(store)).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())),
+    read: async (name) => {
+      const bytes = await get<Uint8Array>(libraryName(name), store);
+      if (!bytes) throw new Error(`File not found: ${name}`);
+      return bytes;
+    },
+    write: (name, bytes) => set(libraryName(name), bytes, store),
+    remove: (name) => del(libraryName(name), store),
+    reveal: null,
+  };
 }
 
 export const browserPlatform: Platform = {
@@ -47,17 +63,8 @@ export const browserPlatform: Platform = {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     return { name: defaultName, path: null };
   },
-  library: {
-    list: async () => (await keys<string>(store)).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())),
-    read: async (name) => {
-      const bytes = await get<Uint8Array>(libraryName(name), store);
-      if (!bytes) throw new Error(`Sound not found: ${name}`);
-      return bytes;
-    },
-    write: (name, bytes) => set(libraryName(name), bytes, store),
-    remove: (name) => del(libraryName(name), store),
-    reveal: null,
-  },
+  library: createLibrary('hadjitron-library', 'sounds'),
+  blocks: createLibrary('hadjitron-block-library', 'blocks'),
   window: null,
   setDocument: (title, dirty) => {
     document.title = `${title} - Hadjitron 3000`;

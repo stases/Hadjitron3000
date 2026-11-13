@@ -1,9 +1,9 @@
 import { expect, test, vi } from 'vitest';
 import {
-  CHANNEL_COLORS, emptyProject, MAX_BARS, newMod, newModule, newPattern, newSound,
+  CHANNEL_COLORS, emptyProject, MAX_BARS, MAX_SONG_BARS, newMod, newModule, newPattern, newSound, SONG_LANES,
 } from '../../src/core/defaults';
 import {
-  FORMAT_VERSION, FormatError, parseProject, parseSound, PROJECT_EXT, sampleId,
+  BLOCK_EXT, FORMAT_VERSION, FormatError, parseProject, parseSound, PROJECT_EXT, sampleId,
   serializeProject, serializeSound, SOUND_EXT, soundSampleIds,
 } from '../../src/core/fileformat';
 import { AMP, EFFECTS, MODS, MODULES, OUT, SOURCES } from '../../src/core/modules';
@@ -52,7 +52,7 @@ function project(): Project {
 }
 
 test('exports the native extensions and format version', () => {
-  expect([SOUND_EXT, PROJECT_EXT, FORMAT_VERSION]).toEqual(['h3s', 'h3k', 1]);
+  expect([SOUND_EXT, PROJECT_EXT, BLOCK_EXT, FORMAT_VERSION]).toEqual(['h3s', 'h3k', 'h3b', 2]);
 });
 
 test.each([0, 4, 384 * 1024 + 1])('a sampled sound round trips %i bytes exactly', (length) => {
@@ -61,7 +61,7 @@ test.each([0, 4, 384 * 1024 + 1])('a sampled sound round trips %i bytes exactly'
   const original = sound();
   const text = serializeSound(original, samples);
   expect(text).toBe(JSON.stringify(JSON.parse(text), null, 2));
-  expect(JSON.parse(text)).toMatchObject({ format: 'hadjitron3000/sound', version: 1 });
+  expect(JSON.parse(text)).toMatchObject({ format: 'hadjitron3000/sound', version: 2 });
   const parsed = parseSound(text);
   expect(parsed.sound).toStrictEqual(original);
   expect(parsed.samples.kick.name).toBe('kïck.wav');
@@ -69,11 +69,11 @@ test.each([0, 4, 384 * 1024 + 1])('a sampled sound round trips %i bytes exactly'
   expect(parsed.samples.kick.bytes).toStrictEqual(bytes);
 });
 
-test('a project round trips two channels, two patterns and a repeated song', () => {
+test('a project round trips two channels, two patterns and simultaneous placements', () => {
   const original = project();
   const text = serializeProject(original);
   expect(text).toBe(JSON.stringify(JSON.parse(text), null, 2));
-  expect(JSON.parse(text)).toMatchObject({ format: 'hadjitron3000/project', version: 1 });
+  expect(JSON.parse(text)).toMatchObject({ format: 'hadjitron3000/project', version: 2 });
   expect(JSON.parse(text).project).not.toHaveProperty('samples');
   expect(parseProject(text)).toStrictEqual(original);
 });
@@ -345,7 +345,7 @@ test.each([
 
 test.each([[0, 1], [99, MAX_BARS], [2.6, 3], ['bad', 1]])('normalizes pattern bars %s', (bars, expected) => {
   const parsed = parseProject(projectFile({ ...emptyProject(), patterns: [{ id: 'a', name: 5, bars, cells: {} }] }));
-  expect(parsed.patterns[0]).toEqual({ id: 'a', name: '', bars: expected, cells: {} });
+  expect(parsed.patterns[0]).toEqual({ id: 'a', name: '', color: 0, bars: expected, cells: {} });
 });
 
 test('normalizes steps, drops invalid indices and drops cells for missing channels', () => {
@@ -357,7 +357,7 @@ test('normalizes steps, drops invalid indices and drops cells for missing channe
       2: { note: 60.6, vel: 0.123, len: 2.7, extra: 1 },
       3: { note: 'bad', vel: null, len: 'bad' },
       500: { note: 72, vel: 1, len: 1 },
-      '-1': null, '1.5': null, 'NaN': null, 'Infinity': null, '': null, 'nope': null,
+      '-1': null, '1.5': null, 'NaN': null, 'Infinity': null, '': null, 'nope': null, '9007199254740992': null,
     },
     gone: null,
   };
@@ -379,12 +379,71 @@ test.each([[], undefined])('a project without patterns receives an empty pattern
 });
 
 test('a version 1 song, a list of pattern ids, becomes placements one after another in the first lane', () => {
-  const parsed = parseProject(projectFile({ ...project(), song: ['b', 'missing', 'a', 'b'] }));
+  const parsed = parseProject(JSON.stringify({
+    format: 'hadjitron3000/project', version: 1, project: { ...project(), song: ['b', 'missing', 'a', 'b'] },
+  }));
   expect(parsed.song).toEqual([
     { id: expect.any(String), pattern: 'b', lane: 0, bar: 0, bars: 2 },
     { id: expect.any(String), pattern: 'a', lane: 0, bar: 2, bars: 1 },
     { id: expect.any(String), pattern: 'b', lane: 0, bar: 3, bars: 2 },
   ]);
+  expect(new Set(parsed.song.map((placement) => placement.id)).size).toBe(3);
+});
+
+test('drops missing patterns and overlapping placements only in the same lane', () => {
+  const song = [
+    { id: 'missing', pattern: 'gone', lane: 0, bar: 0, bars: 10 },
+    { id: 'keep', pattern: 'a', lane: 0, bar: 2, bars: 2 },
+    { id: 'overlap', pattern: 'b', lane: 0, bar: 1, bars: 2 },
+    { id: 'inside', pattern: 'b', lane: 0, bar: 3, bars: 1 },
+    { id: 'cover', pattern: 'b', lane: 0, bar: 0, bars: 8 },
+    { id: 'other', pattern: 'b', lane: 1, bar: 2, bars: 2 },
+    { id: 'before', pattern: 'a', lane: 0, bar: 0, bars: 2 },
+    { id: 'after', pattern: 'b', lane: 0, bar: 4, bars: 2 },
+  ];
+  expect(parseProject(projectFile({ ...project(), song })).song).toEqual([song[1], song[5], song[6], song[7]]);
+});
+
+test.each([
+  [{ lane: -2, bar: -9, bars: 0 }, { lane: 0, bar: 0, bars: 1 }],
+  [{ lane: 99, bar: 999, bars: 999 }, { lane: SONG_LANES - 1, bar: MAX_SONG_BARS - 1, bars: 1 }],
+  [{ lane: 0, bar: 0, bars: 999 }, { lane: 0, bar: 0, bars: MAX_SONG_BARS }],
+  [{ lane: 1.6, bar: 2.6, bars: 3.6 }, { lane: 2, bar: 3, bars: 4 }],
+  [{ lane: 'bad', bar: null, bars: false }, { lane: 0, bar: 0, bars: 2 }],
+  [{}, { lane: 0, bar: 0, bars: 2 }],
+])('normalizes placement lane and timeline bounds %#', (input, expected) => {
+  const song = [{ id: 's1', pattern: 'b', ...input }];
+  expect(parseProject(projectFile({ ...project(), song })).song).toEqual([{ id: 's1', pattern: 'b', ...expected }]);
+});
+
+test('repairs duplicate, empty and missing placement ids', () => {
+  const song = ['keep', 'keep', '', undefined, null, 7].map((id, bar) => ({ id, pattern: 'a', bar }));
+  const parsed = parseProject(projectFile({ ...project(), song })).song;
+  expect(parsed[0].id).toBe('keep');
+  expect(new Set(parsed.map((placement) => placement.id)).size).toBe(song.length);
+  expect(parsed.slice(1).every((placement) => /^s_/.test(placement.id))).toBe(true);
+  expect(parsed.map(({ id: _id, ...placement }) => placement)).toEqual(
+    song.map((_, bar) => ({ pattern: 'a', lane: 0, bar, bars: 1 })),
+  );
+});
+
+test('generated placement ids avoid both existing and later ids', () => {
+  const original = project();
+  const random = vi.spyOn(Math, 'random')
+    .mockReturnValueOnce(0).mockReturnValueOnce(0.5).mockReturnValueOnce(0.5).mockReturnValue(0.25);
+  try {
+    const song = [
+      { pattern: 'a', bar: 0 },
+      { id: 's_00000000', pattern: 'a', bar: 1 },
+      { id: 's_00000000', pattern: 'a', bar: 2 },
+    ];
+    const parsed = parseProject(projectFile({ ...original, song })).song;
+    expect(parsed[1].id).toBe('s_00000000');
+    expect(new Set(parsed.map((placement) => placement.id)).size).toBe(3);
+    expect(parsed.every((placement) => /^s_/.test(placement.id))).toBe(true);
+  } finally {
+    random.mockRestore();
+  }
 });
 
 test('unknown fields are stripped at every level of the returned document', () => {

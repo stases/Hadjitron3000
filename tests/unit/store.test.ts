@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import {
-  CHANNEL_COLORS, MAX_BARS, PATTERN_NAMES, STEPS_PER_BAR, emptyProject, newSound, newStep,
+  CHANNEL_COLORS, MAX_BARS, MAX_SONG_BARS, PATTERN_NAMES, SONG_LANES, STEPS_PER_BAR,
+  emptyProject, newMod, newModule, newSound, newStep,
 } from '../../src/core/defaults';
 import { MAX_NOTE, MIN_NOTE } from '../../src/core/notes';
-import type { Channel, SampleData } from '../../src/core/types';
+import type { Block, Channel, SampleData } from '../../src/core/types';
 import * as app from '../../src/state/store';
 
 const state = app.useApp.getState;
@@ -25,7 +26,7 @@ afterEach(() => {
 test('initial state and transport scope', () => {
   expect(state()).toEqual({
     project: project(), file: null, dirty: false, view: 'track', channelId: null,
-    patternId: project().patterns[0].id, step: null, scope: 'pattern', playing: false,
+    patternId: project().patterns[0].id, placementId: null, step: null, scope: 'pattern', playing: false,
     octave: 3, past: [], future: [],
   });
   expect(app.playScope(state())).toEqual({ kind: 'pattern', patternId: state().patternId });
@@ -600,6 +601,7 @@ test('undo and redo repair channel, pattern and step selections', () => {
 test('opening preserves view and octave while resetting other state, and saving preserves history', () => {
   const a = app.addChannel(newSound());
   app.addPattern();
+  app.addPlacement(state().patternId, 0, 0);
   app.setView('factory');
   app.setOctave(6);
   app.setScope('song');
@@ -612,7 +614,7 @@ test('opening preserves view and octave while resetting other state, and saving 
   app.openProject(opened, file);
   expect(state()).toEqual({
     project: opened, file, dirty: false, view: 'factory', channelId: a,
-    patternId: opened.patterns[0].id, step: null, scope: 'pattern', playing: false,
+    patternId: opened.patterns[0].id, placementId: null, step: null, scope: 'pattern', playing: false,
     octave: 6, past: [], future: [],
   });
   app.setBpm(130);
@@ -670,4 +672,405 @@ test('interface actions leave the document, history and clean status untouched a
   expect(project()).toBe(before.project);
   expect(state().past).toBe(before.past);
   expect(state().future).toBe(before.future);
+});
+
+test('block names trim, truncate and merge per block, with undo and redo', () => {
+  vi.useFakeTimers();
+  const first = state().patternId;
+  const second = app.addPattern()!;
+  app.openProject(project(), null);
+  const before = project();
+  app.renamePattern(first, '  Intro  ');
+  expect(pattern().name).toBe('Intro');
+  app.renamePattern(first, '  A very long name for this block  ');
+  expect(pattern().name).toBe('A very long name for thi');
+  expect(state().past).toEqual([before]);
+  const renamed = project();
+  app.undo();
+  expect(project()).toBe(before);
+  app.redo();
+  expect(project()).toBe(renamed);
+  app.renamePattern(second, 'Outro');
+  expect(state().past).toHaveLength(2);
+  const unchanged = state();
+  app.renamePattern(first, '   ');
+  app.renamePattern(first, ` ${pattern().name} `);
+  app.renamePattern('missing', 'No');
+  expect(state()).toBe(unchanged);
+  app.renamePattern(first, `${'x'.repeat(23)} tail`);
+  expect(pattern().name).toBe('x'.repeat(23));
+});
+
+test('block colors round and clamp, reject nonfinite values, and undo and redo', () => {
+  const id = state().patternId;
+  for (const [input, expected] of [[2.6, 3], [99, CHANNEL_COLORS - 1], [-2, 0]]) {
+    const before = project();
+    app.setPatternColor(id, input);
+    expect(pattern().color).toBe(expected);
+    const after = project();
+    app.undo();
+    expect(project()).toBe(before);
+    app.redo();
+    expect(project()).toBe(after);
+  }
+  const unchanged = state();
+  for (const value of [0, NaN, Infinity, -Infinity]) app.setPatternColor(id, value);
+  app.setPatternColor('missing', 2);
+  expect(state()).toBe(unchanged);
+});
+
+test('new blocks balance block colors and duplicates keep their source color, with undo and redo', () => {
+  const first = state().patternId;
+  app.addChannel(newSound());
+  app.setChannel(state().channelId!, { color: 1 });
+  for (let i = 1; i < CHANNEL_COLORS + 2; i++) app.addPattern();
+  expect(project().patterns.map((p) => p.color)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 0, 1]);
+  app.removePattern(project().patterns[3].id);
+  const before = project();
+  const added = app.addPattern()!;
+  expect(pattern()).toMatchObject({ id: added, name: 'D', color: 3 });
+  const after = project();
+  app.undo();
+  expect(project()).toBe(before);
+  app.redo();
+  expect(project()).toBe(after);
+  app.setPatternColor(first, 6);
+  const beforeCopy = project();
+  const copy = app.duplicatePattern(first)!;
+  expect(pattern()).toMatchObject({ id: copy, name: 'K', color: 6 });
+  const afterCopy = project();
+  app.undo();
+  expect(project()).toBe(beforeCopy);
+  app.redo();
+  expect(project()).toBe(afterCopy);
+});
+
+test('block limits apply even when custom names leave unused letters', () => {
+  const block: Block = { name: 'Custom', color: 2, bars: 1, tracks: [], samples: {} };
+  while (project().patterns.length < PATTERN_NAMES.length) expect(app.insertBlock(block)).not.toBeNull();
+  app.renamePattern(project().patterns[0].id, 'Another custom name');
+  const before = state();
+  expect(app.addPattern()).toBeNull();
+  expect(app.duplicatePattern(state().patternId)).toBeNull();
+  expect(app.insertBlock(block)).toBeNull();
+  expect(state()).toBe(before);
+});
+
+test('adding placements rounds positions, selects their block, fits gaps and supports undo and redo', () => {
+  const first = state().patternId;
+  const channel = app.addChannel(newSound());
+  app.setPatternBars(first, MAX_BARS);
+  const next = app.addPlacement(first, 0, 5)!;
+  const later = app.addPlacement(first, 0, 20)!;
+  app.addPattern();
+  app.selectStep({ channelId: channel, index: 0 });
+  const before = project();
+  const id = app.addPlacement(first, 0.2, 1.6)!;
+  expect(project().song).toEqual([
+    { id: next, pattern: first, lane: 0, bar: 5, bars: MAX_BARS },
+    { id: later, pattern: first, lane: 0, bar: 20, bars: MAX_BARS },
+    { id, pattern: first, lane: 0, bar: 2, bars: 3 },
+  ]);
+  expect(state()).toMatchObject({ placementId: id, patternId: first, step: null });
+  const after = project();
+  app.undo();
+  expect(project()).toBe(before);
+  expect(state().placementId).toBeNull();
+  app.redo();
+  expect(project()).toBe(after);
+  expect(app.addPlacement(first, 1, 2)).not.toBeNull();
+  expect(app.addPlacement(first, 0, 13)).not.toBeNull();
+  const end = app.addPlacement(first, SONG_LANES - 1, MAX_SONG_BARS - 2)!;
+  expect(project().song.find((p) => p.id === end)?.bars).toBe(2);
+});
+
+test('invalid or occupied placement positions do nothing and preserve redo history', () => {
+  const p = state().patternId;
+  app.setPatternBars(p, 4);
+  const id = app.addPlacement(p, 0, 2)!;
+  app.renameProject('Changed');
+  app.undo();
+  const before = state();
+  for (const [lane, bar] of [
+    [-1, 0], [SONG_LANES, 0], [0, -1], [0, MAX_SONG_BARS],
+    [NaN, 0], [Infinity, 0], [0, NaN], [0, Infinity], [0, -Infinity],
+  ]) {
+    expect(app.addPlacement(p, lane, bar)).toBeNull();
+    app.movePlacement(id, lane, bar);
+  }
+  for (const bar of [2, 3, 5]) expect(app.addPlacement(p, 0, bar)).toBeNull();
+  expect(app.addPlacement('missing', 1, 0)).toBeNull();
+  app.movePlacement('missing', 0, 0);
+  app.resizePlacement('missing', 2);
+  app.removePlacement('missing');
+  app.selectPlacement('missing');
+  app.movePlacement(id, 0, 2);
+  app.resizePlacement(id, 4);
+  for (const bars of [NaN, Infinity, -Infinity]) app.resizePlacement(id, bars);
+  expect(state()).toBe(before);
+});
+
+test('moves keep length, reject overlaps in either direction and permit adjacent and cross-lane placements', () => {
+  const p = state().patternId;
+  app.setPatternBars(p, 4);
+  const id = app.addPlacement(p, 0, 0)!;
+  app.addPlacement(p, 0, 6);
+  const before = state();
+  for (const bar of [3, 5, 6, 8, MAX_SONG_BARS - 3]) app.movePlacement(id, 0, bar);
+  expect(state()).toBe(before);
+  app.movePlacement(id, 0, 2);
+  expect(project().song[0]).toMatchObject({ lane: 0, bar: 2, bars: 4 });
+  app.movePlacement(id, 0, 10);
+  expect(project().song[0]).toMatchObject({ bar: 10, bars: 4 });
+  app.movePlacement(id, 0.6, 5.6);
+  expect(project().song[0]).toMatchObject({ lane: 1, bar: 6, bars: 4 });
+  app.movePlacement(id, 1, MAX_SONG_BARS - 4);
+  expect(project().song[0]).toMatchObject({ bar: MAX_SONG_BARS - 4, bars: 4 });
+});
+
+test('resizing rounds and clamps to the next placement or timeline end', () => {
+  const p = state().patternId;
+  const id = app.addPlacement(p, 0, 2)!;
+  app.addPlacement(p, 0, 10);
+  app.addPlacement(p, 0, 6);
+  app.addPlacement(p, 1, 3);
+  app.resizePlacement(id, 100);
+  expect(project().song[0].bars).toBe(4);
+  const before = state();
+  app.resizePlacement(id, 1000);
+  expect(state()).toBe(before);
+  app.resizePlacement(id, 2.6);
+  expect(project().song[0].bars).toBe(3);
+  app.resizePlacement(id, -10);
+  expect(project().song[0].bars).toBe(1);
+  app.movePlacement(id, 2, MAX_SONG_BARS - 3);
+  app.resizePlacement(id, MAX_SONG_BARS);
+  expect(project().song[0].bars).toBe(3);
+});
+
+test.each(['move', 'resize'] as const)('%s drags merge per placement with undo, redo and timeout', (action) => {
+  vi.useFakeTimers();
+  const p = state().patternId;
+  const id = app.addPlacement(p, 0, 0)!;
+  const other = app.addPlacement(p, 1, 0)!;
+  app.openProject(project(), null);
+  const change = (target: string, value: number) => action === 'move'
+    ? app.movePlacement(target, 2, value) : app.resizePlacement(target, value);
+  const before = project();
+  change(id, 2);
+  vi.advanceTimersByTime(700);
+  change(id, 3);
+  vi.advanceTimersByTime(700);
+  change(id, 4);
+  expect(state().past).toEqual([before]);
+  const after = project();
+  app.undo();
+  expect(project()).toBe(before);
+  app.redo();
+  expect(project()).toBe(after);
+  change(id, 5);
+  change(other, 8);
+  expect(state().past).toHaveLength(3);
+  vi.advanceTimersByTime(800);
+  change(other, 9);
+  expect(state().past).toHaveLength(4);
+});
+
+test('move and resize merge keys are distinct and unchanged calls add no history', () => {
+  vi.useFakeTimers();
+  const id = app.addPlacement(state().patternId, 0, 0)!;
+  app.openProject(project(), null);
+  app.movePlacement(id, 1, 2);
+  app.resizePlacement(id, 3);
+  expect(state().past).toHaveLength(2);
+  const before = state();
+  app.movePlacement(id, 1.1, 2.1);
+  app.resizePlacement(id, 3.1);
+  expect(state()).toBe(before);
+  app.undo();
+  expect(project().song[0]).toMatchObject({ lane: 1, bar: 2, bars: 1 });
+  app.undo();
+  expect(project().song[0]).toMatchObject({ lane: 0, bar: 0, bars: 1 });
+});
+
+test('placement selection switches blocks, clears steps, and leaves the document and history untouched', () => {
+  const first = state().patternId;
+  const channel = app.addChannel(newSound());
+  const id = app.addPlacement(first, 0, 0)!;
+  app.addPattern();
+  app.selectStep({ channelId: channel, index: 0 });
+  app.markSaved({ name: 'saved.h3k', path: null });
+  const before = state();
+  app.setView('song');
+  app.selectPlacement(id);
+  expect(state()).toMatchObject({ view: 'song', placementId: id, patternId: first, step: null, dirty: false });
+  app.selectPlacement(null);
+  expect(state()).toMatchObject({ placementId: null, patternId: first });
+  expect(project()).toBe(before.project);
+  expect(state().past).toBe(before.past);
+  expect(state().future).toBe(before.future);
+});
+
+test('removing placements repairs selection, preserves other placements, and supports undo and redo', () => {
+  const p = state().patternId;
+  const other = app.addPlacement(p, 1, 0)!;
+  const id = app.addPlacement(p, 0, 0)!;
+  const before = project();
+  app.removePlacement(other);
+  expect(state().placementId).toBe(id);
+  app.undo();
+  expect(project()).toBe(before);
+  app.removePlacement(id);
+  expect(project().song.map((s) => s.id)).toEqual([other]);
+  expect(state().placementId).toBeNull();
+  const after = project();
+  app.undo();
+  expect(project()).toBe(before);
+  app.selectPlacement(id);
+  app.redo();
+  expect(project()).toBe(after);
+  expect(state().placementId).toBeNull();
+});
+
+test('removing a block removes its placements and repairs selections, with undo and redo', () => {
+  const first = state().patternId;
+  const keep = app.addPlacement(first, 0, 0)!;
+  const second = app.addPattern()!;
+  app.addPlacement(second, 1, 0);
+  const selected = app.addPlacement(second, 2, 0)!;
+  const before = project();
+  app.removePattern(second);
+  expect(project().song.map((s) => s.id)).toEqual([keep]);
+  expect(state()).toMatchObject({ patternId: first, placementId: null });
+  const after = project();
+  app.undo();
+  expect(project()).toBe(before);
+  app.selectPlacement(selected);
+  app.redo();
+  expect(project()).toBe(after);
+  expect(state()).toMatchObject({ patternId: first, placementId: null });
+  const unchanged = state();
+  app.removePattern(first);
+  expect(state()).toBe(unchanged);
+});
+
+test('inserting a block reuses the first identical unused sounds and adds balanced channels in one undo step', () => {
+  const original = newSound('fm', 'Bell');
+  original.chain.push(newModule('filter'));
+  original.mods.push(newMod('lfo'));
+  const a = app.addChannel(original, { old: sample });
+  const b = app.addChannel(structuredClone(original));
+  const different = structuredClone(original);
+  different.chain[0].params.cutoff = 4321;
+  const c = app.addChannel(different);
+  app.setChannel(a, { mute: true, solo: true });
+  const fresh = newSound('sample', 'Kick');
+  fresh.source.params.sample = 'kick';
+  const block: Block = {
+    name: 'Imported beat', color: 6, bars: 3,
+    tracks: [original, original, original, fresh].map((sound, index) => ({
+      sound: structuredClone(sound), steps: { [index]: newStep(60 + index) },
+    })),
+    samples: { kick: structuredClone(sample), old: { name: 'duplicate.wav', bytes: new Uint8Array([9]) } },
+  };
+  app.selectStep({ channelId: c, index: 0 });
+  const before = project();
+  const history = state().past.length;
+  const id = app.insertBlock(block)!;
+  const channels = project().channels;
+  expect(channels).toHaveLength(5);
+  expect(channels.map((channel) => channel.color)).toEqual([0, 1, 2, 3, 4]);
+  expect(channels[0]).toBe(before.channels[0]);
+  expect(channels[3]).toMatchObject({ sound: original, mute: false, solo: false });
+  expect(channels[4].sound).toEqual(fresh);
+  expect(pattern()).toEqual({
+    id, name: block.name, color: block.color, bars: block.bars,
+    cells: {
+      [a]: { 0: newStep(60) }, [b]: { 1: newStep(61) },
+      [channels[3].id]: { 2: newStep(62) }, [channels[4].id]: { 3: newStep(63) },
+    },
+  });
+  expect(state()).toMatchObject({ patternId: id, step: null });
+  expect(project().samples.old).toBe(sample);
+  expect(project().samples.kick).toEqual(sample);
+  expect(state().past).toHaveLength(history + 1);
+  const after = project();
+  app.undo();
+  expect(project()).toBe(before);
+  expect(state().patternId).toBe(before.patterns[0].id);
+  app.redo();
+  expect(project()).toBe(after);
+});
+
+test('inserting a block normalizes steps and deeply isolates all imported data', () => {
+  const importedSound = newSound();
+  importedSound.chain.push(newModule('filter'));
+  importedSound.mods.push(newMod('lfo'));
+  const block: Block = {
+    name: 'Long block name kept as supplied', color: 5, bars: 2,
+    tracks: [{
+      sound: importedSound,
+      steps: {
+        0: { note: -5, vel: 2, len: 0 }, 1: { note: 200, vel: -1, len: 2.8 },
+        2: { note: 60.6, vel: 0.4, len: 1 }, [MAX_BARS * STEPS_PER_BAR - 1]: newStep(),
+        [MAX_BARS * STEPS_PER_BAR]: newStep(), 999: newStep(), '-1': newStep(), '0.5': newStep(),
+      },
+    }],
+    samples: { kick: structuredClone(sample) },
+  };
+  const original = structuredClone(block);
+  app.insertBlock(block);
+  const channel = project().channels[0];
+  expect(pattern()).toMatchObject({ name: block.name, color: 5, bars: 2 });
+  expect(pattern().cells[channel.id]).toEqual({
+    0: { note: MIN_NOTE, vel: 1, len: 1 }, 1: { note: MAX_NOTE, vel: 0, len: 3 },
+    2: { note: 61, vel: 0.4, len: 1 }, [MAX_BARS * STEPS_PER_BAR - 1]: newStep(),
+  });
+  expect(block).toEqual(original);
+  expect(channel.sound).not.toBe(importedSound);
+  expect(channel.sound.source.params).not.toBe(importedSound.source.params);
+  expect(channel.sound.chain[0].params).not.toBe(importedSound.chain[0].params);
+  expect(channel.sound.mods[0]).not.toBe(importedSound.mods[0]);
+  expect(pattern().cells[channel.id]).not.toBe(block.tracks[0].steps);
+  expect(pattern().cells[channel.id][127]).not.toBe(block.tracks[0].steps[127]);
+  expect(project().samples.kick).not.toBe(block.samples.kick);
+  expect(project().samples.kick.bytes.buffer).not.toBe(block.samples.kick.bytes.buffer);
+  block.tracks[0].sound.source.params.pitch = 12;
+  block.tracks[0].sound.chain[0].params.cutoff = 500;
+  block.tracks[0].sound.mods[0].amount = 0.1;
+  block.tracks[0].steps[127].note = 80;
+  block.samples.kick.bytes[0] = 99;
+  expect(channel.sound).toEqual(original.tracks[0].sound);
+  expect(pattern().cells[channel.id][127]).toEqual(newStep());
+  expect(project().samples.kick.bytes[0]).toBe(1);
+});
+
+test('removing a channel keeps imported blocks and their placements valid, with undo and redo', () => {
+  const id = app.insertBlock({
+    name: 'Beat', color: 2, bars: 2,
+    tracks: [
+      { sound: newSound(), steps: { 0: newStep() } },
+      { sound: newSound('fm'), steps: { 1: newStep(65) } },
+    ],
+    samples: {},
+  })!;
+  app.addPlacement(id, 0, 0);
+  const song = project().song;
+  const channel = project().channels[0].id;
+  app.selectStep({ channelId: channel, index: 0 });
+  const before = project();
+  app.removeChannel(channel);
+  expect(project().song).toBe(song);
+  expect(pattern().cells[channel]).toBeUndefined();
+  expect(Object.keys(pattern().cells)).toEqual([project().channels[0].id]);
+  expect(state().step).toBeNull();
+  expect(state().placementId).toBe(song[0].id);
+  const after = project();
+  app.undo();
+  expect(project()).toBe(before);
+  app.redo();
+  expect(project()).toBe(after);
+  app.removeChannel(project().channels[0].id);
+  expect(pattern().cells).toEqual({});
+  expect(project().song).toBe(song);
 });

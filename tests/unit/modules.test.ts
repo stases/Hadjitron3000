@@ -51,7 +51,7 @@ test('modTargets follows signal order and numbers repeated effects', () => {
     { module: 'source', param: 'pitch', label: 'Source · Pitch' },
     { module: 'f1', param: 'cutoff', label: 'Filter · Cutoff' },
     { module: 'f2', param: 'cutoff', label: 'Filter 2 · Cutoff' },
-    { module: 'delay1', param: 'time', label: 'Delay · Free time' },
+    { module: 'delay1', param: 'time', label: 'Delay · Time' },
     { module: 'delay1', param: 'mix', label: 'Delay · Mix' },
     { module: 'out', param: 'level', label: 'Output · Level' },
     { module: 'out', param: 'pan', label: 'Output · Pan' },

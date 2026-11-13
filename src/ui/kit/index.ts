@@ -6,7 +6,7 @@ export { Checkbox } from './Checkbox';
 export { Dialog, DialogButtons, MessageBox } from './Dialog';
 export { Display, Lcd, Led, Meter, Scope } from './Displays';
 export { GroupBox, Panel, Separator, StatusBar, StatusField, Toolbar, Well } from './Frames';
-export { setHint, useHintText } from './hint';
+export { setHint, useHint, useHintText } from './hint';
 export { ColorChip, Icon } from './Icon';
 export { Emblem } from './Emblem';
 export type { IconName } from './icons';

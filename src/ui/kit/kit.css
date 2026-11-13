@@ -640,6 +640,12 @@
   white-space: nowrap;
 }
 
+.h-list-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .h-list-row.is-selected {
   color: var(--sel-ink);
   background: var(--sel);
@@ -858,7 +864,9 @@ button.h-led:focus-visible {
 }
 
 .h-rack-led {
+  flex: none;
   align-self: flex-start;
+  width: 7px;
   margin: 2px -8px 0 0;
 }
 

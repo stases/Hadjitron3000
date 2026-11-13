@@ -191,7 +191,7 @@ export const EFFECTS: readonly ModuleDef[] = [
     params: [
       c(
         'sync',
-        'Time',
+        'Sync',
         [
           ['free', 'Free'],
           ['1/2', '1/2'],
@@ -205,7 +205,7 @@ export const EFFECTS: readonly ModuleDef[] = [
         ],
         '1/8d',
       ),
-      f('time', 'Free time', 0.001, 2, 0.3, { taper: 'log', unit: 's', mod: { depth: 0.02, span: 20, unit: 'ms' } }),
+      f('time', 'Time', 0.001, 2, 0.3, { taper: 'log', unit: 's', mod: { depth: 0.02, span: 20, unit: 'ms' } }),
       f('feedback', 'Feedback', 0, 0.95, 0.4, { unit: '%' }),
       f('tone', 'Tone', 200, 20000, 4000, { taper: 'log', unit: 'Hz' }),
       b('pingpong', 'Ping pong', false),

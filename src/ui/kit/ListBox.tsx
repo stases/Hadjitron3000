@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef } from 'react';
 import type { KeyboardEvent } from 'react';
 import { cx } from './cx';
+import { useHint } from './hint';
 import { ColorChip, Icon } from './Icon';
 import type { IconName } from './icons';
 
@@ -12,10 +13,12 @@ interface ListBoxProps {
   onChange: (id: string) => void;
   onActivate?: (id: string) => void;
   height?: number;
+  hint?: string;
 }
 
-export function ListBox({ items, value, onChange, onActivate, height }: ListBoxProps) {
+export function ListBox({ items, value, onChange, onActivate, height, hint }: ListBoxProps) {
   const root = useRef<HTMLDivElement>(null);
+  const hover = useHint(hint);
   const ids = items.flatMap((item) => ('id' in item ? [item.id] : []));
 
   useLayoutEffect(() => {
@@ -42,7 +45,7 @@ export function ListBox({ items, value, onChange, onActivate, height }: ListBoxP
   };
 
   return (
-    <div className="h-listbox" role="listbox" tabIndex={0} style={{ height }} onKeyDown={onKeyDown}>
+    <div className="h-listbox" role="listbox" tabIndex={0} style={{ height }} onKeyDown={onKeyDown} {...hover.props}>
       <div className="h-listbox-scroll" ref={root}>
         {items.map((item, i) =>
           'header' in item ? (

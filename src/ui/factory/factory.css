@@ -1,0 +1,233 @@
+/* The Factory: sound list, rack and keyboard. The rack runs on one grid: 56px columns 8px apart. */
+
+.h-factory {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  grid-template-rows: 23px minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.h-factory-caption {
+  align-self: end;
+  padding: 0 0 2px 2px;
+  font: var(--font-small);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* Header */
+
+.h-factory-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.h-factory-swatch {
+  display: block;
+  width: 14px;
+  height: 14px;
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.h-factory-spacer {
+  flex: 1;
+}
+
+/* Sound list */
+
+.h-factory-sounds {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+}
+
+.h-factory-sounds .h-listbox {
+  flex: 1;
+  min-height: 0;
+  margin-bottom: 2px;
+}
+
+/* Rack */
+
+.h-factory-well {
+  display: flex;
+  min-height: 0;
+  padding: 2px;
+  box-shadow: var(--bevel-sunken);
+}
+
+.h-factory-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  background: var(--face-lo);
+}
+
+.h-factory-empty {
+  margin: 0;
+  padding: 40px 16px;
+  text-align: center;
+  color: var(--ink-soft);
+}
+
+.h-factory-rack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+}
+
+.h-factory-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.h-factory-sampler {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* A grid cell is as tall as a knob with its caption and value; other controls end on the caption line. */
+.h-factory-cell {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  width: 56px;
+  height: 62px;
+}
+
+.h-factory-cell.is-wide {
+  align-items: flex-start;
+  justify-content: flex-end;
+  width: 120px;
+  padding-bottom: 14px;
+}
+
+.h-factory-cell.is-wide .h-param {
+  justify-content: space-between;
+  height: 38px;
+}
+
+.h-factory-cell.is-stack {
+  gap: 4px;
+}
+
+.h-factory-cell.is-display {
+  width: auto;
+  height: auto;
+  padding: 0;
+}
+
+.h-factory-add {
+  padding: 1px 0 1px 39px;
+}
+
+/* Sampler waveform */
+
+.h-factory-wave {
+  position: relative;
+  flex: none;
+}
+
+.h-factory-wave-name,
+.h-factory-wave-message {
+  position: absolute;
+  font: var(--font-mono);
+  white-space: nowrap;
+  color: var(--amber);
+  text-shadow: var(--amber-glow);
+  pointer-events: none;
+}
+
+.h-factory-wave-name {
+  top: 3px;
+  left: 4px;
+  max-width: 492px;
+  padding: 0 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--crt);
+}
+
+.h-factory-wave-message {
+  top: 34px;
+  left: 2px;
+  right: 2px;
+  text-align: center;
+}
+
+/* Keyboard */
+
+.h-factory-octave {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.h-factory-piano {
+  padding: 6px 2px 2px;
+  background: var(--ink);
+  box-shadow: var(--bevel-sunken);
+}
+
+.h-factory-keys {
+  position: relative;
+  height: 60px;
+  overflow: hidden;
+}
+
+.h-factory-key {
+  position: absolute;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  font: var(--font-small);
+}
+
+.h-factory-key.is-white {
+  height: 60px;
+  padding-bottom: 4px;
+  color: var(--lo);
+  background: var(--paper);
+  box-shadow: inset -1px 0 var(--ink), inset 1px 0 var(--hi), inset 0 -3px var(--face-lo), inset -2px 0 var(--face-hi);
+}
+
+.h-factory-key.is-white.is-down {
+  padding-bottom: 2px;
+  background: var(--face-hi);
+  box-shadow: inset -1px 0 var(--ink), inset 1px 1px var(--lo), inset 0 -1px var(--face-lo);
+}
+
+.h-factory-key.is-black {
+  height: 36px;
+  padding-bottom: 6px;
+  color: var(--lo);
+  background: var(--ink);
+  box-shadow: inset 0 -5px var(--ink-soft), inset 1px 0 var(--ink-soft), inset -1px 0 var(--ink), inset 0 -6px var(--ink);
+}
+
+.h-factory-key.is-black.is-down {
+  padding-bottom: 3px;
+  box-shadow: inset 0 -2px var(--ink-soft), inset 1px 0 var(--ink-soft), inset 0 -3px var(--ink);
+}
+
+.h-factory-key-name {
+  color: var(--ink-soft);
+}
+
+.h-factory-key-letter {
+  height: 12px;
+}

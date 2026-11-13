@@ -12,6 +12,7 @@ interface ParamControlProps {
   value: ParamValue;
   onChange: (value: ParamValue) => void;
   hint?: string;
+  disabled?: boolean;
 }
 
 /** A float with at most this many positions gets a knob that clicks into each one. */
@@ -21,7 +22,7 @@ const WAVES = ['sine', 'triangle', 'sawtooth', 'square'] as const;
 const isWaveChoice = (spec: ChoiceSpec) =>
   spec.options.length === WAVES.length && spec.options.every(([v], i) => v === WAVES[i]);
 
-export function ParamControl({ spec, value, onChange, hint }: ParamControlProps) {
+export function ParamControl({ spec, value, onChange, hint, disabled }: ParamControlProps) {
   switch (spec.kind) {
     case 'float': {
       const count = spec.step && (spec.taper ?? 'lin') === 'lin' ? Math.round((spec.max - spec.min) / spec.step) + 1 : 0;
@@ -34,6 +35,8 @@ export function ParamControl({ spec, value, onChange, hint }: ParamControlProps)
           display={formatValue(spec, value)}
           hint={hint}
           steps={count > 1 && count <= MAX_KNOB_STEPS ? count : undefined}
+          bipolar={spec.min === -spec.max}
+          disabled={disabled}
         />
       );
     }

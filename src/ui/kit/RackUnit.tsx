@@ -12,39 +12,44 @@ const SCREW: Sprite = {
 interface RackUnitProps {
   name: string;
   led?: { on: boolean; onToggle(): void };
-  onMoveUp?: () => void;
-  onMoveDown?: () => void;
+  onMoveUp?: (() => void) | null;
+  onMoveDown?: (() => void) | null;
   onRemove?: () => void;
   children?: ReactNode;
 }
 
 /**
  * One module in the rack: an ink nameplate up the left edge, two screws at the right and the controls in a row.
- * When any of the move or remove handlers is given, all three buttons are drawn and the missing ones are disabled,
- * so the buttons line up from unit to unit.
+ * The lamp has its own column whether or not it is drawn, so the controls start at the same x in every unit.
+ * The move buttons are drawn when either move handler is given (null draws it disabled); the remove button when
+ * onRemove is given. The buttons sit at the right edge, so they line up from unit to unit.
  */
 export function RackUnit({ name, led, onMoveUp, onMoveDown, onRemove, children }: RackUnitProps) {
-  const buttons = onMoveUp || onMoveDown || onRemove;
+  const moves = onMoveUp !== undefined || onMoveDown !== undefined;
   return (
     <div className="h-rack" role="group" aria-label={name}>
       <div className="h-rack-plate">{name}</div>
-      {led && (
-        <span className="h-rack-led">
-          <Led on={led.on} onClick={led.onToggle} hint={led.on ? 'Click to bypass.' : 'Click to switch on.'} />
-        </span>
-      )}
+      <span className="h-rack-led">
+        {led && <Led on={led.on} onClick={led.onToggle} hint={led.on ? 'Click to bypass.' : 'Click to switch on.'} />}
+      </span>
       <div className="h-rack-controls">{children}</div>
-      {buttons && (
+      {(moves || onRemove) && (
         <div className="h-rack-buttons">
-          <Button square small disabled={!onMoveUp} onClick={() => onMoveUp?.()} hint="Move up in the chain.">
-            <Icon name="up" />
-          </Button>
-          <Button square small disabled={!onMoveDown} onClick={() => onMoveDown?.()} hint="Move down in the chain.">
-            <Icon name="down" />
-          </Button>
-          <Button square small disabled={!onRemove} onClick={() => onRemove?.()} hint="Remove.">
-            <Icon name="close" />
-          </Button>
+          {moves && (
+            <>
+              <Button square small disabled={!onMoveUp} onClick={() => onMoveUp?.()} hint="Move up in the chain.">
+                <Icon name="up" />
+              </Button>
+              <Button square small disabled={!onMoveDown} onClick={() => onMoveDown?.()} hint="Move down in the chain.">
+                <Icon name="down" />
+              </Button>
+            </>
+          )}
+          {onRemove && (
+            <Button square small onClick={onRemove} hint="Remove.">
+              <Icon name="close" />
+            </Button>
+          )}
         </div>
       )}
       <span className="h-screw is-top">

@@ -2,16 +2,19 @@
 // Commands talk to the platform (files, dialogs) and the store; views only call them.
 
 import { decodeSample, renderSound } from '../audio';
+import { extractBlock } from '../core/block';
+import { PATTERN_NAMES } from '../core/defaults';
 import {
-  FormatError, PROJECT_EXT, SOUND_EXT, parseProject, parseSound, sampleId, serializeProject, serializeSound,
+  BLOCK_EXT, FormatError, PROJECT_EXT, SOUND_EXT, parseBlock, parseProject, parseSound, sampleId, serializeBlock,
+  serializeProject, serializeSound,
 } from '../core/fileformat';
 import { encodeWav } from '../core/wav';
-import type { SampleData } from '../core/types';
-import type { FileFilter, OpenedFile, SavedFile } from '../platform/api';
+import type { Block, SampleData } from '../core/types';
+import type { FileFilter, Library, OpenedFile, SavedFile } from '../platform/api';
 import { platform } from '../platform';
 import { starterProject } from '../presets/projects';
 import {
-  addChannel, addSampleChannel, markSaved, openProject as loadProject, setSample, setSourceType, useApp,
+  addChannel, addSampleChannel, insertBlock, markSaved, openProject as loadProject, setSample, setSourceType, useApp,
 } from '../state/store';
 import type { AppState } from '../state/store';
 import { ask, fail, openDialog, reason } from './dialogStore';
@@ -20,6 +23,7 @@ const AUDIO_EXTS = ['wav', 'mp3', 'aiff', 'aif', 'flac', 'ogg', 'm4a'];
 const AUDIO_FILTER: FileFilter = { name: 'Audio files', extensions: AUDIO_EXTS };
 const PROJECT_FILTER: FileFilter = { name: 'Hadjitron 3000 projects', extensions: [PROJECT_EXT] };
 const SOUND_FILTER: FileFilter = { name: 'Hadjitron 3000 sounds', extensions: [SOUND_EXT] };
+const BLOCK_FILTER: FileFilter = { name: 'Hadjitron 3000 blocks', extensions: [BLOCK_EXT] };
 
 const extension = (name: string) => name.slice(name.lastIndexOf('.') + 1).toLowerCase();
 const baseName = (name: string) => name.replace(/\.[^.]+$/, '');
@@ -31,6 +35,7 @@ export function documentName(state: Pick<AppState, 'file' | 'project'> = useApp.
 }
 
 const channelOf = (channelId: string) => useApp.getState().project.channels.find((c) => c.id === channelId);
+const blockOf = (patternId: string) => extractBlock(useApp.getState().project, patternId);
 
 /** Offer to save unsaved changes. False when the user cancels (or the save fails). */
 export async function confirmDiscard(): Promise<boolean> {
@@ -147,13 +152,34 @@ export async function importAudio(): Promise<void> {
   if (file) await addAudio(file.name, file.bytes);
 }
 
-/** Files dropped on the window: audio becomes sampler channels, a .h3s a new channel, a .h3k is opened. */
+/** Add a block to the project and make it the current one. False (after telling the user) when the project is full. */
+export async function addBlockToProject(block: Block): Promise<boolean> {
+  if (insertBlock(block)) return true;
+  await fail(`${block.name} could not be added. A project holds at most ${PATTERN_NAMES.length} blocks; `
+    + 'delete one and try again.');
+  return false;
+}
+
+async function addBlockFile(file: { name: string; bytes: Uint8Array }): Promise<void> {
+  let block: Block;
+  try {
+    block = parseBlock(new TextDecoder().decode(file.bytes));
+  } catch (error) {
+    return fail(`${file.name} could not be opened. ${fileProblem(error)}`);
+  }
+  await addBlockToProject(block);
+}
+
+/**
+ * Files dropped on the window: audio becomes sampler channels, a .h3s a new channel, a .h3b a new block,
+ * and a .h3k is opened.
+ */
 export async function dropFiles(files: File[]): Promise<void> {
   for (const file of files) {
     const ext = extension(file.name);
-    if (ext !== PROJECT_EXT && ext !== SOUND_EXT && !AUDIO_EXTS.includes(ext)) {
+    if (![PROJECT_EXT, SOUND_EXT, BLOCK_EXT, ...AUDIO_EXTS].includes(ext)) {
       await fail(`${file.name} is not something Hadjitron 3000 can open. `
-        + `Drop audio files, sounds (.${SOUND_EXT}) or a project (.${PROJECT_EXT}).`);
+        + `Drop audio files, sounds (.${SOUND_EXT}), blocks (.${BLOCK_EXT}) or a project (.${PROJECT_EXT}).`);
       continue;
     }
     let bytes: Uint8Array;
@@ -174,6 +200,8 @@ export async function openFile(file: OpenedFile): Promise<void> {
     if (await confirmDiscard()) openProjectFile(file);
   } else if (ext === SOUND_EXT) {
     addSoundFile(file);
+  } else if (ext === BLOCK_EXT) {
+    await addBlockFile(file);
   } else {
     await addAudio(file.name, file.bytes);
   }
@@ -214,17 +242,14 @@ export async function loadSampleFile(channelId: string, file: File): Promise<voi
   await loadAudioInto(channelId, file.name, bytes);
 }
 
-/** Save a channel's sound into the user's sound library under its name. */
-export async function saveSoundToLibrary(channelId: string): Promise<void> {
-  const channel = channelOf(channelId);
-  if (!channel) return;
-  const { name } = channel.sound;
+/** Write a file into a library under a name, asking before replacing one that is already there. */
+async function saveToLibrary(library: Library, noun: 'sound' | 'block', name: string, text: string): Promise<void> {
   try {
-    if ((await platform.library.list()).includes(name)) {
+    if ((await library.list()).includes(name)) {
       const answer = await ask({
         title: 'Save to Library',
         icon: 'question',
-        text: `Your library already has a sound called ${name}. Replace it?`,
+        text: `Your library already has a ${noun} called ${name}. Replace it?`,
         buttons: [
           { label: 'Replace', value: 'replace' },
           { label: 'Cancel', value: 'cancel', primary: true },
@@ -232,12 +257,20 @@ export async function saveSoundToLibrary(channelId: string): Promise<void> {
       });
       if (answer !== 'replace') return;
     }
-    await platform.library.write(name, utf8(serializeSound(channel.sound, useApp.getState().project.samples)));
+    await library.write(name, utf8(text));
   } catch (error) {
     await fail(error instanceof Error && /Invalid library name/.test(error.message)
-      ? `"${name}" cannot be used as a file name. Rename the sound and try again.`
-      : `The sound could not be saved to your library${reason(error)}.`);
+      ? `"${name}" cannot be used as a file name. Rename the ${noun} and try again.`
+      : `The ${noun} could not be saved to your library${reason(error)}.`);
   }
+}
+
+/** Save a channel's sound into the user's sound library under its name. */
+export async function saveSoundToLibrary(channelId: string): Promise<void> {
+  const channel = channelOf(channelId);
+  if (!channel) return;
+  const text = serializeSound(channel.sound, useApp.getState().project.samples);
+  await saveToLibrary(platform.library, 'sound', channel.sound.name, text);
 }
 
 /** Save a channel's sound as a .h3s file anywhere. */
@@ -249,7 +282,7 @@ export async function saveSoundAs(channelId: string): Promise<void> {
   await writeFile({ title: 'Save Sound', defaultName, filters: [SOUND_FILTER], bytes });
 }
 
-/** Open the Export dialog (song or pattern, WAV or MP3). */
+/** Open the Export dialog (song or block, WAV or MP3). */
 export function exportAudio(): void {
   openDialog({ kind: 'export' });
 }
@@ -281,10 +314,25 @@ export function showShortcuts(): void {
 }
 
 /** Open the Block Library to add a block to the project. */
-export function addBlock(): void {}
+export function addBlock(): void {
+  openDialog({ kind: 'blocks' });
+}
+
+/** Ask for a new name for a block. */
+export function renameBlock(patternId: string): void {
+  openDialog({ kind: 'rename', patternId });
+}
 
 /** Save a block, with the sounds it plays, into the user's block library under its name. */
-export async function saveBlockToLibrary(_patternId: string): Promise<void> {}
+export async function saveBlockToLibrary(patternId: string): Promise<void> {
+  const block = blockOf(patternId);
+  if (block) await saveToLibrary(platform.blocks, 'block', block.name, serializeBlock(block));
+}
 
 /** Save a block, with the sounds it plays, as a .h3b file anywhere. */
-export async function saveBlockAs(_patternId: string): Promise<void> {}
+export async function saveBlockAs(patternId: string): Promise<void> {
+  const block = blockOf(patternId);
+  if (!block) return;
+  const bytes = utf8(serializeBlock(block));
+  await writeFile({ title: 'Save Block', defaultName: `${block.name}.${BLOCK_EXT}`, filters: [BLOCK_FILTER], bytes });
+}

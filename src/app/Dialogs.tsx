@@ -1,9 +1,10 @@
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
 import { version } from '../../package.json';
-import { Button, Dialog, DialogButtons, Emblem, MessageBox } from '../ui/kit';
+import { renamePattern, useApp } from '../state/store';
+import { Button, Dialog, DialogButtons, Emblem, MessageBox, TextField } from '../ui/kit';
 import { closeDialog, useDialogs } from './dialogStore';
 import { ExportDialog } from './ExportDialog';
-import { LibraryDialog } from './LibraryDialog';
+import { BlockLibraryDialog, SoundLibraryDialog } from './LibraryDialog';
 import { SHORTCUT_GROUPS } from './shortcuts';
 
 function AboutDialog() {
@@ -15,8 +16,8 @@ function AboutDialog() {
           <p className="h-app-about-name">Hadjitron 3000</p>
           <p>Version {version}</p>
           <p>
-            A small music machine for building sounds in the Factory and putting them on the Track. Make yourself a cup
-            of tea and play something.
+            A small music machine for building sounds in the Factory, putting them into blocks on the Track and
+            arranging the blocks in the Song. Make yourself a cup of tea and play something.
           </p>
           <p className="h-app-about-credits">
             Fusion Pixel by TakWolf and Departure Mono by Helena Zhang, both under the SIL Open Font License.
@@ -57,13 +58,46 @@ function ShortcutsDialog() {
   );
 }
 
+const BLOCK_NAME_LENGTH = 24;
+
+function RenameBlockDialog({ patternId }: { patternId: string }) {
+  const [name, setName] = useState(() => useApp.getState().project.patterns.find((p) => p.id === patternId)!.name);
+  const rename = () => {
+    if (!name.trim()) return;
+    renamePattern(patternId, name);
+    closeDialog();
+  };
+  return (
+    <Dialog title="Rename Block" onClose={closeDialog}>
+      <form
+        className="h-app-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          rename();
+        }}
+      >
+        <span>Name:</span>
+        <TextField value={name} onChange={setName} maxLength={BLOCK_NAME_LENGTH} width={180} autoFocus />
+      </form>
+      <DialogButtons>
+        <Button primary disabled={!name.trim()} onClick={rename}>
+          OK
+        </Button>
+        <Button onClick={closeDialog}>Cancel</Button>
+      </DialogButtons>
+    </Dialog>
+  );
+}
+
 /** The open dialog, with the first waiting message box on top of it. */
 export function Dialogs() {
   const dialog = useDialogs((s) => s.dialog);
   const message = useDialogs((s) => s.messages[0]);
   return (
     <>
-      {dialog?.kind === 'library' && <LibraryDialog replace={dialog.replace} />}
+      {dialog?.kind === 'library' && <SoundLibraryDialog replace={dialog.replace} />}
+      {dialog?.kind === 'blocks' && <BlockLibraryDialog />}
+      {dialog?.kind === 'rename' && <RenameBlockDialog patternId={dialog.patternId} />}
       {dialog?.kind === 'export' && <ExportDialog />}
       {dialog?.kind === 'about' && <AboutDialog />}
       {dialog?.kind === 'shortcuts' && <ShortcutsDialog />}

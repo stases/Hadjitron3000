@@ -13,11 +13,12 @@ const FORMATS = [
   ...[128, 192, 256, 320].map((kbps) => ({ value: String(kbps), label: `MP3, ${kbps} kbit/s` })),
 ];
 const RING_OUT_SECONDS = 6;
+const SELECT_WIDTH = 220; // "Block: " and a name of 24 characters
 
-/** Render the song or the current pattern and save it as WAV or MP3. */
+/** Render the song or the current block and save it as WAV or MP3. */
 export function ExportDialog() {
   const patternId = useApp((s) => s.patternId);
-  const pattern = `Pattern ${useApp((s) => s.project.patterns.find((p) => p.id === s.patternId)!.name)}`;
+  const block = useApp((s) => s.project.patterns.find((p) => p.id === s.patternId)!.name);
   const [what, setWhat] = useState(() => useApp.getState().scope);
   const [repeats, setRepeats] = useState(1);
   const [format, setFormat] = useState('wav');
@@ -37,13 +38,13 @@ export function ExportDialog() {
     const steps = loopSteps(project, scope);
     if (eventsBetween(project, scope, 0, steps).length === 0) {
       await fail(what === 'song'
-        ? 'The song has no notes to export. Add patterns with notes to the song first.'
-        : `${pattern} has no notes to export. Add some steps first.`);
+        ? 'The song has no notes to export. Place blocks with notes in the Song view first.'
+        : `The block ${block} has no notes to export. Add some steps first.`);
       return;
     }
     const mp3 = format !== 'wav';
     const ext = mp3 ? 'mp3' : 'wav';
-    const name = what === 'song' ? documentName() : `${documentName()} - ${pattern}`;
+    const name = what === 'song' ? documentName() : `${documentName()} - ${block}`;
     let bytes: Uint8Array;
     try {
       setProgress({ label: 'Rendering…', value: 0 });
@@ -79,7 +80,7 @@ export function ExportDialog() {
 
   const busy = progress !== null;
   return (
-    <Dialog title="Export Audio" onClose={closeDialog} width={340}>
+    <Dialog title="Export Audio" onClose={closeDialog} width={380}>
       <GroupBox label="Export">
         <div className="h-app-form">
           <span>What:</span>
@@ -87,16 +88,16 @@ export function ExportDialog() {
             value={what}
             options={[
               { value: 'song', label: 'The song' },
-              { value: 'pattern', label: pattern },
+              { value: 'pattern', label: `Block: ${block}` },
             ]}
             onChange={(v) => setWhat(v as 'song' | 'pattern')}
-            width={150}
+            width={SELECT_WIDTH}
             disabled={busy}
           />
           <span>Repeats:</span>
           <Stepper value={repeats} min={1} max={16} onChange={setRepeats} width={52} disabled={busy || what === 'song'} />
           <span>Format:</span>
-          <Select value={format} options={FORMATS} onChange={setFormat} width={150} disabled={busy} />
+          <Select value={format} options={FORMATS} onChange={setFormat} width={SELECT_WIDTH} disabled={busy} />
           <span />
           <Checkbox
             checked={ringOut}

@@ -31,6 +31,7 @@ function command(e: KeyboardEvent): (() => unknown) | null {
   if (key === 'y' && !e.shiftKey) return redo;
   if (e.code === 'Digit1') return () => setView('factory');
   if (e.code === 'Digit2') return () => setView('track');
+  if (e.code === 'Digit3') return () => setView('song');
   return null;
 }
 

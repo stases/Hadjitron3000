@@ -4,18 +4,21 @@ import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { position, tap } from '../../src/app/audio';
-import { addSound, dropFiles } from '../../src/app/commands';
+import { addSound, dropFiles, renameBlock } from '../../src/app/commands';
 import { OUT, paramSpec } from '../../src/core/modules';
 import type { FloatSpec } from '../../src/core/modules';
 import { fromNorm, toNorm } from '../../src/core/params';
 import { loopProject as demoProject } from '../support/loopProject';
 import {
-  openProject, selectStep, setPatternBars, setPlaying, setScope, undo, useApp,
+  addPattern, addPlacement, openProject, removePattern, selectStep, setPatternBars, setPatternColor, setPlaying,
+  setScope, undo, useApp,
 } from '../../src/state/store';
 import { TrackView } from '../../src/ui/track';
 
 vi.mock('../../src/app/audio', () => ({ tap: vi.fn(), position: vi.fn(() => -1) }));
-vi.mock('../../src/app/commands', () => ({ addSound: vi.fn(), dropFiles: vi.fn(async () => {}) }));
+vi.mock('../../src/app/commands', () => ({
+  addSound: vi.fn(), dropFiles: vi.fn(async () => {}), renameBlock: vi.fn(),
+}));
 
 // Demo rows: 0 Kick, 1 Clap, 2 Hat, 3 Sub Bass, 4 Kalimba, 5 Warm Pad, 6 Glass Pad, 7 Bell.
 const KICK = 0;
@@ -55,7 +58,11 @@ const cell = (row: number, col: number) => lanes()[row].querySelectorAll<HTMLEle
 const stepsIn = (row: number) => [...lanes()[row].querySelectorAll<HTMLElement>('.h-track-step')];
 const button = (label: string) =>
   [...host.querySelectorAll<HTMLButtonElement>('.h-track-bar button')].find((b) => b.textContent === label)!;
-const plusButtons = () => [...host.querySelectorAll<HTMLButtonElement>('.h-track-bar button.is-square')];
+const blockSelect = () => host.querySelector<HTMLElement>('.h-track-bar .h-select')!;
+const chip = () => host.querySelector('.h-track-bar .h-track-swatch')!.closest('button')!;
+const addButton = () =>
+  [...host.querySelectorAll<HTMLButtonElement>('.h-track-bar button.is-square')].find((b) => b !== chip())!;
+const used = () => host.querySelector('.h-track-used')!.textContent;
 
 function centre(el: Element) {
   const r = el.getBoundingClientRect();
@@ -74,7 +81,13 @@ async function drag(from: { x: number; y: number }, ...path: { x: number; y: num
 
 const click = (el: Element) => drag(centre(el));
 
-test('the grid shows the rows and steps of the pattern and follows pattern switches and the bar count', async () => {
+/** Picks a block by name in the block bar's list. */
+async function choose(name: string) {
+  await click(blockSelect());
+  await click([...document.querySelectorAll('.h-select-option')].find((o) => o.textContent === name)!);
+}
+
+test('the grid shows the rows and steps of the block and follows block switches and the bar count', async () => {
   expect(lanes()).toHaveLength(8);
   expect(host.querySelector('.h-track-head .h-track-name')!.textContent).toBe('Kick');
   expect(stepsIn(KICK)).toHaveLength(Object.keys(cellsOf(KICK)).length);
@@ -89,7 +102,7 @@ test('the grid shows the rows and steps of the pattern and follows pattern switc
     expect(rect(el!).right).toBe(rect(cell(SUB, index + step.len - 1)).right);
   }
 
-  await click(button('B'));
+  await choose('B');
   expect(pattern().name).toBe('B');
   expect(stepsIn(KICK)).toHaveLength(Object.keys(cellsOf(KICK)).length);
   expect(stepsIn(KICK)).toHaveLength(5);
@@ -193,30 +206,51 @@ test('mute, solo and the level slider call through', async () => {
   expect(state().channelId).toBe(channelId(CLAP));
 });
 
-test('the pattern bar selects, adds, copies, clears and deletes patterns', async () => {
-  const [add] = plusButtons();
-  expect(button('Delete').disabled).toBe(false);
-  await click(button('A'));
+test('the block bar picks, recolours, adds, copies, clears and deletes blocks and shows their use', async () => {
+  expect(blockSelect().textContent).toBe('A');
+  expect(used()).toBe('In the song 3 times');
+  await choose('B');
+  expect(pattern().name).toBe('B');
+  expect(used()).toBe('In the song once');
+  expect([...document.querySelectorAll('.h-select-option')]).toHaveLength(0);
+
+  expect(pattern().color).toBe(0);
+  await click(chip());
+  expect(pattern().color).toBe(1);
+  flushSync(() => setPatternColor(pattern().id, 7));
+  await click(chip());
+  expect(pattern().color).toBe(0);
+
+  await click(button('Rename…'));
+  expect(renameBlock).toHaveBeenCalledWith(pattern().id);
+
+  await choose('A');
   await click(button('Copy'));
   expect(pattern().name).toBe('C');
+  expect(blockSelect().textContent).toBe('C');
+  expect(used()).toBe('Not in the song yet');
   expect(pattern().cells).toEqual(state().project.patterns[0].cells);
   await click(button('Clear'));
   expect(pattern().cells).toEqual({});
   expect(stepsIn(KICK)).toHaveLength(0);
-  await click(add);
+  await click(addButton());
   expect(pattern().name).toBe('D');
   await click(button('Delete'));
   expect(state().project.patterns.map((p) => p.name)).toEqual(['A', 'B', 'C']);
 
-  for (let i = 0; i < 5; i++) await click(add);
-  expect(state().project.patterns).toHaveLength(8);
-  expect(add.disabled).toBe(true);
+  flushSync(() => {
+    for (let i = 0; i < 22; i++) addPattern();
+  });
+  await click(addButton());
+  expect(state().project.patterns).toHaveLength(26);
+  expect(addButton().disabled).toBe(true);
   expect(button('Copy').disabled).toBe(true);
 
-  for (let i = 0; i < 7; i++) await click(button('Delete'));
-  expect(state().project.patterns).toHaveLength(1);
+  flushSync(() => {
+    for (const p of state().project.patterns.slice(1)) removePattern(p.id);
+  });
   expect(button('Delete').disabled).toBe(true);
-  expect(add.disabled).toBe(false);
+  expect(addButton().disabled).toBe(false);
 });
 
 test('the inspector edits the selected step', async () => {
@@ -242,7 +276,7 @@ test('the inspector edits the selected step', async () => {
   expect(cellsOf(SUB)[0].len).toBe(6);
 });
 
-test('the play marker sits on the column being heard and hides while another pattern plays', async () => {
+test('the play marker sits on the column being heard and hides while another block plays', async () => {
   const scroller = host.querySelector<HTMLElement>('.h-track-scroll')!;
   const marker = host.querySelector<HTMLElement>('.h-track-marker')!;
   const now = lanes()[CLAP].querySelector<HTMLElement>('.h-track-now')!;
@@ -259,14 +293,20 @@ test('the play marker sits on the column being heard and hides while another pat
   expect(lamp(KICK).classList.contains('is-on')).toBe(false);
   expect(lamp(5).classList.contains('is-on')).toBe(true);
 
-  // The song is A A B A, 32 steps each: step 70 is in the third entry, pattern B.
+  // The first lane of the song is A A B A, two bars each: step 70 is in the third placement, block B.
   vi.mocked(position).mockReturnValue(70.2);
   flushSync(() => setScope('song'));
   await expect.poll(() => scroller.dataset.now).toBeUndefined();
   expect(getComputedStyle(marker).display).toBe('none');
-  await expect.poll(() => host.querySelectorAll('.h-track-slot')[2].classList.contains('is-now')).toBe(true);
 
-  await click(button('B'));
+  await choose('B');
+  await expect.poll(() => getComputedStyle(marker).display).toBe('block');
+  expect(marker.getBoundingClientRect().left).toBe(cell(CLAP, 6).getBoundingClientRect().left);
+
+  // A placed in the second lane at bar 5 plays together with B, so the marker shows on A too.
+  const a = state().project.patterns[0].id;
+  flushSync(() => addPlacement(a, 1, 4));
+  expect(pattern().name).toBe('A');
   await expect.poll(() => getComputedStyle(marker).display).toBe('block');
   expect(marker.getBoundingClientRect().left).toBe(cell(CLAP, 6).getBoundingClientRect().left);
 });

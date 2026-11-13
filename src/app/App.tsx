@@ -50,17 +50,20 @@ function useSampleRate(): number {
   return rate;
 }
 
-/** Where the transport is: the pattern and bar.beat while playing, otherwise what Play would play. */
-function playText(state: AppState): string {
+/**
+ * What Play plays, the block or the song, and then where the transport is (bar.beat) while playing or how long
+ * it is while stopped.
+ */
+function playText(state: AppState): [string, string] {
   const { project, scope } = state;
   const bars = (n: number) => `${n} ${n === 1 ? 'bar' : 'bars'}`;
   const pattern = project.patterns.find((p) => p.id === state.patternId)!;
-  if (scope === 'song' && project.song.length === 0) return 'Song is empty';
-  if (!state.playing) return scope === 'song' ? `Song · ${bars(songBars(project))}` : `Block ${pattern.name} · ${bars(pattern.bars)}`;
+  if (scope === 'song' && project.song.length === 0) return ['The song is empty', ''];
+  const what = scope === 'song' ? 'Song' : `Block ${pattern.name}`;
+  if (!state.playing) return [what, scope === 'song' ? bars(songBars(project)) : bars(pattern.bars)];
   const step = Math.max(0, Math.floor(position()));
   const at = scope === 'song' ? step % (songBars(project) * STEPS_PER_BAR) : heardAt(project, playScope(state), step)[0].step;
-  const place = `${Math.floor(at / STEPS_PER_BAR) + 1}.${Math.floor((at % STEPS_PER_BAR) / 4) + 1}`;
-  return scope === 'song' ? `Song ${place}` : `Block ${pattern.name} ${place}`;
+  return [what, `${Math.floor(at / STEPS_PER_BAR) + 1}.${Math.floor((at % STEPS_PER_BAR) / 4) + 1}`];
 }
 
 function Status() {
@@ -68,10 +71,16 @@ function Status() {
   const state = useApp();
   const rate = useSampleRate();
   useFrames(state.playing);
+  const [what, detail] = playText(state);
   return (
     <StatusBar>
       <StatusField>{hint || 'Ready.'}</StatusField>
-      <StatusField width={150}>{playText(state)}</StatusField>
+      <StatusField width={190}>
+        <span className="h-app-where">
+          <span className="h-app-where-what">{what}</span>
+          {detail && <span>{` · ${detail}`}</span>}
+        </span>
+      </StatusField>
       <StatusField width={70}>{rate ? `${(rate / 1000).toFixed(1)} kHz` : ''}</StatusField>
     </StatusBar>
   );
@@ -153,7 +162,7 @@ export function App() {
         </TabPage>
         {dropping && (
           <div className="h-app-drop">
-            <div className="h-app-drop-card">Drop audio files, sounds or a project to add or open them.</div>
+            <div className="h-app-drop-card">Drop audio files, sounds, blocks or a project to add or open them.</div>
           </div>
         )}
       </div>

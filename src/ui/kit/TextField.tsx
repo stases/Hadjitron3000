@@ -6,12 +6,16 @@ interface TextFieldProps {
   onCommit?: (value: string) => void;
   placeholder?: string;
   width?: number;
+  maxLength?: number;
+  autoFocus?: boolean; // a dialog puts the focus here first, with the text selected
   disabled?: boolean;
   hint?: string;
 }
 
 /** A sunken paper text field; Enter and leaving the field commit. */
-export function TextField({ value, onChange, onCommit, placeholder, width, disabled, hint }: TextFieldProps) {
+export function TextField({
+  value, onChange, onCommit, placeholder, width, maxLength, autoFocus, disabled, hint,
+}: TextFieldProps) {
   const hover = useHint(hint);
   return (
     <input
@@ -19,6 +23,8 @@ export function TextField({ value, onChange, onCommit, placeholder, width, disab
       style={width ? { width } : undefined}
       value={value}
       placeholder={placeholder}
+      maxLength={maxLength}
+      data-autofocus={autoFocus || undefined}
       disabled={disabled}
       spellCheck={false}
       onChange={(e) => onChange(e.target.value)}

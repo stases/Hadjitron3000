@@ -32,23 +32,21 @@
   margin-left: 0;
 }
 
-.h-track-joined {
-  display: flex;
+.h-track-swatch {
+  display: block;
+  width: 14px;
+  height: 14px;
+  box-shadow: inset 0 0 0 1px var(--ink);
 }
 
-.h-track-song {
-  display: flex;
-  align-items: center;
-  gap: 2px;
+.h-track-used {
   min-width: 0;
+  margin-left: auto;
+  padding: 0 4px 0 10px;
   overflow: hidden;
-}
-
-.h-track-slot.is-now .h-button {
-  color: var(--amber);
-  text-shadow: var(--amber-glow);
-  background: var(--ink);
-  box-shadow: var(--bevel-pressed);
+  font: var(--font-small);
+  text-overflow: ellipsis;
+  color: var(--ink-soft);
 }
 
 /* The grid */

@@ -1,7 +1,9 @@
-// The two projects the app can start from: an empty kit, and the demo song of the first launch.
+// The two projects the app can start from (an empty kit, and the demo song of the first launch),
+// and the factory blocks taken from the demo.
 
+import { extractBlock } from '../core/block';
 import { emptyProject, newPattern, uid } from '../core/defaults';
-import type { Channel, Pattern, Project, Step } from '../core/types';
+import type { Block, Channel, Pattern, Project, Step } from '../core/types';
 import { preset } from './index';
 
 function channels(names: string[]): Channel[] {
@@ -86,4 +88,10 @@ export function demoProject(): Project {
     patterns: [beat, bassline, keys, pads, breakBeat, bassUp, keysUp, padsUp],
     song: lanes.flatMap((row, lane) => row.map(([p, bar, bars]) => ({ id: uid('s'), pattern: p.id, lane, bar, bars }))),
   };
+}
+
+/** The factory blocks of the Block Library: the eight blocks of the demo song, each with the sounds it plays. */
+export function factoryBlocks(): Block[] {
+  const demo = demoProject();
+  return demo.patterns.map((pattern) => extractBlock(demo, pattern.id)!);
 }

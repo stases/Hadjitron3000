@@ -91,7 +91,7 @@ const MENUS: { label: string; items: MenuItem[] }[] = [
     ],
   },
   { label: 'Sound', items: [{ label: 'New Sound', onSelect: noop }, { label: 'Add Effect', items: [] }] },
-  { label: 'Track', items: [{ label: 'Add Pattern', onSelect: noop }] },
+  { label: 'Track', items: [{ label: 'Add Block', onSelect: noop }] },
   { label: 'Help', items: [{ label: 'About Hadjitron 3000…', onSelect: noop }] },
 ];
 

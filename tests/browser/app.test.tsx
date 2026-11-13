@@ -10,10 +10,12 @@ import * as commands from '../../src/app/commands';
 import { useDialogs } from '../../src/app/dialogStore';
 import { installKeys } from '../../src/app/keys';
 import { restoreSession, saveSession } from '../../src/app/session';
+import { SHORTCUT_GROUPS } from '../../src/app/shortcuts';
+import { extractBlock } from '../../src/core/block';
 import { emptyProject, newSound } from '../../src/core/defaults';
-import { parseProject } from '../../src/core/fileformat';
+import { parseBlock, parseProject, serializeBlock } from '../../src/core/fileformat';
 import { platform } from '../../src/platform';
-import { demoProject, starterProject } from '../../src/presets/projects';
+import { demoProject, factoryBlocks, starterProject } from '../../src/presets/projects';
 import * as store from '../../src/state/store';
 
 vi.mock('../../src/app/audio', async (original) => ({
@@ -22,9 +24,17 @@ vi.mock('../../src/app/audio', async (original) => ({
   noteOff: vi.fn(),
   tap: vi.fn(),
   audition: vi.fn(async () => {}),
+  auditionBlock: vi.fn(async () => {}),
 }));
 
 const state = store.useApp.getState;
+const current = () => state().project.patterns.find((p) => p.id === state().patternId)!;
+/** A block of the demo song as the bytes of a .h3b file. */
+function blockFile(name: string) {
+  const project = demoProject();
+  const block = extractBlock(project, project.patterns.find((p) => p.name === name)!.id)!;
+  return new TextEncoder().encode(serializeBlock(block));
+}
 const sessionStore = createStore('hadjitron-session', 'session');
 let root: { root: Root; host: HTMLElement } | null = null;
 let removeKeys: (() => void) | null = null;
@@ -84,6 +94,8 @@ async function messageText(): Promise<string> {
 // Buttons of the open dialog when there is one, so a view's button of the same name is not picked.
 const button = (label: string) =>
   $$(document.querySelector('.h-dialog') ? '.h-dialog .h-button' : '.h-button').find((b) => b.textContent === label)!;
+const messageButton = (label: string) => $$('.h-message-buttons .h-button').find((b) => b.textContent === label)!;
+const row = (label: string) => $$('.h-list-row').find((r) => r.textContent === label)!;
 
 test('the title shows the document name and an asterisk for unsaved changes', async () => {
   const setDocument = vi.spyOn(platform, 'setDocument');
@@ -137,15 +149,30 @@ test('the menus list their commands and follow the store', async () => {
   expect(disabled(await openMenu('Sound'), 'Duplicate')).toBe(true);
   await userEvent.keyboard('{Escape}');
 
-  const track = await openMenu('Track');
-  expect(labels(track)).toEqual([
-    'Play / Stop', 'New Pattern', 'Duplicate Pattern', 'Clear Pattern', 'Delete Pattern', 'Play Pattern', 'Play Song',
-  ]);
-  expect(track[5].querySelector('.h-menu-check svg')).not.toBeNull();
-  await userEvent.click(track[6]);
-  expect(state().scope).toBe('song');
-  expect(labels(await openMenu('View'))).toEqual(['Factory', 'Track']);
+  expect(labels(await openMenu('Track'))).toEqual(['Play / Stop']);
   await userEvent.keyboard('{Escape}');
+
+  const block = await openMenu('Block');
+  expect(labels(block)).toEqual([
+    'New Block', 'Duplicate Block', 'Clear Block', 'Delete Block', 'Block Library…', 'Save Block to Library',
+    'Save Block As…', 'Play Block', 'Play Song',
+  ]);
+  expect(block[7].querySelector('.h-menu-check svg')).not.toBeNull();
+  await userEvent.click(block[8]);
+  expect(state().scope).toBe('song');
+  await userEvent.click((await openMenu('Block'))[0]);
+  expect(current().name).toBe('A');
+  expect(state().project.patterns).toHaveLength(9);
+  await userEvent.click((await openMenu('Block'))[4]);
+  await expect.poll(() => document.querySelector('.h-dialog')?.getAttribute('aria-label')).toBe('Block Library');
+  await userEvent.click(button('Close'));
+
+  const view = await openMenu('View');
+  expect(labels(view)).toEqual(['Factory', 'Track', 'Song']);
+  expect(view.map((el) => el.querySelector('.h-menu-shortcut')!.textContent)).toEqual(['Ctrl+1', 'Ctrl+2', 'Ctrl+3']);
+  await userEvent.click(view[2]);
+  expect(state().view).toBe('song');
+  expect($('.h-tab.is-selected').textContent).toBe('Song');
   expect(labels(await openMenu('Help'))).toEqual(['Keyboard Shortcuts…', 'About Hadjitron 3000…']);
 });
 
@@ -222,6 +249,24 @@ test('Space, undo and redo, and the view shortcuts', () => {
   expect(state().view).toBe('factory');
   press('2', { ctrlKey: true, code: 'Digit2' });
   expect(state().view).toBe('track');
+  expect(state().scope).toBe('pattern');
+  press('3', { ctrlKey: true, code: 'Digit3' });
+  expect(state().view).toBe('song');
+  expect(state().scope).toBe('song');
+  expect(SHORTCUT_GROUPS[0].keys).toContainEqual(['Ctrl+1, Ctrl+2, Ctrl+3', 'Factory, Track, Song']);
+});
+
+test('the transport and the status bar say what Play plays, the block or the song', async () => {
+  renderApp();
+  const where = () => $$('.h-statusfield')[1].textContent;
+  expect($$('.h-app-joined .h-button').map((b) => b.textContent)).toEqual(['Block', 'Song']);
+  expect(where()).toBe('Block Beat · 2 bars');
+  await userEvent.click(button('Song'));
+  expect(state().scope).toBe('song');
+  await expect.poll(where).toBe('Song · 16 bars');
+  flushSync(() => store.openProject({ ...demoProject(), song: [] }, null));
+  flushSync(() => store.setScope('song'));
+  expect(where()).toBe('The song is empty');
 });
 
 test('the computer keyboard plays the selected sound from the C of the octave', () => {
@@ -379,6 +424,183 @@ test('a library sound replaces the sound of a channel', async () => {
   await expect.poll(() => state().project.channels[0].sound.name).toBe('Tom');
 });
 
+test('the Block Library lists factory and saved blocks, auditions them and adds one with its sounds', async () => {
+  vi.spyOn(platform.blocks, 'list').mockResolvedValue(['My Groove']);
+  const read = vi.spyOn(platform.blocks, 'read').mockResolvedValue(blockFile('Bass up'));
+  store.openProject(emptyProject(), null);
+  renderApp();
+  commands.addBlock();
+  await expect.poll(() => $$('.h-list-row').map((r) => r.textContent)).toContain('My Groove');
+  expect($('.h-dialog').getAttribute('aria-label')).toBe('Block Library');
+  expect($$('.h-list-header').map((h) => h.textContent)).toEqual(['Factory', 'My Blocks']);
+  expect(factoryBlocks().map((b) => b.name)).toEqual([
+    'Beat', 'Bass', 'Keys', 'Pads', 'Break', 'Bass up', 'Keys up', 'Pads up',
+  ]);
+  expect($$('.h-list-row').map((r) => r.textContent)).toEqual([...factoryBlocks().map((b) => b.name), 'My Groove']);
+  expect(row('Pads').querySelector('.h-chip')!.getAttribute('style')).toContain('--c5');
+  expect((button('Delete') as HTMLButtonElement).disabled).toBe(true);
+
+  await userEvent.dblClick(row('Pads'));
+  await expect.poll(() => vi.mocked(audio.auditionBlock).mock.calls.length).toBe(1);
+  const auditioned = vi.mocked(audio.auditionBlock).mock.lastCall![0];
+  expect(auditioned.name).toBe('Pads');
+  expect(auditioned.tracks.map((t) => t.sound.name)).toEqual(['Warm Pad', 'Glass Pad']);
+  await userEvent.click(button('Add to Project'));
+  await expect.poll(() => state().project.patterns.length).toBe(2);
+  expect(current().name).toBe('Pads');
+  expect(current().bars).toBe(2);
+  expect(state().project.channels.map((c) => c.sound.name)).toEqual(['Warm Pad', 'Glass Pad']);
+  expect(document.querySelector('.h-dialog')).toBeNull();
+
+  commands.addBlock();
+  await expect.poll(() => document.querySelector('.h-list-row')).not.toBeNull();
+  await expect.poll(() => row('My Groove')).toBeDefined();
+  await userEvent.click(row('My Groove'));
+  expect((button('Delete') as HTMLButtonElement).disabled).toBe(false);
+  await userEvent.click(button('Audition'));
+  await expect.poll(() => vi.mocked(audio.auditionBlock).mock.calls.length).toBe(2);
+  expect(read).toHaveBeenCalledWith('My Groove');
+  await userEvent.click(button('Add to Project'));
+  await expect.poll(() => current().name).toBe('Bass up');
+  expect(state().project.channels.map((c) => c.sound.name)).toEqual(['Warm Pad', 'Glass Pad', 'Sub Bass']);
+});
+
+test('a saved block can be deleted from the Block Library', async () => {
+  const list = vi.spyOn(platform.blocks, 'list').mockResolvedValue(['My Groove']);
+  const remove = vi.spyOn(platform.blocks, 'remove').mockResolvedValue();
+  renderApp();
+  commands.addBlock();
+  await expect.poll(() => row('My Groove')).toBeDefined();
+  expect($('.h-app-library-note').textContent).toBe('Double-click a block to hear it.');
+  await userEvent.click(row('My Groove'));
+  list.mockResolvedValue([]);
+  await userEvent.click(button('Delete'));
+  expect(await messageText()).toBe('Delete My Groove from your library? This cannot be undone.');
+  expect($$('.h-dialog')[1].getAttribute('aria-label')).toBe('Delete Block');
+  await userEvent.click(messageButton('Delete'));
+  await expect.poll(() => remove.mock.calls).toEqual([['My Groove']]);
+  await expect.poll(() => $$('.h-list-row').map((r) => r.textContent)).not.toContain('My Groove');
+  expect($('.h-app-library-note').textContent).toBe('Blocks you save to the library are listed under My Blocks.');
+});
+
+test('a block saves to the library, asking before it replaces one, and as a .h3b file', async () => {
+  const list = vi.spyOn(platform.blocks, 'list').mockResolvedValue(['Beat']);
+  const write = vi.spyOn(platform.blocks, 'write').mockResolvedValue();
+  renderApp();
+  const beat = state().patternId;
+  let done = commands.saveBlockToLibrary(beat);
+  expect(await messageText()).toBe('Your library already has a block called Beat. Replace it?');
+  await userEvent.click(button('Cancel'));
+  await done;
+  expect(write).not.toHaveBeenCalled();
+
+  done = commands.saveBlockToLibrary(beat);
+  await messageText();
+  await userEvent.click(button('Replace'));
+  await done;
+  expect(write).toHaveBeenCalledOnce();
+  expect(write.mock.lastCall![0]).toBe('Beat');
+  const saved = parseBlock(new TextDecoder().decode(write.mock.lastCall![1]));
+  expect(saved.tracks.map((t) => t.sound.name)).toEqual(['Kick', 'Clap', 'Hat']);
+  expect(saved.bars).toBe(2);
+
+  list.mockResolvedValue([]);
+  write.mockRejectedValue(new Error('Invalid library name'));
+  done = commands.saveBlockToLibrary(beat);
+  expect(await messageText()).toBe('"Beat" cannot be used as a file name. Rename the block and try again.');
+  await userEvent.click(button('OK'));
+  await done;
+  write.mockRejectedValue(new Error('disk full'));
+  done = commands.saveBlockToLibrary(beat);
+  expect(await messageText()).toBe('The block could not be saved to your library (disk full).');
+  await userEvent.click(button('OK'));
+  await done;
+
+  const saveFile = vi.spyOn(platform, 'saveFile').mockResolvedValue({ name: 'Beat.h3b', path: null });
+  await commands.saveBlockAs(beat);
+  expect(saveFile).toHaveBeenCalledWith(expect.objectContaining({
+    title: 'Save Block', defaultName: 'Beat.h3b', filters: [{ name: 'Hadjitron 3000 blocks', extensions: ['h3b'] }],
+  }));
+  expect(parseBlock(new TextDecoder().decode(saveFile.mock.lastCall![0].bytes)).name).toBe('Beat');
+});
+
+test('opening or dropping a .h3b file adds its block, and a broken file or a full project is refused', async () => {
+  renderApp();
+  const count = state().project.patterns.length;
+  await commands.openFile({ name: 'Pads.h3b', path: '/blocks/Pads.h3b', bytes: blockFile('Pads') });
+  expect(state().project.patterns).toHaveLength(count + 1);
+  expect(current().name).toBe('Pads');
+  await commands.dropFiles([new File([blockFile('Break')], 'Break.h3b')]);
+  expect(state().project.patterns).toHaveLength(count + 2);
+  expect(current().name).toBe('Break');
+  expect(Object.keys(current().cells)).toHaveLength(3);
+
+  void commands.dropFiles([new File(['nonsense'], 'broken.h3b')]);
+  expect(await messageText()).toBe('broken.h3b could not be opened. This is not a Hadjitron 3000 block file.');
+  await userEvent.click(button('OK'));
+
+  flushSync(() => {
+    while (state().project.patterns.length < 26) store.addPattern();
+  });
+  void commands.openFile({ name: 'Beat.h3b', path: null, bytes: blockFile('Beat') });
+  expect(await messageText())
+    .toBe('Beat could not be added. A project holds at most 26 blocks; delete one and try again.');
+  await userEvent.click(button('OK'));
+  expect(state().project.patterns).toHaveLength(26);
+});
+
+test('Rename asks for a new name for the block', async () => {
+  renderApp();
+  const id = state().patternId;
+  commands.renameBlock(id);
+  await expect.poll(() => document.activeElement?.tagName).toBe('INPUT');
+  const input = document.activeElement as HTMLInputElement;
+  expect($('.h-dialog').getAttribute('aria-label')).toBe('Rename Block');
+  expect(input.value).toBe('Beat');
+  expect(input.selectionEnd! - input.selectionStart!).toBe(4);
+  expect(input.maxLength).toBe(24);
+  await userEvent.keyboard('Four on the floor{Enter}');
+  expect(state().project.patterns.find((p) => p.id === id)!.name).toBe('Four on the floor');
+  await expect.poll(() => document.querySelector('.h-dialog')).toBeNull();
+
+  commands.renameBlock(id);
+  await expect.poll(() => document.activeElement?.tagName).toBe('INPUT');
+  await userEvent.keyboard('{Backspace}');
+  expect((button('OK') as HTMLButtonElement).disabled).toBe(true);
+  await userEvent.keyboard('{Enter}');
+  expect(document.querySelector('.h-dialog')).not.toBeNull();
+  await userEvent.keyboard('Nope{Escape}');
+  await expect.poll(() => document.querySelector('.h-dialog')).toBeNull();
+  expect(state().project.patterns.find((p) => p.id === id)!.name).toBe('Four on the floor');
+});
+
+test('the export dialog offers the song or the current block by name and refuses one without notes', async () => {
+  renderApp();
+  commands.exportAudio();
+  await expect.poll(() => document.querySelector('.h-dialog .h-select')).not.toBeNull();
+  const what = $('.h-dialog .h-select');
+  expect(what.textContent).toBe('Block: Beat');
+  await userEvent.click(what);
+  expect($$('.h-select-option').map((o) => o.textContent)).toEqual(['The song', 'Block: Beat']);
+  await userEvent.keyboard('{Escape}');
+  await userEvent.click(button('Cancel'));
+
+  flushSync(() => store.clearPattern(state().patternId));
+  commands.exportAudio();
+  await expect.poll(() => document.querySelector('.h-dialog')).not.toBeNull();
+  await userEvent.click(button('Export'));
+  expect(await messageText()).toBe('The block Beat has no notes to export. Add some steps first.');
+  await userEvent.click(messageButton('OK'));
+  await userEvent.click(button('Cancel'));
+
+  flushSync(() => store.openProject({ ...demoProject(), song: [] }, null));
+  flushSync(() => store.setScope('song'));
+  commands.exportAudio();
+  await expect.poll(() => document.querySelector('.h-dialog .h-select')?.textContent).toBe('The song');
+  await userEvent.click(button('Export'));
+  expect(await messageText()).toBe('The song has no notes to export. Place blocks with notes in the Song view first.');
+});
+
 test('files that cannot be read end in a message box', async () => {
   renderApp();
   const notes = { name: 'notes.h3k', path: null, bytes: new TextEncoder().encode('hello') };
@@ -409,6 +631,7 @@ test('the session stores the project with its samples and restores it', async ()
   await clear(sessionStore);
   await restoreSession();
   expect(state().project.name).toBe('Welcome');
+  expect(state().view).toBe('song');
 
   const bytes = new Uint8Array([82, 73, 70, 70, 1, 2, 3]);
   const channel = store.addSampleChannel('s0123456789abcdef', { name: 'loop.wav', bytes });
@@ -436,4 +659,45 @@ test('the session stores the project with its samples and restores it', async ()
   await restoreSession();
   expect(state().project.name).toBe('Welcome');
   expect(await get('doc', sessionStore)).toBeUndefined();
+});
+
+test('the first launch opens the demo in the Song view, and later launches restore the view', async () => {
+  await clear(sessionStore);
+  await restoreSession();
+  expect(state().view).toBe('song');
+  expect(state().scope).toBe('song');
+  renderApp();
+  expect($('.h-tab.is-selected').textContent).toBe('Song');
+
+  for (const view of ['factory', 'track', 'song'] as const) {
+    store.setView(view);
+    await saveSession();
+    store.setView(view === 'track' ? 'factory' : 'track');
+    await restoreSession();
+    expect(state().view).toBe(view);
+    expect(state().scope).toBe(view === 'song' ? 'song' : 'pattern');
+  }
+});
+
+test('a session stored before blocks existed still opens', async () => {
+  const sound = starterProject().channels[0].sound;
+  const project = {
+    name: 'Old', bpm: 100, swing: 0, master: 0,
+    channels: [{ id: 'c1', sound, color: 2, mute: false, solo: false }],
+    patterns: [
+      { id: 'p1', name: 'A', bars: 1, cells: { c1: { 0: { note: 60, vel: 0.8, len: 1 } } } },
+      { id: 'p2', name: 'B', bars: 2, cells: {} },
+    ],
+    song: ['p1', 'p2', 'p1'],
+  };
+  await set('doc', { project, samples: [], file: null, dirty: false }, sessionStore);
+  await restoreSession();
+  expect(state().project.name).toBe('Old');
+  expect(state().view).toBe('track');
+  expect(state().project.patterns.map((p) => [p.name, p.color])).toEqual([['A', 0], ['B', 0]]);
+  expect(state().project.song.map((p) => [p.pattern, p.lane, p.bar, p.bars])).toEqual([
+    ['p1', 0, 0, 1], ['p2', 0, 1, 2], ['p1', 0, 3, 1],
+  ]);
+  renderApp();
+  expect($$('.h-statusfield')[1].textContent).toBe('Block A · 1 bar');
 });

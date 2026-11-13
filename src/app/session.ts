@@ -1,12 +1,12 @@
-// The project survives a restart: it is kept in IndexedDB and restored on launch.
+// The project and the view survive a restart: they are kept in IndexedDB and restored on launch.
 // The document (without samples) is one entry; each sample's bytes are their own entry, written once.
 
 import { clear, createStore, del, get, keys, set, setMany } from 'idb-keyval';
 import { readProject, soundSampleIds } from '../core/fileformat';
 import type { Project, SampleData } from '../core/types';
 import { demoProject } from '../presets/projects';
-import { openProject, useApp } from '../state/store';
-import type { FileRef } from '../state/store';
+import { openProject, setView, useApp } from '../state/store';
+import type { FileRef, View } from '../state/store';
 
 const store = createStore('hadjitron-session', 'session');
 const DOC = 'doc';
@@ -18,6 +18,7 @@ interface StoredDoc {
   samples: string[];
   file: FileRef | null;
   dirty: boolean;
+  view?: View; // missing in sessions stored before the Song view existed
 }
 
 // Sample ids known to be in the database.
@@ -31,20 +32,23 @@ export function saveSession(): Promise<void> {
 }
 
 async function write(): Promise<void> {
-  const { project, file, dirty } = useApp.getState();
+  const { project, file, dirty, view } = useApp.getState();
   const { samples, ...doc } = project;
   const used = [...new Set(project.channels.flatMap((c) => soundSampleIds(c.sound)))].filter((id) => samples[id]);
   const fresh = used.filter((id) => !stored.has(id));
   if (fresh.length) await setMany(fresh.map((id) => [SAMPLE + id, samples[id]]), store);
   fresh.forEach((id) => stored.add(id));
-  await set(DOC, { project: doc, samples: used, file, dirty } satisfies StoredDoc, store);
+  await set(DOC, { project: doc, samples: used, file, dirty, view } satisfies StoredDoc, store);
   for (const id of [...stored].filter((id) => !used.includes(id))) {
     await del(SAMPLE + id, store);
     stored.delete(id);
   }
 }
 
-/** Open the stored project, or the demo on the first launch or when the stored one cannot be read. */
+/**
+ * Open the stored project in the view it was left in, or the demo in the Song view on the first launch or when
+ * the stored project cannot be read.
+ */
 export async function restoreSession(): Promise<void> {
   try {
     stored = new Set((await keys<string>(store)).filter((k) => k.startsWith(SAMPLE)).map((k) => k.slice(SAMPLE.length)));
@@ -57,6 +61,7 @@ export async function restoreSession(): Promise<void> {
       }
       openProject(readProject(doc.project, samples), doc.file);
       useApp.setState({ dirty: doc.dirty });
+      if (doc.view) setView(doc.view);
       return;
     }
   } catch (error) {
@@ -65,6 +70,7 @@ export async function restoreSession(): Promise<void> {
     await clear(store).catch(() => {});
   }
   openProject(demoProject(), null);
+  setView('song');
 }
 
 /** Save the project about a second after every change. Returns the function that stops it. */
@@ -77,7 +83,8 @@ export function watchSession(): () => void {
     void saveSession();
   };
   const unsubscribe = useApp.subscribe((state, prev) => {
-    if (state.project === prev.project && state.file === prev.file && state.dirty === prev.dirty) return;
+    if (state.project === prev.project && state.file === prev.file && state.dirty === prev.dirty
+      && state.view === prev.view) return;
     clearTimeout(timer);
     timer = window.setTimeout(flush, DELAY_MS);
   });

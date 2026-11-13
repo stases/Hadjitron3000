@@ -5,6 +5,8 @@ import { create } from 'zustand';
 
 export type DialogKind =
   | { kind: 'library'; replace: string | null }
+  | { kind: 'blocks' }
+  | { kind: 'rename'; patternId: string }
   | { kind: 'export' }
   | { kind: 'about' }
   | { kind: 'shortcuts' };

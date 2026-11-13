@@ -9,8 +9,8 @@ import {
 import type { AppState } from '../state/store';
 import type { MenuItem } from '../ui/kit';
 import {
-  addSound, exportAudio, exportSound, importAudio, newProject, openProject, replaceSound, saveProject, saveProjectAs,
-  saveSoundAs, saveSoundToLibrary, showAbout, showShortcuts,
+  addBlock, addSound, exportAudio, exportSound, importAudio, newProject, openProject, replaceSound, saveBlockAs,
+  saveBlockToLibrary, saveProject, saveProjectAs, saveSoundAs, saveSoundToLibrary, showAbout, showShortcuts,
 } from './commands';
 import { modKey } from './shortcuts';
 
@@ -21,6 +21,8 @@ export function buildMenus(state: AppState): { label: string; items: MenuItem[] 
     onSelect: () => channel && void run(channel),
   });
   const { reveal } = platform.library;
+  const revealBlocks = platform.blocks.reveal;
+  const block = state.patternId;
   const win = platform.window;
   const full = state.project.patterns.length >= PATTERN_NAMES.length;
   return [
@@ -62,17 +64,22 @@ export function buildMenus(state: AppState): { label: string; items: MenuItem[] 
       label: 'Track',
       items: [
         { label: 'Play / Stop', shortcut: 'Space', onSelect: () => setPlaying(!state.playing) },
+      ],
+    },
+    {
+      label: 'Block',
+      items: [
+        { label: 'New Block', disabled: full, onSelect: addPattern },
+        { label: 'Duplicate Block', disabled: full, onSelect: () => duplicatePattern(block) },
+        { label: 'Clear Block', onSelect: () => clearPattern(block) },
+        { label: 'Delete Block', disabled: state.project.patterns.length <= 1, onSelect: () => removePattern(block) },
         'separator',
-        { label: 'New Pattern', disabled: full, onSelect: addPattern },
-        { label: 'Duplicate Pattern', disabled: full, onSelect: () => duplicatePattern(state.patternId) },
-        { label: 'Clear Pattern', onSelect: () => clearPattern(state.patternId) },
-        {
-          label: 'Delete Pattern',
-          disabled: state.project.patterns.length <= 1,
-          onSelect: () => removePattern(state.patternId),
-        },
+        { label: 'Block Library…', onSelect: addBlock },
+        { label: 'Save Block to Library', onSelect: () => void saveBlockToLibrary(block) },
+        { label: 'Save Block As…', onSelect: () => void saveBlockAs(block) },
+        ...(revealBlocks ? [{ label: 'Show Library Folder', onSelect: revealBlocks }] : []),
         'separator',
-        { label: 'Play Pattern', checked: state.scope === 'pattern', onSelect: () => setScope('pattern') },
+        { label: 'Play Block', checked: state.scope === 'pattern', onSelect: () => setScope('pattern') },
         { label: 'Play Song', checked: state.scope === 'song', onSelect: () => setScope('song') },
       ],
     },
@@ -81,6 +88,7 @@ export function buildMenus(state: AppState): { label: string; items: MenuItem[] 
       items: [
         { label: 'Factory', shortcut: modKey('1'), checked: state.view === 'factory', onSelect: () => setView('factory') },
         { label: 'Track', shortcut: modKey('2'), checked: state.view === 'track', onSelect: () => setView('track') },
+        { label: 'Song', shortcut: modKey('3'), checked: state.view === 'song', onSelect: () => setView('song') },
       ],
     },
     {

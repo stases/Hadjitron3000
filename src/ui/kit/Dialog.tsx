@@ -48,7 +48,10 @@ export function Dialog({ title, onClose, width, children }: DialogProps) {
   useEffect(() => {
     const el = box.current;
     if (!placed || !el || el.contains(document.activeElement)) return;
-    (el.querySelector<HTMLElement>('.h-button.is-primary') ?? el.querySelector<HTMLElement>(FOCUSABLE) ?? el).focus();
+    const first = el.querySelector<HTMLElement>('[data-autofocus]')
+      ?? el.querySelector<HTMLElement>('.h-button.is-primary') ?? el.querySelector<HTMLElement>(FOCUSABLE) ?? el;
+    first.focus();
+    if (first instanceof HTMLInputElement) first.select();
   }, [placed]);
 
   const onKeyDown = (e: KeyboardEvent) => {

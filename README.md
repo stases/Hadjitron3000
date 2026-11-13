@@ -12,7 +12,7 @@
 +==========================================================================+
 ```
 
-Hadjitron 3000 is a small music machine for electronic and experimental music. You build sounds in the Factory, put them on the Track, press Space, and export what you made. It looks and behaves like a program from 1998 on purpose.
+Hadjitron 3000 is a small music machine for electronic and experimental music. You build sounds in the Factory, write short blocks of steps with them on the Track, arrange the blocks into a song in the Song, press Space, and export what you made. It looks and behaves like a program from 1998 on purpose.
 
 ![The Track](docs/img/track.png)
 
@@ -60,13 +60,27 @@ To update later, run `git pull` and `npm install`, then start it again.
 
 Every sound of the project is a row, and every column is a sixteenth note. Click a cell to put a step there and click it again to remove it. Hold the button and move sideways to paint several steps. Drag a step up or down to change its note, drag its right edge to make it longer, and turn the scroll wheel over it to make it louder or softer. A right-click selects a step without changing it, and the bar at the bottom then shows its note, velocity and length.
 
-A pattern is one to eight bars long. A project holds up to eight patterns, named A to H. The Song strip chains patterns one after another; the Pattern and Song buttons next to the tempo choose which of the two is played. Tempo, swing and the master volume are in the bar at the top.
+The grid shows one block: one to eight bars of steps for any of the project's sounds. The bar above the grid chooses the block to work on and gives it a colour and a name. Next to that are buttons to add a new block, copy the current one to start a variation, clear it and delete it, and the length of the block in bars. At the right end a quiet line tells you how often the block is used in the song.
+
+Tempo, swing and the master volume are in the bar at the top of the window. The Block and Song buttons next to them choose what Play plays: the current block over and over, or the whole song. The Track plays the block and the Song plays the song, so you rarely need to touch them.
 
 Each row has a mute button, a solo button and a level slider. Double-click the name of a row to open that sound in the Factory. Drop audio files anywhere on the window to add them as new rows.
 
 ```
 +--------------------------------------------------------------------------+
-|  3. THE FACTORY                                                          |
+|  3. THE SONG                                                             |
++--------------------------------------------------------------------------+
+```
+
+The Song arranges blocks on a timeline of four lanes, counted in bars. Blocks in different lanes play at the same time, so the beat, the bass line, the keys and a pad can each have a lane of their own, and a block in one lane can start while another is still going.
+
+The list at the left holds the blocks of the project. Pick one and click an empty bar of a lane to place it there. Drag a placed block to move it along its lane or into another lane, and drag its right edge to stretch it: a block placed longer than it is plays again from the start, and one placed shorter is cut off. Double-click a placed block to edit its steps on the Track, and right-click it for a small menu. With the timeline selected, Delete removes the selected block and the arrow keys move it.
+
+A project holds up to twenty-six blocks. A block can also travel to other projects. Save Block to Library in the Block menu keeps a block, together with the sounds it plays, in the folder `Documents/Hadjitron 3000/Blocks`, and the Block Library window lists it next to the eight blocks of the demo song. Audition plays a block once, and Add to Project brings it into the project with any of its sounds the project does not have yet.
+
+```
++--------------------------------------------------------------------------+
+|  4. THE FACTORY                                                          |
 +--------------------------------------------------------------------------+
 ```
 
@@ -80,29 +94,30 @@ Save to Library keeps a sound for other projects. The library is the folder `Doc
 
 ```
 +--------------------------------------------------------------------------+
-|  4. FILES                                                                |
+|  5. FILES                                                                |
 +--------------------------------------------------------------------------+
 ```
 
 | File   | What it is                                                              |
 | ------ | ----------------------------------------------------------------------- |
-| `.h3k` | A project: its sounds, patterns, song, tempo and any samples it uses.   |
+| `.h3k` | A project: its sounds, blocks, song, tempo and any samples it uses.     |
 | `.h3s` | One sound, with its sample if it has one.                               |
+| `.h3b` | One block, with the sounds it plays and their samples.                  |
 | `.wav` | Export Audio, 16-bit stereo.                                            |
 | `.mp3` | Export Audio, 128 to 320 kbit/s.                                        |
 
-Projects and sounds are plain JSON, so they are safe to keep in git or to send by mail. Samples travel inside the file. Export Audio in the File menu renders the current pattern or the whole song, and Export in the Factory renders a single sound. WAV, MP3, AIFF, FLAC, Ogg and M4A files can be imported.
+Projects, sounds and blocks are plain JSON, so they are safe to keep in git or to send by mail. Samples travel inside the file. Sounds in the library are kept in `Documents/Hadjitron 3000/Sounds` and blocks in `Documents/Hadjitron 3000/Blocks`. Dropping a `.h3s` or `.h3b` file on the window adds the sound or the block to the project. Export Audio in the File menu renders the current block or the whole song, and Export in the Factory renders a single sound. WAV, MP3, AIFF, FLAC, Ogg and M4A files can be imported.
 
 ```
 +--------------------------------------------------------------------------+
-|  5. KEYS                                                                 |
+|  6. KEYS                                                                 |
 +--------------------------------------------------------------------------+
 ```
 
 | Key                    | What it does                              |
 | ---------------------- | ----------------------------------------- |
 | Space                  | Play or stop                              |
-| Cmd+1, Cmd+2           | Factory, Track                            |
+| Cmd+1, Cmd+2, Cmd+3    | Factory, Track, Song                      |
 | Cmd+N, Cmd+O, Cmd+S    | New, open, save                           |
 | Shift+Cmd+S            | Save as                                   |
 | Cmd+E                  | Export audio                              |
@@ -116,7 +131,7 @@ The full list is under Help, Keyboard Shortcuts.
 
 ```
 +--------------------------------------------------------------------------+
-|  6. FOR THE TINKERER                                                     |
+|  7. FOR THE TINKERER                                                     |
 +--------------------------------------------------------------------------+
 ```
 

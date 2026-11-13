@@ -1,16 +1,23 @@
 // The audio controller: the one place where the store meets the engine.
 // Views call these functions; nothing else in the interface touches Web Audio.
 
-import { Engine, Transport } from '../audio';
-import type { Channel, Project, SampleData, Sound } from '../core/types';
+import { Engine, Transport, renderProject } from '../audio';
+import type { Block, Channel, Project, SampleData, Sound } from '../core/types';
 import { playScope, useApp } from '../state/store';
 
 const PREVIEW_ID = 'preview';
+const BLOCK_TAIL_SECONDS = 2;
+
+interface BlockAudition {
+  player: AudioBufferSourceNode | null; // null while the block is still being rendered
+}
 
 let engine: Engine | null = null;
 let transport: Transport | null = null;
 // A library sound being auditioned. It lives in the engine only, never in the project.
 let preview: { channel: Channel; samples: Record<string, SampleData> } | null = null;
+// A library block being auditioned: rendered offline on its own, then played as one buffer.
+let blockAudition: BlockAudition | null = null;
 
 /** The project as the engine should hear it: the document plus the sound being auditioned. */
 function heard(): Project {
@@ -94,9 +101,46 @@ export async function audition(sound: Sound, samples: Record<string, SampleData>
   if (preview?.channel.sound === sound) e.play(PREVIEW_ID, note, 0.8, e.ctx.currentTime + 0.005, 0.5);
 }
 
-/** Forget the auditioned sound (closing the library). */
+/** The project a block plays in on its own: one channel per track, at the tempo and swing of the open project. */
+function blockProject(block: Block): Project {
+  const { bpm, swing, master } = useApp.getState().project;
+  const channels = block.tracks.map((track, i) => ({
+    id: `b${i}`, sound: track.sound, color: 0, mute: false, solo: false,
+  }));
+  const cells = Object.fromEntries(block.tracks.map((track, i) => [`b${i}`, track.steps]));
+  return {
+    name: block.name, bpm, swing, master, channels, song: [], samples: block.samples,
+    patterns: [{ id: 'block', name: block.name, color: block.color, bars: block.bars, cells }],
+  };
+}
+
+/** Play a block that is not in the project once (browsing the block library). It is rendered first, then played. */
+export async function auditionBlock(block: Block): Promise<void> {
+  const e = boot();
+  stopBlock();
+  const playing: BlockAudition = { player: null };
+  blockAudition = playing;
+  const pcm = await renderProject(blockProject(block), { kind: 'pattern', patternId: 'block' }, {
+    tail: BLOCK_TAIL_SECONDS, sampleRate: e.ctx.sampleRate,
+  });
+  if (blockAudition !== playing) return;
+  const buffer = e.ctx.createBuffer(2, pcm.channels[0].length, pcm.sampleRate);
+  pcm.channels.forEach((data, i) => buffer.getChannelData(i).set(data));
+  playing.player = e.ctx.createBufferSource();
+  playing.player.buffer = buffer;
+  playing.player.connect(e.ctx.destination);
+  playing.player.start();
+}
+
+function stopBlock(): void {
+  blockAudition?.player?.stop();
+  blockAudition = null;
+}
+
+/** Forget the auditioned sound and stop an auditioned block (closing a library). */
 export function endAudition(): void {
   preview = null;
+  stopBlock();
   engine?.setProject(heard());
 }
 

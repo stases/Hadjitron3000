@@ -498,6 +498,11 @@
   box-shadow: var(--bevel-sunken);
 }
 
+.h-textfield::selection {
+  color: var(--sel-ink);
+  background: var(--sel);
+}
+
 .h-textfield::placeholder {
   color: var(--lo);
 }

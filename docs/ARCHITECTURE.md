@@ -9,11 +9,11 @@ Hadjitron 3000 is a web app (TypeScript, React, the Web Audio API) inside a thin
 | `src/core` | The document model, the module table, the sequencer and the file formats. Pure TypeScript, no DOM and no audio. |
 | `src/audio` | The Web Audio engine, the transport, offline rendering and MP3 encoding. |
 | `src/state` | The app store and its actions, including undo. |
-| `src/platform` | Files, the sound library folder and the window, once for Electron and once for the browser. |
-| `src/app` | The window chrome, dialogs, keyboard shortcuts, and the glue between store, engine and platform. |
+| `src/platform` | Files, the sound and block library folders and the window, once for Electron and once for the browser. |
+| `src/app` | The window chrome, dialogs, keyboard shortcuts, the stored session, and the glue between store, engine and platform. |
 | `src/ui/kit` | The retro widgets. `src/ui/theme` holds the tokens and fonts. |
-| `src/ui/factory`, `src/ui/track` | The two views. |
-| `src/presets` | Factory sounds and the demo project, in the app's own file formats. |
+| `src/ui/factory`, `src/ui/track`, `src/ui/song` | The three views. |
+| `src/presets` | Factory sounds in the app's own file format, the demo project, and the factory blocks taken from it. |
 | `electron` | The main process and the preload script, plain CommonJS with no build step. |
 | `tests` | `unit` runs in Node, `browser` runs in headless Chromium (the engine needs real Web Audio), `e2e` drives the built app. |
 
@@ -21,7 +21,13 @@ Dependencies point one way: `core` knows nothing else; `audio` and `state` use `
 
 ## The document
 
-A project (`Project` in `src/core/types.ts`) has a tempo, a swing amount, a master level, a list of channels, a list of patterns, a song (pattern ids in play order) and the audio files it uses. A channel is one row of the Track grid: a sound plus mute and solo. The Factory and the Track are two views of the same channels, so a sound made in the Factory is immediately a row on the grid.
+A project (`Project` in `src/core/types.ts`) has a tempo, a swing amount, a master level, a list of channels, a list of blocks, a song and the audio files it uses. A channel is one row of the Track grid: a sound plus mute and solo. The Factory and the Track are two views of the same channels, so a sound made in the Factory is immediately a row on the grid.
+
+What the user sees as a block is a `Pattern` in the code, and the store keeps that word in its names (`patternId`, `addPattern`, `renamePattern` and so on). A block has a name, a colour and one to eight bars of sixteen steps for any of the channels; a project holds up to 26. A step holds a note, a velocity and a length in steps. Note 60 is C3 and plays a sound at its own pitch.
+
+The song is a list of placements (`Placement`): a block put on one of four lanes at a bar, for a number of bars. Placements in different lanes play together; in one lane they never overlap. A placement longer than its block repeats it, and a shorter one cuts it off. The Track edits one block and the Song arranges them.
+
+A block can also stand on its own outside a project (`Block`): its steps together with the sounds that play them and their samples. `extractBlock` in `src/core/block.ts` lifts one out of a project, and the store's `insertBlock` adds one to a project, reusing a channel when the project already has the same sound. The Block Library offers the blocks of the demo song this way and the user's own blocks from the block library folder.
 
 A sound is a source, an amp envelope, a chain of effects, a set of modulators and an output:
 
@@ -32,11 +38,9 @@ source -> amp envelope -> effect -> effect -> ... -> output (level, pan)
 
 Every module is described once in `src/core/modules.ts`: its parameters with ranges, units, knob tapers and defaults. The engine, the file format and the generic module panel in the Factory are all driven by that table. Parameter values are stored in real units (hertz, seconds, semitones, decibels).
 
-A pattern has one to eight bars of sixteen steps. A step holds a note, a velocity and a length in steps. Note 60 is C3 and plays a sound at its own pitch.
-
 ## Files
 
-Sounds are saved as `.h3s` and projects as `.h3k`. Both are JSON text with a `format` tag and a `version`. Audio files used by a sampler are embedded as base64 in their original encoding and are keyed by a hash of their content, so the same file is stored once however many sounds use it. `src/core/fileformat.ts` reads and writes both formats and refuses files it does not understand with a readable message.
+Sounds are saved as `.h3s`, blocks as `.h3b` and projects as `.h3k`. All three are JSON text with a `format` tag and a `version`. Audio files used by a sampler are embedded as base64 in their original encoding and are keyed by a hash of their content, so the same file is stored once however many sounds use it. `src/core/fileformat.ts` reads and writes the three formats and refuses files it does not understand with a readable message. Projects of version 1, whose song was a list of patterns played one after another, open with that list laid out in the first lane.
 
 ## The engine
 
@@ -57,11 +61,15 @@ The engine takes any `BaseAudioContext`. The same code plays live through an `Au
 
 ## Time
 
-The sequencer in `src/core/sequencer.ts` is a pure function from a project and a range of steps to a list of note events with times in seconds. The transport calls it a little ahead of the audio clock (a look-ahead scheduler) and hands the events to the engine; the offline renderer calls it once for the whole export. A step is a sixteenth note. Swing delays every second sixteenth by up to half a step.
+The sequencer in `src/core/sequencer.ts` is a pure function from a project, a play scope (one block on repeat, or the song) and a range of steps to a list of note events with times in seconds. `heardAt` tells which blocks are heard at a step, which is also how the views place their play markers. The transport calls it a little ahead of the audio clock (a look-ahead scheduler) and hands the events to the engine; the offline renderer calls it once for the whole export. A step is a sixteenth note. Swing delays every second sixteenth by up to half a step.
 
 ## The shell
 
-The Electron main process creates a frameless window (the retro title bar in the page is the real one), serves the built app from an `app://` origin, and answers a small set of requests from the page: open and save dialogs, the sound library folder, window controls. The page only sees the `Platform` interface in `src/platform/api.ts`; in a browser the same interface is backed by file pickers, downloads and IndexedDB.
+The Electron main process creates a frameless window (the retro title bar in the page is the real one), serves the built app from an `app://` origin, and answers a small set of requests from the page: open and save dialogs, the sound and block library folders (`Documents/Hadjitron 3000/Sounds` and `Blocks`), window controls. The page only sees the `Platform` interface in `src/platform/api.ts`; in a browser the same interface is backed by file pickers, downloads and IndexedDB.
+
+The open project and the view it was shown in are kept in IndexedDB a second after every change (`src/app/session.ts`) and restored on the next launch. The first launch opens the demo song in the Song view.
+
+A library block is auditioned by rendering it offline on its own, at the tempo of the open project, and playing the result once (`auditionBlock` in `src/app/audio.ts`); it never enters the live engine or the project.
 
 ## Adding a module
 

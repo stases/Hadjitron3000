@@ -182,11 +182,15 @@ export function Transport() {
         <Button
           pressed={playScope === 'pattern'}
           onClick={() => setScope('pattern')}
-          hint="Play the current pattern over and over."
+          hint="Play the current block over and over."
         >
-          Pattern
+          Block
         </Button>
-        <Button pressed={playScope === 'song'} onClick={() => setScope('song')} hint="Play the song's patterns in order.">
+        <Button
+          pressed={playScope === 'song'}
+          onClick={() => setScope('song')}
+          hint="Play the whole song, with the blocks of all lanes together."
+        >
           Song
         </Button>
       </div>

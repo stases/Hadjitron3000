@@ -252,7 +252,7 @@ test('Beginner Mode in the View menu folds or shows the Factory controls and is 
     'Pitch', 'Fine', 'Voices', 'Spread', 'Width', 'Noise', 'Pulse', 'Pitch 2', 'Fine 2', 'Mix 2', 'Sub', 'Sub Oct',
     'Glide',
   ]);
-  expect($$('.h-rack-folds')).toHaveLength(0);
+  expect($$('.h-folds')).toHaveLength(0);
   expect((await item()).querySelector('.h-menu-check svg')).toBeNull();
   await userEvent.keyboard('{Escape}');
   expect(JSON.parse(localStorage.getItem('hadjitron-prefs')!)).toEqual({ beginner: false });
@@ -348,7 +348,8 @@ test('the transport and the status bar say what Play plays, the block or the son
   const where = () => $$('.h-statusfield')[1].textContent;
   expect($$('.h-app-joined .h-button').map((b) => b.textContent)).toEqual(['Block', 'Song']);
   expect(where()).toBe('Block Beat · 2 bars');
-  await userEvent.click(button('Song'));
+  // The test page is narrower than the smallest window, so the button may lie past its right edge.
+  button('Song').click();
   expect(state().scope).toBe('song');
   await expect.poll(where).toBe('Song · 16 bars');
   flushSync(() => store.openProject({ ...demoProject(), song: [] }, null));

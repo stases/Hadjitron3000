@@ -67,7 +67,7 @@ export function PatternBar() {
         max={MAX_BARS}
         onChange={(bars) => setPatternBars(patternId, bars)}
         width={40}
-        hint="How long this block is, in bars of sixteen steps."
+        hint="How long this block is, in bars of the song's time signature."
       />
       <span className="h-track-used" {...usedHint.props}>
         {usedText(used)}

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Button } from './Button';
+import { cx } from './cx';
 import { Led } from './Displays';
 import { Icon, SpriteImage } from './Icon';
 import type { Sprite } from './icons';
@@ -17,6 +18,23 @@ export interface RackFold {
   hint: string;
   onToggle(): void;
   children: ReactNode;
+}
+
+/**
+ * The toggles of some folds, stacked or in a row: each the fold's label in small capitals with an amber lamp that
+ * is lit while something in it differs from its default.
+ */
+export function FoldToggles({ folds, row }: { folds: Omit<RackFold, 'children'>[]; row?: boolean }) {
+  return (
+    <div className={cx('h-folds', row && 'is-row')}>
+      {folds.map((f) => (
+        <Button key={f.label} small pressed={f.open} onClick={f.onToggle} hint={f.hint}>
+          <Led on={f.lit} color="amber" />
+          {f.label}
+        </Button>
+      ))}
+    </div>
+  );
 }
 
 interface RackUnitProps {
@@ -61,16 +79,7 @@ export function RackUnit({
       </div>
       {(folds.length > 0 || moves || onRemove) && (
         <div className="h-rack-side">
-          {folds.length > 0 && (
-            <div className="h-rack-folds">
-              {folds.map((f) => (
-                <Button key={f.label} small pressed={f.open} onClick={f.onToggle} hint={f.hint}>
-                  <Led on={f.lit} color="amber" />
-                  {f.label}
-                </Button>
-              ))}
-            </div>
-          )}
+          {folds.length > 0 && <FoldToggles folds={folds} />}
           {(moves || onRemove) && (
             <div className="h-rack-buttons">
               {moves && (

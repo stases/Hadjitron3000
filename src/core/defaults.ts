@@ -4,12 +4,9 @@ import { AMP, FILTER, MODULES, OUT, PLAY } from './modules';
 import { defaultParams } from './params';
 import type { ModInst, ModuleInst, NoteInit, Pattern, Project, Sound } from './types';
 
-export const STEPS_PER_BAR = 16;
 /** 96 ticks to a quarter note: a 32nd is 12 ticks, a sixteenth triplet 16. */
 export const TICKS_PER_STEP = 24;
 export const MAX_BARS = 32;
-/** The length of the longest block in ticks; no note starts at or after it. */
-export const MAX_TICKS = MAX_BARS * STEPS_PER_BAR * TICKS_PER_STEP;
 export const CHANNEL_COLORS = 8;
 export const SONG_LANES = 4;
 export const MAX_SONG_BARS = 256;
@@ -58,6 +55,7 @@ export function emptyProject(): Project {
     name: 'Untitled',
     bpm: 120,
     swing: 0,
+    meter: [4, 4],
     master: 0,
     channels: [],
     patterns: [pattern],

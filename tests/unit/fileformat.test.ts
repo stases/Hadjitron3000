@@ -1,11 +1,12 @@
 import { expect, test, vi } from 'vitest';
 import {
-  CHANNEL_COLORS, emptyProject, MAX_BARS, MAX_SONG_BARS, MAX_TICKS, newMod, newModule, newPattern, newSound,
+  CHANNEL_COLORS, emptyProject, MAX_BARS, MAX_SONG_BARS, newMod, newModule, newPattern, newSound,
   SONG_LANES, TICKS_PER_STEP,
 } from '../../src/core/defaults';
+import { MAX_TICKS } from '../../src/core/meter';
 import {
   BLOCK_EXT, FORMAT_VERSION, FormatError, parseBlock, parseProject, parseSound, PROJECT_EXT, readProject, sampleId,
-  serializeProject, serializeSound, SOUND_EXT, soundSampleIds,
+  serializeBlock, serializeProject, serializeSound, SOUND_EXT, soundSampleIds,
 } from '../../src/core/fileformat';
 import { AMP, EFFECTS, FILTER, MODS, MODULES, OUT, PLAY, SOURCES } from '../../src/core/modules';
 import { MAX_NOTE, MIN_NOTE } from '../../src/core/notes';
@@ -595,4 +596,63 @@ test('dictionary ids such as __proto__ survive without prototype lookup or mutat
   expect(parseProject(serializeProject(original))).toStrictEqual(original);
   const samples: Record<string, SampleData> = Object.create({ kick: { name: 'inherited', bytes: new Uint8Array() } });
   expect(JSON.parse(serializeSound(sound(), samples)).samples).toEqual({});
+});
+
+test('a project writes its meter always and note extras only where they are set, and reads them back', () => {
+  const original = project();
+  original.meter = [7, 8];
+  original.patterns[1].notes.c2[0] = { ...original.patterns[1].notes.c2[0], chance: 40, ratchet: 3, slide: true };
+  original.patterns[1].notes.c2[2] = { ...original.patterns[1].notes.c2[2], hold: true };
+  const text = serializeProject(original);
+  const written = JSON.parse(text).project;
+  expect(written.meter).toEqual([7, 8]);
+  expect(written.patterns[1].notes.c2).toEqual([
+    { id: 'n1', start: 408, len: 72, note: 65, vel: 0.5, chance: 40, ratchet: 3, slide: true },
+    { id: 'n2', start: 408, len: 30, note: 69, vel: 0.5 },
+    { id: 'n3', start: 413, len: 5, note: 65, vel: 0.4, hold: true },
+  ]);
+  expect(parseProject(text)).toStrictEqual(original);
+  expect(JSON.parse(serializeProject(project())).project.meter).toEqual([4, 4]);
+});
+
+test('files without a meter or with one that is not offered read as 4/4', () => {
+  const old = { ...project(), meter: undefined };
+  expect(parseProject(projectFile(old)).meter).toEqual([4, 4]);
+  for (const meter of [[4, 2], [11, 8], '7/8', [7, 8, 1]]) {
+    expect(parseProject(projectFile({ ...project(), meter })).meter).toEqual([4, 4]);
+  }
+  expect(parseProject(projectFile({ ...project(), meter: [12, 8] })).meter).toEqual([12, 8]);
+  const v1 = { name: 'Old', bpm: 120, channels: [], patterns: [], song: [] };
+  expect(parseProject(JSON.stringify({ format: 'hadjitron3000/project', version: 1, project: v1 })).meter)
+    .toEqual([4, 4]);
+});
+
+test.each([
+  [{ chance: 50 }, { chance: 50 }],
+  [{ chance: 0 }, { chance: 1 }],
+  [{ chance: 33.4 }, { chance: 33 }],
+  [{ chance: 100 }, {}],
+  [{ chance: 250 }, {}],
+  [{ chance: '50' }, {}],
+  [{ ratchet: 8 }, { ratchet: 8 }],
+  [{ ratchet: 1 }, {}],
+  [{ ratchet: 5 }, {}],
+  [{ slide: true, hold: true }, { slide: true, hold: true }],
+  [{ slide: false, hold: 'yes' }, {}],
+])('note extras %j read as %j', (extras, expected) => {
+  const file = project();
+  file.patterns[0].notes.c1[0] = { ...file.patterns[0].notes.c1[0], ...extras } as never;
+  expect(parseProject(projectFile(file)).patterns[0].notes.c1[0])
+    .toEqual({ id: 'n1', start: 0, len: 24, note: 60, vel: 0.7, ...expected });
+});
+
+test('a block keeps the extras of its notes and carries no meter', () => {
+  const notes = [
+    { id: 'n1', start: 0, len: 24, note: 60, vel: 0.7, ratchet: 4, hold: true },
+    { id: 'n2', start: 24, len: 24, note: 62, vel: 0.7 },
+  ];
+  const text = serializeBlock({ name: 'B', color: 1, bars: 2, tracks: [{ sound: newSound(), notes }], samples: {} });
+  expect(JSON.parse(text).block).not.toHaveProperty('meter');
+  expect(JSON.parse(text).block.tracks[0].notes).toEqual(notes);
+  expect(parseBlock(text).tracks[0].notes).toEqual(notes);
 });

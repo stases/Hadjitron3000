@@ -101,15 +101,15 @@ export async function audition(sound: Sound, samples: Record<string, SampleData>
   if (preview?.channel.sound === sound) e.play(PREVIEW_ID, note, 0.8, e.ctx.currentTime + 0.005, 0.5);
 }
 
-/** The project a block plays in on its own: one channel per track, at the tempo and swing of the open project. */
+/** The project a block plays in on its own: one channel per track, at the open project's tempo, swing and meter. */
 function blockProject(block: Block): Project {
-  const { bpm, swing, master } = useApp.getState().project;
+  const { bpm, swing, meter, master } = useApp.getState().project;
   const channels = block.tracks.map((track, i) => ({
     id: `b${i}`, sound: track.sound, color: 0, mute: false, solo: false,
   }));
   const notes = Object.fromEntries(block.tracks.map((track, i) => [`b${i}`, track.notes]));
   return {
-    name: block.name, bpm, swing, master, channels, song: [], samples: block.samples,
+    name: block.name, bpm, swing, meter, master, channels, song: [], samples: block.samples,
     patterns: [{ id: 'block', name: block.name, color: block.color, bars: block.bars, notes }],
   };
 }

@@ -5,6 +5,7 @@ import { TICKS_PER_STEP } from '../core/defaults';
 import { eventsBetween, loopSteps, stepSeconds } from '../core/sequencer';
 import type { NoteEvent, Pcm, PlayScope, Project, SampleData, Sound } from '../core/types';
 import { Engine } from './engine';
+import { playEvent } from './transport';
 
 // Rendering pauses this often (in audio seconds) to schedule the next notes and report progress.
 const CHUNK = 0.5;
@@ -29,8 +30,7 @@ async function render(
   let i = 0;
   const scheduleUntil = (t: number) => {
     for (; i < events.length && events[i].time < t; i++) {
-      const e = events[i];
-      engine.play(e.channelId, e.note, e.vel, e.time, e.dur);
+      playEvent(engine, events[i], events[i].time);
     }
   };
   // Suspensions land on render-quantum boundaries, possibly a little after `t`, so notes are
@@ -81,6 +81,7 @@ export async function renderSound(
     name: sound.name,
     bpm: 120,
     swing: 0,
+    meter: [4, 4],
     master: 0,
     channels: [{ id: 'sound', sound, color: 0, mute: false, solo: false }],
     patterns: [],

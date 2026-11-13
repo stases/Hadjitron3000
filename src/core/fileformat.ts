@@ -1,9 +1,8 @@
-import {
-  CHANNEL_COLORS, MAX_BARS, MAX_SONG_BARS, MAX_TICKS, SONG_LANES, STEPS_PER_BAR, TICKS_PER_STEP, newPattern, uid,
-} from './defaults';
+import { CHANNEL_COLORS, MAX_BARS, MAX_SONG_BARS, SONG_LANES, TICKS_PER_STEP, newPattern, uid } from './defaults';
+import { MAX_TICKS, readMeter } from './meter';
 import { AMP, FILTER, MODULES, OUT, PLAY, paramSpec } from './modules';
 import type { ModuleDef, ModuleKind } from './modules';
-import { MAX_NOTE, MIN_NOTE, cleanNotes } from './notes';
+import { MAX_NOTE, MIN_NOTE, cleanNotes, noteExtras } from './notes';
 import { coerce } from './params';
 import type { Block, ModInst, ModuleInst, Note, Params, Pattern, Placement, Project, SampleData, Sound } from './types';
 
@@ -50,11 +49,11 @@ export function serializeSound(sound: Sound, samples: Record<string, SampleData>
 }
 
 export function serializeProject(project: Project): string {
-  const { name, bpm, swing, master, channels, patterns, song } = project;
+  const { name, bpm, swing, meter, master, channels, patterns, song } = project;
   return JSON.stringify({
     format: 'hadjitron3000/project',
     version: FORMAT_VERSION,
-    project: { name, bpm, swing, master, channels, patterns, song },
+    project: { name, bpm, swing, meter, master, channels, patterns, song },
     samples: encodeSamples(channels.flatMap((c) => soundSampleIds(c.sound)), project.samples),
   }, null, 2);
 }
@@ -198,7 +197,7 @@ function uniqueId(value: unknown, ids: Set<string>, label: string): string {
   return value;
 }
 
-/** A row's notes. Version 3 keeps a list of notes in ticks. */
+/** A row's notes. Version 3 keeps a list of notes in ticks, with their extras where they are set. */
 function readNotes(value: unknown, label: string): Note[] {
   return cleanNotes(array(value, label).map((entry) => {
     const raw = object(entry, 'note');
@@ -208,11 +207,12 @@ function readNotes(value: unknown, label: string): Note[] {
       len: number(raw.len, TICKS_PER_STEP, 1, MAX_TICKS),
       note: number(raw.note, 60, MIN_NOTE, MAX_NOTE),
       vel: number(raw.vel, 0.8, 0, 1),
+      ...noteExtras(raw),
     };
   }));
 }
 
-/** Versions 1 and 2 keep a map from step index to one step with a length in steps; each becomes a note. */
+/** Versions 1 and 2, all in 4/4, keep a map from step index to one step with a length in steps; each becomes a note. */
 function readSteps(value: unknown, label: string): Note[] {
   return cleanNotes(Object.entries(object(value, label)).flatMap(([index, value]) => {
     const i = Number(index);
@@ -220,7 +220,7 @@ function readSteps(value: unknown, label: string): Note[] {
     const raw = object(value, `step ${index}`);
     return [{
       start: i * TICKS_PER_STEP,
-      len: Math.round(number(raw.len, 1, 1, MAX_BARS * STEPS_PER_BAR)) * TICKS_PER_STEP,
+      len: Math.round(number(raw.len, 1, 1, MAX_BARS * 16)) * TICKS_PER_STEP,
       note: number(raw.note, 60, MIN_NOTE, MAX_NOTE),
       vel: number(raw.vel, 0.8, 0, 1),
     }];
@@ -322,6 +322,7 @@ export function readProject(value: unknown, samples: Record<string, SampleData>)
     name: typeof raw.name === 'string' ? raw.name : 'Untitled',
     bpm: number(raw.bpm, 120, 40, 240),
     swing: number(raw.swing, 0, 0, 1),
+    meter: readMeter(raw.meter) ?? [4, 4],
     master: number(raw.master, 0, -48, 6),
     channels,
     patterns,

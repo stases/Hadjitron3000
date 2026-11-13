@@ -1,4 +1,4 @@
-/* The Track view. Cell sizes and gaps must match src/ui/track/steps.ts. */
+/* The Track view. Cell sizes must match src/ui/track/steps.ts, which also sets the gaps after the cells. */
 
 .h-track {
   display: flex;
@@ -10,7 +10,7 @@
 }
 
 .h-track-bar,
-.h-track-inspector {
+.h-track-group {
   display: flex;
   flex: none;
   align-items: center;
@@ -112,7 +112,6 @@
 .h-track-box {
   position: relative;
   display: flex;
-  gap: 2px;
 }
 
 .h-track-cell,
@@ -121,23 +120,13 @@
   width: 24px;
 }
 
-.h-track-cell:nth-child(4n),
-.h-track-tick:nth-child(4n) {
-  margin-right: 4px;
-}
-
-.h-track-cell:nth-child(16n),
-.h-track-tick:nth-child(16n) {
-  margin-right: 10px;
-}
-
 .h-track-cell {
   height: 22px;
   background: var(--face);
   box-shadow: var(--bevel-well);
 }
 
-.h-track-cell:nth-child(4n + 1) {
+.h-track-cell.is-beat {
   background: var(--face-lo);
 }
 
@@ -150,7 +139,7 @@
   color: var(--ink-soft);
 }
 
-.h-track-tick:not(:nth-child(16n + 1))::after {
+.h-track-tick:not(.is-bar)::after {
   content: '';
   position: absolute;
   bottom: 2px;
@@ -160,7 +149,7 @@
   background: var(--lo);
 }
 
-.h-track-tick:nth-child(4n + 1):not(:nth-child(16n + 1))::after {
+.h-track-tick.is-beat::after {
   height: 4px;
   background: var(--ink-soft);
 }
@@ -230,6 +219,29 @@
   background: var(--ink);
 }
 
+/* A held note sounds on to the end of the block: a thin key from its step to the end of the lane. */
+.h-track-hold {
+  position: absolute;
+  top: 10px;
+  height: 2px;
+  background: var(--cell);
+  box-shadow: 0 0 0 1px var(--ink);
+}
+
+.h-track-step.is-long.has-slide {
+  padding-left: 9px;
+}
+
+.h-track-step .h-mark-slide {
+  bottom: 3px;
+  left: 3px;
+}
+
+.h-track-step .h-mark-hold {
+  top: 9px;
+  right: 3px;
+}
+
 .h-track-sel {
   position: absolute;
   top: 0;
@@ -274,7 +286,27 @@
   color: var(--ink-soft);
 }
 
-/* Step inspector */
+/* Inspector: the Basics and each open level are groups that wrap onto a second line when the row is too narrow. */
+
+.h-track-inspector {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  min-width: 0;
+}
+
+.h-track-fields {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  column-gap: 6px;
+  min-width: 0;
+}
+
+.h-track-inspector .h-folds {
+  align-self: flex-start;
+  margin-top: 4px;
+}
 
 .h-track-which {
   flex: none;
@@ -293,10 +325,50 @@
 }
 
 .h-track-help {
+  flex: 1 1 0;
   min-width: 0;
   margin-left: 10px;
+  line-height: 26px;
+  white-space: nowrap;
   font: var(--font-small);
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--ink-soft);
+}
+
+/* Marks of a note's extras (marks.tsx), on a step of the grid and a note of the roll. */
+
+.h-track-step.is-maybe,
+.h-roll-note.is-maybe {
+  z-index: 0;
+}
+
+/* Plays only sometimes: dithered, as if only half there. */
+.h-track-step.is-maybe::after,
+.h-roll-note.is-maybe::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  z-index: -1;
+  background: var(--dither);
+}
+
+/* On a selected note of the roll the dither is darker, so its light name stays readable. */
+.h-roll-note.is-selected.is-maybe::after {
+  background: linear-gradient(45deg, var(--lo) 25%, transparent 25%, transparent 75%, var(--lo) 75%) 0 0 / 2px 2px,
+    linear-gradient(45deg, var(--lo) 25%, transparent 25%, transparent 75%, var(--lo) 75%) 1px 1px / 2px 2px;
+}
+
+.h-mark-ratchet {
+  position: absolute;
+  bottom: 2px;
+  width: 1px;
+  height: 4px;
+  background: currentColor;
+}
+
+.h-mark-slide,
+.h-mark-hold {
+  position: absolute;
+  display: flex;
 }

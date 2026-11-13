@@ -80,7 +80,7 @@ const show = (name: string) => flushSync(() => selectChannel(channel(name).id));
 const pro = () => flushSync(() => usePrefs.setState({ beginner: false }));
 const knobs = (name: string) =>
   [...unit(name).querySelectorAll('[role="slider"]')].map((k) => k.getAttribute('aria-label'));
-const folds = (name: string) => [...unit(name).querySelectorAll<HTMLElement>('.h-rack-folds .h-button')];
+const folds = (name: string) => [...unit(name).querySelectorAll<HTMLElement>('.h-folds .h-button')];
 const fold = (name: string, level: string) => folds(name).find((b) => b.textContent === level)!;
 const lit = (name: string, level: string) => fold(name, level).querySelector('.h-led')!.classList.contains('is-on');
 const sections = (name: string) =>
@@ -219,7 +219,7 @@ test('pro mode shows every control in table order with no sections', () => {
   ]);
   expect(knobs('Filter')).toEqual(['Cutoff', 'Reso', 'Drive', 'Key', 'Velocity']);
   expect(knobs('Reverb')).toEqual(['Size', 'Tone', 'Mix']);
-  expect(host.querySelectorAll('.h-rack-folds, .h-rack-section')).toHaveLength(0);
+  expect(host.querySelectorAll('.h-folds, .h-rack-section')).toHaveLength(0);
 });
 
 test('the Filter unit sits between Source and Amp, off until its lamp is pressed, controls by level', async () => {

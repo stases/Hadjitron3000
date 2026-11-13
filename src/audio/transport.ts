@@ -3,13 +3,18 @@
 
 import { TICKS_PER_STEP } from '../core/defaults';
 import { eventsBetween, stepSeconds, tickTime } from '../core/sequencer';
-import type { PlayScope, Project } from '../core/types';
+import type { NoteEvent, PlayScope, Project } from '../core/types';
 import type { Engine } from './engine';
 
 const TICK_MS = 25;
 const LOOKAHEAD = 0.12;
 // The first step sounds this long after start(), so it is not already late when scheduled.
 const START_DELAY = 0.05;
+
+/** Start one note of the sequencer at context time `time`; live playback and export both play notes here. */
+export function playEvent(engine: Engine, e: NoteEvent, time: number): void {
+  engine.play(e.channelId, e.note, e.vel, time, e.dur, e.slide);
+}
 
 export class Transport {
   private timer: ReturnType<typeof setInterval> | undefined;
@@ -66,7 +71,7 @@ export class Transport {
       const from = this.next * TICKS_PER_STEP;
       for (const e of eventsBetween(project, scope, from, from + TICKS_PER_STEP)) {
         // After a stall (a throttled timer) notes that should already have started are dropped.
-        if (this.origin + e.time >= now) this.engine.play(e.channelId, e.note, e.vel, this.origin + e.time, e.dur);
+        if (this.origin + e.time >= now) playEvent(this.engine, e, this.origin + e.time);
       }
       this.next++;
     }

@@ -31,7 +31,7 @@ test('fresh documents have independent parameter objects', () => {
 test('an empty project contains one pattern and an empty song', () => {
   const project = emptyProject();
   expect(project).toEqual({
-    name: 'Untitled', bpm: 120, swing: 0, master: 0, channels: [], samples: {},
+    name: 'Untitled', bpm: 120, swing: 0, meter: [4, 4], master: 0, channels: [], samples: {},
     patterns: [{ id: expect.any(String), name: 'A', color: 0, bars: 1, notes: {} }],
     song: [],
   });

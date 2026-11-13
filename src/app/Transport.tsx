@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PointerEvent } from 'react';
+import { LEVEL_NAMES } from '../core/levels';
+import { DEFAULT_METER, METERS, meterText } from '../core/meter';
 import type { FloatSpec } from '../core/modules';
 import { formatValue, fromNorm, toNorm } from '../core/params';
-import { setBpm, setMaster, setPlaying, setScope, setSwing, useApp } from '../state/store';
-import { Button, Icon, Knob, Lcd, Meter, Scope, Separator, Toolbar, setHint } from '../ui/kit';
+import { setBpm, setMaster, setMeter, setPlaying, setScope, setSwing, useApp } from '../state/store';
+import { toggleFold, useShown } from '../ui/factory/levels';
+import { Button, FoldToggles, Icon, Knob, Lcd, Meter, Scope, Select, Separator, Toolbar, setHint } from '../ui/kit';
 import { levels, scope } from './audio';
 import { fail } from './dialogStore';
+import { usePrefs } from './prefs';
 
 const SWING: FloatSpec = { kind: 'float', id: 'swing', label: 'Swing', min: 0, max: 1, def: 0, unit: '%' };
 const MASTER: FloatSpec = {
@@ -123,6 +127,42 @@ function Tempo() {
   );
 }
 
+/**
+ * The time signature of the project, a Deep control: in beginner mode it waits behind a Deep toggle whose lamp is lit
+ * when the project is not in 4/4.
+ */
+function TimeSignature() {
+  const meter = useApp((s) => s.project.meter);
+  const beginner = usePrefs((p) => p.beginner);
+  const shown = useShown()('transport', 3);
+  const text = meterText(meter);
+  return (
+    <>
+      {beginner && (
+        <FoldToggles
+          row
+          folds={[{
+            label: LEVEL_NAMES[3],
+            open: shown,
+            lit: text !== meterText(DEFAULT_METER),
+            hint: 'Shows the time signature; the lamp lights when the song is not in 4/4.',
+            onToggle: () => toggleFold('transport', 3),
+          }]}
+        />
+      )}
+      {shown && (
+        <Select
+          value={text}
+          options={METERS.map((m) => ({ value: meterText(m), label: meterText(m) }))}
+          onChange={(value) => setMeter(METERS.find((m) => meterText(m) === value)!)}
+          width={56}
+          hint="Time signature: how many beats make a bar, for every block. Notes keep their places when it changes."
+        />
+      )}
+    </>
+  );
+}
+
 function TransportKnob({ spec, value, onChange, hint }: {
   spec: FloatSpec;
   value: number;
@@ -179,6 +219,7 @@ export function Transport() {
       </Button>
       <Separator vertical />
       <Tempo />
+      <TimeSignature />
       <Button onClick={tapTempo} hint="Tap a few times in time to set the tempo.">
         Tap
       </Button>

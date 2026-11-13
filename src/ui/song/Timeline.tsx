@@ -1,7 +1,8 @@
 import { memo, useEffect, useRef, useState } from 'react';
-import type { KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
+import type { CSSProperties, KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { position } from '../../app/audio';
-import { MAX_SONG_BARS, SONG_LANES, STEPS_PER_BAR } from '../../core/defaults';
+import { MAX_SONG_BARS, SONG_LANES } from '../../core/defaults';
+import { barOf } from '../../core/meter';
 import { songBars } from '../../core/sequencer';
 import type { Placement } from '../../core/types';
 import {
@@ -10,7 +11,7 @@ import {
 } from '../../state/store';
 import { Well, openMenu, setHint, useHint } from '../kit';
 import { SpriteImage } from '../kit/Icon';
-import { BAR_W, openInTrack, placementText, room } from './song';
+import { barWidth, openInTrack, placementText, room } from './song';
 import { Tile } from './Tile';
 
 /** Empty bars the timeline always shows after the end of the song. */
@@ -61,6 +62,8 @@ export function Timeline() {
   const placementId = useApp((s) => s.placementId);
   const length = useApp((s) => songBars(s.project));
   const following = useApp((s) => s.playing && s.scope === 'song');
+  const bar = useApp((s) => barOf(s.project.meter));
+  const w = barWidth(bar);
   const scroller = useRef<HTMLDivElement>(null);
   const gesture = useRef<Gesture | null>(null);
   const added = useRef<{ id: string | null; time: number }>({ id: null, time: 0 });
@@ -69,10 +72,10 @@ export function Timeline() {
 
   useEffect(() => {
     const el = scroller.current!;
-    const observer = new ResizeObserver(() => setFit(Math.ceil(el.clientWidth / BAR_W)));
+    const observer = new ResizeObserver(() => setFit(Math.ceil(el.clientWidth / w)));
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [w]);
 
   useEffect(() => {
     const el = scroller.current!;
@@ -80,9 +83,9 @@ export function Timeline() {
     let shown = -1;
     let frame = requestAnimationFrame(function poll() {
       frame = requestAnimationFrame(poll);
-      const steps = songBars(useApp.getState().project) * STEPS_PER_BAR;
+      const steps = songBars(useApp.getState().project) * bar.steps;
       const pos = position();
-      const x = pos < 0 || steps === 0 ? -1 : Math.floor(((pos % steps) * BAR_W) / STEPS_PER_BAR);
+      const x = pos < 0 || steps === 0 ? -1 : Math.floor(((pos % steps) * w) / bar.steps);
       if (x === shown) return;
       shown = x;
       if (x < 0) {
@@ -93,30 +96,30 @@ export function Timeline() {
       el.style.setProperty('--h-song-now', `${x}px`);
       const head = el.querySelector<HTMLElement>('.h-song-corner')!.offsetWidth;
       if (x + PAD < el.scrollLeft || x + PAD >= el.scrollLeft + el.clientWidth - head) {
-        el.scrollLeft = x - (x % BAR_W);
+        el.scrollLeft = x - (x % w);
       }
     });
     return () => {
       cancelAnimationFrame(frame);
       delete el.dataset.now;
     };
-  }, [following]);
+  }, [following, bar, w]);
 
   /** The bar and lane under a point, from the first lane's box and the rows' rectangles. */
   const locate = (clientX: number, clientY: number) => {
     const lanes = scroller.current!.querySelectorAll('.h-song-lane .h-song-box');
     const boxes = [...lanes].map((box) => box.getBoundingClientRect());
-    const bar = Math.floor((clientX - boxes[0].left) / BAR_W);
+    const x = clientX - boxes[0].left;
     const lane = boxes.findIndex((r) => clientY < r.bottom + 3);
-    return { bar, lane: lane < 0 ? SONG_LANES - 1 : lane, x: clientX - boxes[0].left };
+    return { bar: Math.floor(x / w), lane: lane < 0 ? SONG_LANES - 1 : lane, x };
   };
 
   /** Scroll just enough to show the whole placement. */
   const reveal = (placement: Placement) => {
     const el = scroller.current!;
     const head = el.querySelector<HTMLElement>('.h-song-corner')!.offsetWidth;
-    const left = placement.bar * BAR_W;
-    const right = left + placement.bars * BAR_W + PAD * 2;
+    const left = placement.bar * w;
+    const right = left + placement.bars * w + PAD * 2;
     if (left < el.scrollLeft) el.scrollLeft = left;
     else if (right > el.scrollLeft + el.clientWidth - head) el.scrollLeft = right - el.clientWidth + head;
   };
@@ -165,7 +168,7 @@ export function Timeline() {
       const moved = findPlacement(g.id)!;
       setHint(`${placementText(name, moved)}, lane ${moved.lane + 1}`);
     } else {
-      resizePlacement(g.id, Math.max(1, Math.round(x / BAR_W) - placement.bar));
+      resizePlacement(g.id, Math.max(1, Math.round(x / w) - placement.bar));
       setHint(`${name} · ${bars(findPlacement(g.id)!.bars)}`);
     }
   };
@@ -223,6 +226,7 @@ export function Timeline() {
       <div
         ref={scroller}
         className="h-song-scroll"
+        style={{ '--h-song-cell': `${w - 2}px` } as CSSProperties}
         data-tour="timeline"
         tabIndex={0}
         onKeyDown={onKeyDown}
@@ -250,12 +254,12 @@ export function Timeline() {
           openMenu(tileMenu(placement), e.clientX, e.clientY);
         }}
       >
-        <Ruler count={count} />
+        <Ruler count={count} width={w} />
         {LANES.map((lane) => (
           <div key={lane} className="h-song-row">
             <LaneLabel lane={lane} />
             <div className="h-song-lane">
-              <div className="h-song-box" style={{ width: count * BAR_W - 2 }}>
+              <div className="h-song-box" style={{ width: count * w - 2 }}>
                 <Cells count={count} />
                 {byLane[lane].map((placement) => {
                   const pattern = patterns.find((p) => p.id === placement.pattern)!;
@@ -265,6 +269,7 @@ export function Timeline() {
                       placement={placement}
                       pattern={pattern}
                       channels={channels}
+                      bar={bar}
                       selected={placement.id === placementId}
                       current={pattern.id === patternId}
                     />
@@ -283,13 +288,13 @@ export function Timeline() {
   );
 }
 
-const Ruler = memo(function Ruler({ count }: { count: number }) {
+const Ruler = memo(function Ruler({ count, width }: { count: number; width: number }) {
   const hint = useHint('The bars of the song. While the song plays, the amber marker shows where it is.');
   return (
     <div className="h-song-ruler" {...hint.props}>
       <div className="h-song-corner" />
       <div className="h-song-ticks">
-        <div className="h-song-box" style={{ width: count * BAR_W - 2 }}>
+        <div className="h-song-box" style={{ width: count * width - 2 }}>
           {Array.from({ length: count }, (_, i) => (
             <span key={i} className="h-song-tick">
               {i % 4 === 0 && i + 1}

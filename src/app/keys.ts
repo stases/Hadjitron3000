@@ -1,11 +1,11 @@
 // The one global keyboard handler: menu shortcuts, the computer-keyboard piano, step entry and the piano roll.
 
-import { STEPS_PER_BAR, TICKS_PER_STEP, newNote } from '../core/defaults';
+import { TICKS_PER_STEP, newNote } from '../core/defaults';
+import { barOf } from '../core/meter';
 import { KEY_SEMITONES, MAX_NOTE, MIN_NOTE } from '../core/notes';
 import {
   addNote, moveNotes, redo, removeNotes, selectStep, setOctave, setPlaying, setView, undo, useApp,
 } from '../state/store';
-import { BAR_TICKS } from '../ui/track/roll';
 import {
   closeRoll, copySelection, cutSelection, deleteSelection, nudgeSelection, paste, repeatSelection, selectAll,
   selectNotes, useRoll,
@@ -59,10 +59,11 @@ function rollKey(e: KeyboardEvent): boolean {
   if (!rollOpen()) return false;
   const { snap, selected } = useRoll.getState();
   const octave = e.shiftKey ? 12 : 1;
+  const bar = barOf(useApp.getState().project.meter);
   switch (e.key) {
     case 'ArrowLeft':
     case 'ArrowRight':
-      nudgeSelection((e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? BAR_TICKS : snap), 0);
+      nudgeSelection((e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? bar.ticks : snap), 0);
       return true;
     case 'ArrowUp':
     case 'ArrowDown':
@@ -87,7 +88,7 @@ function stepKey(e: KeyboardEvent): boolean {
   if (state.view !== 'track' || !step) return false;
   const pattern = state.project.patterns.find((p) => p.id === state.patternId);
   if (!pattern) return false;
-  const length = pattern.bars * STEPS_PER_BAR;
+  const length = pattern.bars * barOf(state.project.meter).steps;
   const cell = rowCells(pattern.notes[step.channelId]).get(step.index);
   const ids = cell?.notes.map((n) => n.id) ?? [];
   switch (e.key) {
@@ -128,7 +129,7 @@ function pianoKey(e: KeyboardEvent, semitone: number): void {
     const cell = rowCells(pattern.notes[step.channelId]).get(step.index);
     if (cell) moveNotes(pattern.id, step.channelId, cell.notes.map((n) => n.id), 0, note - cell.notes[0].note);
     else addNote(pattern.id, step.channelId, newNote(step.index * TICKS_PER_STEP, note));
-    selectStep({ ...step, index: (step.index + 1) % (pattern.bars * STEPS_PER_BAR) });
+    selectStep({ ...step, index: (step.index + 1) % (pattern.bars * barOf(state.project.meter).steps) });
   }
   const { channelId } = state;
   if (!channelId) return;

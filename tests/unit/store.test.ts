@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import {
-  CHANNEL_COLORS, MAX_BARS, MAX_SONG_BARS, MAX_TICKS, PATTERN_NAMES, SONG_LANES, TICKS_PER_STEP,
+  CHANNEL_COLORS, MAX_BARS, MAX_SONG_BARS, PATTERN_NAMES, SONG_LANES, TICKS_PER_STEP,
   emptyProject, newMod, newModule, newNote, newSound,
 } from '../../src/core/defaults';
+import { MAX_TICKS } from '../../src/core/meter';
 import { MAX_NOTE, MIN_NOTE } from '../../src/core/notes';
 import type { Block, Channel, NoteInit, SampleData } from '../../src/core/types';
 import * as app from '../../src/state/store';
@@ -451,7 +452,7 @@ test('pattern length is bounded while hidden notes survive shortening', () => {
   app.setPatternBars(p, 99);
   expect(pattern().bars).toBe(MAX_BARS);
   expect(MAX_BARS).toBe(32);
-  const last = put(p, a, MAX_BARS * 16 - 1)!;
+  const last = put(p, a, MAX_TICKS / T - 1)!;
   app.setPatternBars(p, -5);
   expect(pattern().bars).toBe(1);
   expect(row(a)).toEqual([newNote(MAX_TICKS - T)]);
@@ -1276,4 +1277,68 @@ test('duplicating a placement puts a copy of the same length right after it in o
   expect(project()).toBe(before);
   const end = app.addPlacement(p, 0, MAX_SONG_BARS - 2)!;
   expect(app.duplicatePlacement(end)).toBeNull();
+});
+
+test('extras are set on several notes in one undo step, kept by other edits, and default values take them away', () => {
+  const a = app.addChannel(newSound());
+  const p = state().patternId;
+  const [x, y, z] = [[0, 60], [0, 64], [48, 62]].map(([start, note]) => app.addNote(p, a, newNote(start, note))!);
+  const steps = state().past.length;
+  app.setNotesExtras(p, a, [x, y], { chance: 40 });
+  app.setNotesExtras(p, a, [x, y], { chance: 25.4 });
+  expect(state().past.length).toBe(steps + 1);
+  app.setNotesExtras(p, a, [y, z], { ratchet: 4, slide: true, hold: true });
+  expect(pattern().notes[a].map(({ id: _, ...n }) => n)).toEqual([
+    { ...newNote(0, 60), chance: 25 },
+    { ...newNote(0, 64), chance: 25, ratchet: 4, slide: true, hold: true },
+    { ...newNote(48, 62), ratchet: 4, slide: true, hold: true },
+  ]);
+  expect(state().past.length).toBe(steps + 2);
+  app.moveNotes(p, a, [x, y, z], 24, 1);
+  app.resizeNotes(p, a, [z], 12);
+  app.updateNotes(p, a, [{ ...pattern().notes[a][0], vel: 0.5 }]);
+  expect(pattern().notes[a].map((n) => [n.chance, n.ratchet, n.hold])).toEqual([
+    [25, undefined, undefined], [25, 4, true], [undefined, 4, true],
+  ]);
+  app.setNotesExtras(p, a, [x, y, z], { chance: 100, ratchet: 1, slide: false, hold: false });
+  for (const n of pattern().notes[a]) expect(Object.keys(n)).toEqual(['id', 'start', 'len', 'note', 'vel']);
+  app.setNotesExtras(p, a, [x], { ratchet: 5 });
+  expect(pattern().notes[a][0]).not.toHaveProperty('ratchet');
+  app.undo();
+  expect(pattern().notes[a][1]).toMatchObject({ chance: 25, ratchet: 4, slide: true, hold: true });
+});
+
+test('a new meter keeps every note at its tick, gives each block the bars that hold it, and is one undo step', () => {
+  const a = app.addChannel(newSound());
+  const first = state().patternId;
+  app.setPatternBars(first, 2);
+  app.addNote(first, a, { ...newNote(31 * T), len: 2 * T });
+  const second = app.addPattern()!;
+  app.setPatternBars(second, 1);
+  app.addNote(second, a, newNote(0));
+  app.addNote(second, a, newNote(40 * T));
+  app.addPlacement(first, 0, 3);
+  const before = project();
+  const steps = state().past.length;
+  app.setMeter([7, 8]);
+  expect(project().meter).toEqual([7, 8]);
+  // 2 bars of 4/4 are 32 steps and the note ends on step 33: three bars of 14 steps. 16 steps need two bars; the
+  // note past the end of the one-bar block stays where it is and does not count.
+  expect(project().patterns.map((pt) => pt.bars)).toEqual([3, 2]);
+  expect(project().patterns.map((pt) => pt.notes)).toEqual(before.patterns.map((pt) => pt.notes));
+  expect(project().song).toEqual(before.song);
+  expect(state().past.length).toBe(steps + 1);
+  // Each change keeps at least the length before it: 672 ticks of 7/8 need two bars of 12/8.
+  app.setMeter([12, 8]);
+  expect(project().patterns.map((pt) => pt.bars)).toEqual([2, 2]);
+  app.setMeter([2, 4]);
+  expect(project().patterns.map((pt) => pt.bars)).toEqual([6, 6]);
+  const now = project();
+  app.setMeter([2, 4]);
+  app.setMeter([3, 3] as never);
+  expect(project()).toBe(now);
+  app.undo();
+  app.undo();
+  app.undo();
+  expect(project()).toEqual(before);
 });

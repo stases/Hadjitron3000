@@ -1,7 +1,8 @@
-// Where the cells of the step grid sit, and how the notes of one row fall into them.
-// The gaps here must match the margins in track.css.
+// Where the cells of the step grid sit in the project's meter, and how the notes of one row fall into them.
 
 import { TICKS_PER_STEP } from '../../core/defaults';
+import { beatOf } from '../../core/meter';
+import type { Bar } from '../../core/meter';
 import { ROOT_NOTE } from '../../core/notes';
 import type { Note } from '../../core/types';
 import { resizeNotes } from '../../state/store';
@@ -11,25 +12,33 @@ const GAP = 2;
 const BEAT_GAP = 6;
 const BAR_GAP = 12;
 
-/** Left edge of column `i` in the lane. */
-export function cellX(i: number): number {
-  return i * (CELL_W + GAP) + Math.floor(i / 4) * (BEAT_GAP - GAP) + Math.floor(i / 16) * (BAR_GAP - BEAT_GAP);
+/** Left edge of column `i` in the lane: a wider gap before each beat, and a wider one still before each bar. */
+export function cellX(i: number, bar: Bar): number {
+  const bars = Math.floor(i / bar.steps);
+  const beats = bars * (bar.beats.length - 1) + beatOf(i - bars * bar.steps, bar);
+  return i * (CELL_W + GAP) + beats * (BEAT_GAP - GAP) + bars * (BAR_GAP - GAP);
 }
 
-export function laneWidth(columns: number): number {
-  return cellX(columns - 1) + CELL_W;
+export function laneWidth(columns: number, bar: Bar): number {
+  return cellX(columns - 1, bar) + CELL_W;
 }
 
 /** Width of a key of `len` columns starting at column `i`, across the gaps it covers. */
-export function spanWidth(i: number, len: number): number {
-  return cellX(i + len - 1) + CELL_W - cellX(i);
+export function spanWidth(i: number, len: number, bar: Bar): number {
+  return cellX(i + len - 1, bar) + CELL_W - cellX(i, bar);
 }
 
+/** The space after column `i` before the next one. */
+export const gapAfter = (i: number, bar: Bar) => cellX(i + 1, bar) - cellX(i, bar) - CELL_W;
+
+/** True when column `i` starts a beat. */
+export const onBeat = (i: number, bar: Bar) => bar.beats.includes(i % bar.steps);
+
 /** The column under a point of the lane; a gap belongs to the column before it. -1 outside the lane. */
-export function columnAt(x: number, columns: number): number {
-  if (x < 0 || x >= laneWidth(columns)) return -1;
+export function columnAt(x: number, columns: number, bar: Bar): number {
+  if (x < 0 || x >= laneWidth(columns, bar)) return -1;
   let i = Math.min(columns - 1, Math.floor(x / (CELL_W + GAP)));
-  while (i > 0 && cellX(i) > x) i--;
+  while (i > 0 && cellX(i, bar) > x) i--;
   return i;
 }
 

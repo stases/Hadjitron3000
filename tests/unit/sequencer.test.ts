@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { emptyProject, newSound, TICKS_PER_STEP } from '../../src/core/defaults';
-import { eventsBetween, heardAt, loopSteps, songBars, stepSeconds, tickTime } from '../../src/core/sequencer';
+import { eventsBetween, heardAt, loopSteps, plays, songBars, stepSeconds, tickTime } from '../../src/core/sequencer';
 import type { Note, Project } from '../../src/core/types';
 import { notesOf, stepNote } from '../support/steps';
 
@@ -156,4 +156,163 @@ test('tick windows schedule every note once, across window edges and the loop wr
   const block = windowed(p, { kind: 'pattern', patternId: a.id }, T, 3 * 16 * T);
   expect(block).toHaveLength(24);
   expect(block.slice(0, 4).map((e) => e.split(':').slice(1).join(':'))).toEqual(['k:60', 'pad:48', 'pad:55', 'pad:63']);
+});
+
+/** A project with one row of these notes in a one-bar block A, at 120 BPM. */
+function oneRow(notes: Note[], meter: Project['meter'] = [4, 4]): Project {
+  const p = emptyProject();
+  p.meter = meter;
+  p.channels.push({ id: 'k', sound: newSound(), color: 0, mute: false, solo: false });
+  p.patterns[0].notes = { k: notes };
+  return p;
+}
+
+const blockScope = (p: Project) => ({ kind: 'pattern', patternId: p.patterns[0].id } as const);
+
+test('a note with a chance plays on the same passes every time, and on about that share of them', () => {
+  const note: Note = { id: 'n', start: 0, len: T, note: 60, vel: 1, chance: 30 };
+  const passes = Array.from({ length: 10000 }, (_, i) => plays(note, 'p', i));
+  expect(Array.from({ length: 10000 }, (_, i) => plays(note, 'p', i))).toEqual(passes);
+  expect(passes.filter(Boolean).length / passes.length).toBeCloseTo(0.3, 1.5);
+  for (const chance of [1, 50, 99]) {
+    const share = Array.from({ length: 20000 }, (_, i) => plays({ ...note, chance }, 'q', i)).filter(Boolean).length;
+    expect(Math.abs(share / 20000 - chance / 100)).toBeLessThan(0.015);
+  }
+  // Another note or another block makes other choices.
+  expect(Array.from({ length: 64 }, (_, i) => plays({ ...note, id: 'm' }, 'p', i))).not.toEqual(passes.slice(0, 64));
+  expect(Array.from({ length: 64 }, (_, i) => plays(note, 'r', i))).not.toEqual(passes.slice(0, 64));
+  expect(plays({ ...note, chance: undefined }, 'p', 0)).toBe(true);
+});
+
+test('in the block on repeat a chance is decided per pass, the same on every play', () => {
+  const p = oneRow([{ id: 'n', start: 0, len: T, note: 60, vel: 1, chance: 50 }]);
+  const scope = blockScope(p);
+  const heard = (from: number) => eventsBetween(p, scope, from, 64 * 16 * T).map((e) => Math.round(e.time / 2));
+  const passes = heard(0);
+  expect(passes.length).toBeGreaterThan(16);
+  expect(passes.length).toBeLessThan(48);
+  expect(heard(0)).toEqual(passes);
+  const [note] = p.patterns[0].notes.k;
+  expect(passes).toEqual(Array.from({ length: 64 }, (_, i) => i).filter((i) => plays(note, p.patterns[0].id, i)));
+});
+
+test('in the song a chance is decided by the bar where the repeat of the placement starts', () => {
+  const p = oneRow([{ id: 'n', start: 0, len: T, note: 60, vel: 1, chance: 50 }]);
+  const a = p.patterns[0];
+  p.song = [
+    { id: 's1', pattern: a.id, lane: 0, bar: 0, bars: 40 }, { id: 's2', pattern: a.id, lane: 1, bar: 3, bars: 2 },
+  ];
+  const bars = eventsBetween(p, { kind: 'song' }, 0, 40 * 16 * T).map((e) => e.time / 2);
+  const lane1 = Array.from({ length: 40 }, (_, i) => i).filter((i) => plays(a.notes.k[0], a.id, i));
+  const lane2 = [3, 4].filter((i) => plays(a.notes.k[0], a.id, i));
+  expect(bars).toEqual([...lane1, ...lane2].sort((x, y) => x - y));
+  // The second time round the song sounds the same.
+  const again = eventsBetween(p, { kind: 'song' }, 40 * 16 * T, 80 * 16 * T).map((e) => e.time / 2 - 40);
+  expect(again).toEqual(bars);
+});
+
+test('a ratchet plays the note that many times inside its length, each that long, swung like the steps', () => {
+  for (const swing of [0, 0.5]) {
+    const p = oneRow([{ id: 'r', start: 2 * T, len: 2 * T, note: 60, vel: 0.5, ratchet: 4, slide: true }]);
+    p.swing = swing;
+    const events = eventsBetween(p, blockScope(p), 0, 16 * T);
+    const ticks = [48, 60, 72, 84];
+    expect(events.map((e) => e.time)).toEqual(ticks.map((t) => tickTime(t, 120, swing)));
+    expect(events.map((e) => e.dur)).toEqual(ticks.map((t) => tickTime(t + 12, 120, swing) - tickTime(t, 120, swing)));
+    expect(events.map((e) => [e.note, e.vel])).toEqual(ticks.map(() => [60, 0.5]));
+    // Only the first repeat glides in.
+    expect(events.map((e) => e.slide ?? false)).toEqual([true, false, false, false]);
+  }
+  for (const ratchet of [2, 3, 6, 8]) {
+    const p = oneRow([{ id: 'r', start: 0, len: T, note: 60, vel: 1, ratchet }]);
+    const events = eventsBetween(p, blockScope(p), 0, 16 * T);
+    expect(events).toHaveLength(ratchet);
+    events.forEach((e, i) => expect(e.time).toBeCloseTo(tickTime((i * T) / ratchet, 120, 0), 12));
+    events.forEach((e) => expect(e.dur).toBeCloseTo(stepSeconds(120) / ratchet, 12));
+  }
+});
+
+test('repeats of a ratchet past the end of the block are left out, and windows find each repeat once', () => {
+  const p = oneRow([
+    { ...stepNote(3), ratchet: 3 }, { id: 'r', start: 15 * T, len: 2 * T, note: 60, vel: 1, ratchet: 4 },
+  ]);
+  p.swing = 0.3;
+  const scope = blockScope(p);
+  expect(eventsBetween(p, scope, 0, 16 * T)).toHaveLength(2 + 3);
+  const end = 3 * 16 * T;
+  const whole = windowed(p, scope, end, end);
+  for (const size of [1, 5, 7, T]) expect(windowed(p, scope, size, end)).toEqual(whole);
+});
+
+test('a ratchet plays whole or not at all when it has a chance', () => {
+  const p = oneRow([{ id: 'r', start: 0, len: 4 * T, note: 60, vel: 1, ratchet: 8, chance: 50 }]);
+  const scope = blockScope(p);
+  const counts = Array.from({ length: 40 }, (_, pass) =>
+    eventsBetween(p, scope, pass * 16 * T, (pass + 1) * 16 * T).length);
+  expect(new Set(counts)).toEqual(new Set([0, 8]));
+});
+
+test('a held note in the song sounds once from its start to the end of its placement', () => {
+  const held: Note = { id: 'h', start: 4 * T, len: T, note: 48, vel: 0.6, hold: true };
+  const p = oneRow([held, stepNote(0, 72)]);
+  const a = p.patterns[0];
+  p.song = [
+    { id: 's1', pattern: a.id, lane: 0, bar: 2, bars: 3 }, { id: 's2', pattern: a.id, lane: 0, bar: 6, bars: 1 },
+  ];
+  for (const bpm of [60, 133]) {
+    p.bpm = bpm;
+    const time = (tick: number) => tickTime(tick, bpm, 0);
+    const events = eventsBetween(p, { kind: 'song' }, 0, 7 * 16 * T).filter((e) => e.note === 48);
+    // Not started again when the block repeats inside the placement, cut where the placement ends.
+    expect(events).toHaveLength(2);
+    expect(events[0].time).toBe(time(36 * T));
+    expect(events[0].time + events[0].dur).toBeCloseTo(time(5 * 16 * T), 12);
+    expect(events[1].time + events[1].dur).toBeCloseTo(time(7 * 16 * T), 12);
+    expect(events[0].dur / stepSeconds(bpm)).toBeCloseTo(44, 9);
+  }
+  // A placement that ends before the note starts does not play it.
+  p.song = [{ id: 's1', pattern: a.id, lane: 0, bar: 0, bars: 1 }];
+  a.bars = 2;
+  held.start = 20 * T;
+  expect(eventsBetween(p, { kind: 'song' }, 0, 16 * T).map((e) => e.note)).toEqual([72]);
+});
+
+test('a held note in the block on repeat lasts to the end of the block and starts again with each pass', () => {
+  const p = oneRow([{ id: 'h', start: 4 * T, len: T, note: 48, vel: 0.6, hold: true, ratchet: 2 }]);
+  const events = eventsBetween(p, blockScope(p), 0, 32 * T);
+  // With a ratchet the last repeat is the one held.
+  const at = (tick: number) => tickTime(tick, 120, 0);
+  expect(events.map((e) => [e.time, e.dur])).toEqual([
+    [at(96), stepSeconds(120) / 2], [at(108), at(384) - at(108)],
+    [at(480), stepSeconds(120) / 2], [at(492), at(768) - at(492)],
+  ]);
+});
+
+test('a slide is carried to the event and nothing else is', () => {
+  const p = oneRow([{ ...stepNote(0), slide: true }, stepNote(1)]);
+  const [first, second] = eventsBetween(p, blockScope(p), 0, 16 * T);
+  expect(first.slide).toBe(true);
+  expect(second).toEqual({ channelId: 'k', time: 0.125, dur: 0.125, note: 60, vel: 0.8 });
+});
+
+test('a 7/8 bar is fourteen steps, in blocks and the song, and windows schedule each event once', () => {
+  const notes = [
+    stepNote(0), { ...stepNote(6, 67), ratchet: 3 }, { ...stepNote(10, 50), hold: true }, stepNote(13, 64),
+  ];
+  const p = oneRow(notes, [7, 8]);
+  p.swing = 0.25;
+  const a = p.patterns[0];
+  a.bars = 2;
+  p.song = [{ id: 's1', pattern: a.id, lane: 0, bar: 1, bars: 3 }];
+  expect(loopSteps(p, blockScope(p))).toBe(28);
+  expect(loopSteps(p, { kind: 'song' })).toBe(56);
+  expect(heardAt(p, { kind: 'song' }, 14 * T + 5)).toMatchObject([{ tick: 5 }]);
+  expect(eventsBetween(p, blockScope(p), 0, 28 * T).map((e) => e.time / stepSeconds(120)))
+    .toEqual([0, 6, 6 + 1 / 3, 6 + 2 / 3, 10, 13].map((step) => tickTime(step * T, 120, 0.25) / stepSeconds(120)));
+  for (const scope of [blockScope(p), { kind: 'song' } as const]) {
+    const end = 3 * loopSteps(p, scope) * T;
+    const whole = windowed(p, scope, end, end);
+    expect(whole.length).toBeGreaterThan(0);
+    for (const size of [1, 7, T, 5 * T, 14 * T]) expect(windowed(p, scope, size, end)).toEqual(whole);
+  }
 });

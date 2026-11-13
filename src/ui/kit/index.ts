@@ -18,7 +18,7 @@ export type { MenuItem } from './Menu';
 export { ParamControl } from './ParamControl';
 export { drawLine, fillBox, fillPixel, tokenColor } from './pixels';
 export { ProgressBar } from './ProgressBar';
-export { RackUnit } from './RackUnit';
+export { FoldToggles, RackUnit } from './RackUnit';
 export type { RackFold } from './RackUnit';
 export { Select } from './Select';
 export type { SelectItem } from './Select';

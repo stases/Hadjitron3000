@@ -139,7 +139,7 @@
 .h-song-cell,
 .h-song-tick {
   flex: none;
-  width: 28px;
+  width: var(--h-song-cell);
 }
 
 .h-song-cell {

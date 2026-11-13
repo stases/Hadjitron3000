@@ -14,6 +14,11 @@ const FOLD_HINTS: Readonly<Record<2 | 3, string>> = {
   3: 'Shows the Deep controls, the ones that take some explaining; the lamp lights when one is changed.',
 };
 
+/** Open or close the section of a level in units of a type. */
+export function toggleFold(type: string, level: Level): void {
+  useFolds.setState((s) => ({ [`${type}/${level}`]: !s[`${type}/${level}`] }));
+}
+
 /** Tells whether controls of a level are on screen in units of a type: always in pro mode and at Basics. */
 export function useShown(): (type: string, level: Level) => boolean {
   const beginner = usePrefs((p) => p.beginner);
@@ -67,7 +72,7 @@ export function useLevels(type: string, cells: Cell[]): { row: ReactNode[]; fold
       open: shown(type, level),
       lit: groups[level].some((c) => c.changed),
       hint: FOLD_HINTS[level],
-      onToggle: () => useFolds.setState((s) => ({ [`${type}/${level}`]: !s[`${type}/${level}`] })),
+      onToggle: () => toggleFold(type, level),
       children: <div className="h-factory-row">{arrange(groups[level])}</div>,
     }));
   return { row: arrange(groups[1]), folds };

@@ -1,11 +1,12 @@
 // The geometry of the song timeline and small questions about placements. Sizes must match song.css.
 
 import { MAX_SONG_BARS } from '../../core/defaults';
+import type { Bar } from '../../core/meter';
 import type { Placement } from '../../core/types';
 import { selectPattern, setView } from '../../state/store';
 
-/** Width of one bar on the timeline: a 28px cell and a 2px bar line. */
-export const BAR_W = 30;
+/** Width of one bar on the timeline: a cell of seven pixels to four steps (28 in 4/4) and a 2px bar line. */
+export const barWidth = (bar: Bar) => Math.round((bar.steps * 7) / 4) + 2;
 /** Height of a tile, the inside of a lane. */
 export const TILE_H = 56;
 

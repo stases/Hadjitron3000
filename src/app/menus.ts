@@ -98,7 +98,8 @@ export function buildMenus(state: AppState, prefs: Prefs): { label: string; tour
         {
           label: 'Beginner Mode',
           checked: prefs.beginner,
-          hint: 'Folds the Shaping and Deep controls of each unit away and groups the add lists by level.',
+          hint: 'Folds the Shaping and Deep controls away (in the Factory, the note inspector and the time signature) '
+            + 'and groups the add lists by level.',
           onSelect: () => setPrefs({ beginner: !prefs.beginner }),
         },
       ],

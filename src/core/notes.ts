@@ -1,6 +1,7 @@
 // Pitches are MIDI numbers; 60 is C3 and plays a sound at its own pitch. Below them, the notes of a row.
 
-import { MAX_TICKS, uid } from './defaults';
+import { uid } from './defaults';
+import { MAX_TICKS } from './meter';
 import type { Note, NoteInit } from './types';
 
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -48,9 +49,25 @@ export function compareNotes(a: NoteInit, b: NoteInit): number {
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
+/** The ratchet choices besides playing once. */
+export const RATCHETS: readonly number[] = [2, 3, 4, 6, 8];
+
+export type NoteExtras = Pick<Note, 'chance' | 'ratchet' | 'slide' | 'hold'>;
+
+/** The extras of a note that differ from their defaults, made valid; a chance of 100 or more is no chance at all. */
+export function noteExtras(raw: Record<string, unknown>): NoteExtras {
+  const extras: NoteExtras = {};
+  const chance = typeof raw.chance === 'number' ? Math.round(raw.chance) : NaN;
+  if (chance < 100) extras.chance = Math.max(1, chance);
+  if (typeof raw.ratchet === 'number' && RATCHETS.includes(raw.ratchet)) extras.ratchet = raw.ratchet;
+  if (raw.slide === true) extras.slide = true;
+  if (raw.hold === true) extras.hold = true;
+  return extras;
+}
+
 /**
  * A row's notes made valid and sorted: whole ticks, starts inside the longest block, pitches and velocities in
- * range, unique ids, and never two notes with the same start and pitch (the first one stays).
+ * range, extras only where set, unique ids, and never two notes with the same start and pitch (the first one stays).
  */
 export function cleanNotes(notes: readonly (NoteInit & { id?: string })[]): Note[] {
   const reserved = new Set(notes.flatMap((n) => (n.id ? [n.id] : [])));
@@ -68,7 +85,9 @@ export function cleanNotes(notes: readonly (NoteInit & { id?: string })[]): Note
       do { id = uid('n'); } while (ids.has(id) || reserved.has(id));
     }
     ids.add(id);
-    clean.push({ id, start, len: clamp(Math.round(n.len), 1, MAX_TICKS), note, vel: clamp(n.vel, 0, 1) });
+    clean.push({
+      id, start, len: clamp(Math.round(n.len), 1, MAX_TICKS), note, vel: clamp(n.vel, 0, 1), ...noteExtras({ ...n }),
+    });
   }
   return clean.sort(compareNotes);
 }

@@ -51,6 +51,17 @@ test('tail 0 renders exactly the loop, loops 2 doubles it, and trailing silence 
   expect(seconds).toBeLessThan(2.4 + 0.375 + 0.06);
 });
 
+test('an export of a 7/8 block lasts its fourteen steps a bar, and its notes fall on them', async () => {
+  const p = blips(100, 0);
+  p.meter = [7, 8];
+  p.patterns[0].bars = 2;
+  const loop = Math.round(28 * (15 / 100) * SR);
+  const two = await renderProject(p, scopeOf(p), { tail: 0, loops: 2 });
+  expect(two.channels[0].length).toBe(2 * loop);
+  // The second pass starts with the block's first note, 28 steps in.
+  expect(onset(two.channels[0], loop / SR - 0.01)).toBeCloseTo(loop / SR, 2);
+});
+
 test('render progress advances during the render', async () => {
   const p = blips(100, 0);
   const seen: number[] = [];

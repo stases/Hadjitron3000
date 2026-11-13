@@ -969,13 +969,18 @@ button.h-led:focus-visible {
   gap: 4px;
 }
 
-.h-rack-folds {
+.h-folds {
   display: flex;
+  flex: none;
   flex-direction: column;
   gap: 2px;
 }
 
-.h-rack-folds .h-button {
+.h-folds.is-row {
+  flex-direction: row;
+}
+
+.h-folds .h-button {
   justify-content: flex-start;
   width: 61px;
   height: 17px;

@@ -55,6 +55,11 @@ export interface Note {
   len: number; // ticks, integer, >= 1
   note: number; // MIDI note number, 60 = C3
   vel: number; // 0..1
+  // Extras, absent when they have their default value:
+  chance?: number; // 1..99: the percent of passes it plays on; absent plays every time
+  ratchet?: number; // 2, 3, 4, 6 or 8: played that many times inside its length; absent plays once
+  slide?: boolean; // true: the pitch glides in from the row's previous note
+  hold?: boolean; // true: a drone, sounding to the end of its placement (or of the block played on repeat)
 }
 
 /** A note before the store gives it an id. */
@@ -65,7 +70,7 @@ export interface Pattern {
   id: string;
   name: string;
   color: number; // index into the colour palette, 0..7
-  bars: number; // 1..MAX_BARS, sixteen steps per bar
+  bars: number; // 1..MAX_BARS, in the project's meter
   notes: Record<string, Note[]>; // channel id -> its notes, sorted by start, then pitch
 }
 
@@ -93,10 +98,14 @@ export interface SampleData {
   bytes: Uint8Array;
 }
 
+/** A time signature as [beats, unit]: [7, 8] is 7/8. One of METERS in core/meter.ts. */
+export type Meter = [beats: number, unit: 4 | 8];
+
 export interface Project {
   name: string;
   bpm: number; // 40..240
   swing: number; // 0..1, off-beat sixteenths are delayed by swing * half a step
+  meter: Meter; // the same for every bar of every block
   master: number; // dB
   channels: Channel[];
   patterns: Pattern[];
@@ -114,6 +123,7 @@ export interface NoteEvent {
   dur: number; // seconds
   note: number;
   vel: number;
+  slide?: boolean; // the pitch glides in from the previous note of the row
 }
 
 /** Rendered audio: one Float32Array per output channel (always two). */

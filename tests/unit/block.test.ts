@@ -1,8 +1,9 @@
 import { expect, test } from 'vitest';
 import { extractBlock } from '../../src/core/block';
 import {
-  CHANNEL_COLORS, emptyProject, MAX_BARS, MAX_TICKS, newMod, newModule, newSound, TICKS_PER_STEP,
+  CHANNEL_COLORS, emptyProject, MAX_BARS, newMod, newModule, newSound, TICKS_PER_STEP,
 } from '../../src/core/defaults';
+import { MAX_TICKS } from '../../src/core/meter';
 import {
   FORMAT_VERSION, FormatError, parseBlock, serializeBlock, serializeProject, serializeSound,
 } from '../../src/core/fileformat';

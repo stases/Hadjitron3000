@@ -2,14 +2,17 @@ import { produce } from 'immer';
 import { create } from 'zustand';
 import type { StoreApi, UseBoundStore } from 'zustand';
 import {
-  CHANNEL_COLORS, MAX_BARS, MAX_SONG_BARS, MAX_TICKS, PATTERN_NAMES, SONG_LANES, STEPS_PER_BAR,
+  CHANNEL_COLORS, MAX_BARS, MAX_SONG_BARS, PATTERN_NAMES, SONG_LANES, TICKS_PER_STEP,
   emptyProject, newMod, newModule, newPattern, newSound, uid,
 } from '../core/defaults';
+import { MAX_TICKS, barOf, barsToHold, meterText, readMeter } from '../core/meter';
 import { MODULES, moduleDef, paramSpec } from '../core/modules';
-import { MAX_NOTE, MIN_NOTE, cleanNotes, compareNotes } from '../core/notes';
+import { MAX_NOTE, MIN_NOTE, cleanNotes, compareNotes, noteExtras } from '../core/notes';
+import type { NoteExtras } from '../core/notes';
 import { coerce, defaultParams } from '../core/params';
 import type {
-  Block, Channel, ModInst, ModTarget, Note, NoteInit, ParamValue, Params, PlayScope, Project, SampleData, Sound,
+  Block, Channel, Meter, ModInst, ModTarget, Note, NoteInit, ParamValue, Params, PlayScope, Project, SampleData,
+  Sound,
 } from '../core/types';
 
 export type View = 'factory' | 'track' | 'song';
@@ -143,6 +146,25 @@ export function setBpm(bpm: number): void {
 
 export function setSwing(swing: number): void {
   edit((p) => { p.swing = clamp(swing, 0, 1); }, 'swing');
+}
+
+/**
+ * Give the project another time signature. Every note keeps its tick; each block gets the fewest bars of the new
+ * meter that hold its old length and the notes that start in it, and placements keep their bars.
+ */
+export function setMeter(meter: Meter): void {
+  const next = readMeter(meter);
+  if (!next || meterText(next) === meterText(useApp.getState().project.meter)) return;
+  edit((p) => {
+    const old = barOf(p.meter);
+    const bar = barOf(next);
+    p.meter = next;
+    for (const pattern of p.patterns) {
+      const length = pattern.bars * old.ticks;
+      const ends = Object.values(pattern.notes).flat().filter((n) => n.start < length).map((n) => n.start + n.len);
+      pattern.bars = barsToHold(Math.max(length, ...ends), bar);
+    }
+  });
 }
 
 export function setMaster(db: number): void {
@@ -338,7 +360,7 @@ export function setModAmount(channelId: string, modId: string, amount: number): 
 }
 
 function validIndex(index: number): boolean {
-  return Number.isInteger(index) && index >= 0 && index < MAX_BARS * STEPS_PER_BAR;
+  return Number.isInteger(index) && index >= 0 && index < MAX_TICKS / TICKS_PER_STEP;
 }
 
 const finiteNote = (n: NoteInit) => [n.start, n.len, n.note, n.vel].every(Number.isFinite);
@@ -365,7 +387,7 @@ function editNotes(
       const v = change(n);
       return {
         id: n.id, start: clamp(Math.round(v.start), 0, MAX_TICKS - 1), len: clamp(Math.round(v.len), 1, MAX_TICKS),
-        note: clamp(Math.round(v.note), MIN_NOTE, MAX_NOTE), vel: clamp(v.vel, 0, 1),
+        note: clamp(Math.round(v.note), MIN_NOTE, MAX_NOTE), vel: clamp(v.vel, 0, 1), ...noteExtras({ ...v }),
       };
     });
     if (new Set(next.map((n) => `${n.start}:${n.note}`)).size === next.length) {
@@ -467,6 +489,16 @@ export function setNotesPitch(patternId: string, channelId: string, ids: readonl
 export function setNotesVelocity(patternId: string, channelId: string, ids: readonly string[], vel: number): void {
   if (!Number.isFinite(vel)) return;
   editNotes(patternId, channelId, ids, (n) => ({ ...n, vel }), 'vel');
+}
+
+/**
+ * Give notes the same extras, leaving the others as they are. A default value takes an extra away: chance 100,
+ * ratchet 1, slide or hold false.
+ */
+export function setNotesExtras(
+  patternId: string, channelId: string, ids: readonly string[], extras: NoteExtras,
+): void {
+  editNotes(patternId, channelId, ids, (n) => ({ ...n, ...extras }), JSON.stringify(Object.keys(extras).sort()));
 }
 
 export function setPatternBars(patternId: string, bars: number): void {

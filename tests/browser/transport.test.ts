@@ -94,3 +94,14 @@ test('with nothing to play the transport runs silently', async () => {
   expect(calls).toEqual([]);
   transport.stop();
 });
+
+test('in 7/8 the block comes round every fourteen steps', async () => {
+  const p = project([{ id: 'a', sound: sound('osc') }], { a: { 0: { note: 69, vel: 1, len: 0.5 } } }, { bpm: 240 });
+  p.meter = [7, 8];
+  const { calls, transport } = await setup(p);
+  transport.start();
+  await sleep(1100);
+  transport.stop();
+  expect(calls.length).toBeGreaterThanOrEqual(2);
+  expect(calls[1] - calls[0]).toBeCloseTo(14 * stepSeconds(240), 9);
+});

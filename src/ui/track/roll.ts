@@ -2,7 +2,9 @@
 // changes the notes, the clipboard, and the background. Time uses the step grid's columns (steps.ts) at one pixel
 // per tick, so the roll and the grid are the same sheet.
 
-import { STEPS_PER_BAR, TICKS_PER_STEP } from '../../core/defaults';
+import { TICKS_PER_STEP } from '../../core/defaults';
+import { beatOf } from '../../core/meter';
+import type { Bar } from '../../core/meter';
 import { MAX_NOTE, MIN_NOTE, isBlackKey } from '../../core/notes';
 import type { Note, NoteInit } from '../../core/types';
 import { CELL_W, cellX, columnAt, laneWidth } from './steps';
@@ -10,8 +12,6 @@ import { CELL_W, cellX, columnAt, laneWidth } from './steps';
 /** Height of one semitone. */
 export const ROW_H = 12;
 export const SHEET_H = (MAX_NOTE - MIN_NOTE + 1) * ROW_H;
-export const BAR_TICKS = STEPS_PER_BAR * TICKS_PER_STEP;
-const BEAT_TICKS = 4 * TICKS_PER_STEP;
 const EDGE_PX = 4;
 
 /** The snap choices, in ticks. */
@@ -26,21 +26,21 @@ export const SNAPS = [
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 /** Left edge of a tick on the sheet. */
-export function tickX(t: number): number {
+export function tickX(t: number, bar: Bar): number {
   const step = Math.floor(t / TICKS_PER_STEP);
-  return cellX(step) + t - step * TICKS_PER_STEP;
+  return cellX(step, bar) + t - step * TICKS_PER_STEP;
 }
 
 /** Right edge of something that ends at tick `t`: on a step line that is the right edge of the cell before it. */
-export function endX(t: number): number {
-  return t % TICKS_PER_STEP === 0 ? cellX(t / TICKS_PER_STEP - 1) + CELL_W : tickX(t);
+export function endX(t: number, bar: Bar): number {
+  return t % TICKS_PER_STEP === 0 ? cellX(t / TICKS_PER_STEP - 1, bar) + CELL_W : tickX(t, bar);
 }
 
 /** The tick under a point of the sheet, from 0 to the end of the block; a gap counts as the step line after it. */
-export function tickAt(x: number, columns: number): number {
-  const at = clamp(Math.floor(x), 0, laneWidth(columns) - 1);
-  const column = columnAt(at, columns);
-  return column * TICKS_PER_STEP + Math.min(TICKS_PER_STEP, at - cellX(column));
+export function tickAt(x: number, columns: number, bar: Bar): number {
+  const at = clamp(Math.floor(x), 0, laneWidth(columns, bar) - 1);
+  const column = columnAt(at, columns, bar);
+  return column * TICKS_PER_STEP + Math.min(TICKS_PER_STEP, at - cellX(column, bar));
 }
 
 export const noteY = (note: number) => (MAX_NOTE - note) * ROW_H;
@@ -52,9 +52,11 @@ export const snapRound = (t: number, unit: number) => Math.round(t / unit) * uni
 const snapCeil = (t: number, unit: number) => Math.ceil(t / unit) * unit;
 
 /** Where a note of the block is drawn; a note longer than what is left of the block is cut at its end. */
-export function noteBox(n: Note, blockTicks: number): Box {
+export function noteBox(n: Note, blockTicks: number, bar: Bar): Box {
   const top = noteY(n.note);
-  return { left: tickX(n.start), right: endX(Math.min(n.start + n.len, blockTicks)), top, bottom: top + ROW_H };
+  return {
+    left: tickX(n.start, bar), right: endX(Math.min(n.start + n.len, blockTicks), bar), top, bottom: top + ROW_H,
+  };
 }
 
 export interface Box {
@@ -71,26 +73,26 @@ export type Part = 'start' | 'body' | 'end';
  * notes overlap, the one that starts last is on top.
  */
 export function noteAt(
-  notes: readonly Note[], x: number, y: number, blockTicks: number,
+  notes: readonly Note[], x: number, y: number, blockTicks: number, bar: Bar,
 ): { note: Note; part: Part } | null {
   const pitch = pitchAt(y);
   let found: Note | null = null;
   for (const n of notes) {
     if (n.note !== pitch || n.start >= blockTicks || (found && n.start < found.start)) continue;
-    const box = noteBox(n, blockTicks);
+    const box = noteBox(n, blockTicks, bar);
     if (x >= box.left && x < box.right) found = n;
   }
   if (!found) return null;
-  const { left, right } = noteBox(found, blockTicks);
+  const { left, right } = noteBox(found, blockTicks, bar);
   const edge = Math.min(EDGE_PX, Math.floor((right - left) / 3));
   return { note: found, part: x >= right - edge ? 'end' : x < left + edge ? 'start' : 'body' };
 }
 
 /** The ids of the notes a rubber band touches. */
-export function notesIn(notes: readonly Note[], band: Box, blockTicks: number): string[] {
+export function notesIn(notes: readonly Note[], band: Box, blockTicks: number, bar: Bar): string[] {
   return notes.flatMap((n) => {
     if (n.start >= blockTicks) return [];
-    const b = noteBox(n, blockTicks);
+    const b = noteBox(n, blockTicks, bar);
     return b.left < band.right && b.right > band.left && b.top < band.bottom && b.bottom > band.top ? [n.id] : [];
   });
 }
@@ -129,10 +131,10 @@ export function dragNotes(
  * The notes a velocity bar near `x` stands for: those that start where the bar is, or only the selected ones among
  * them when there are any, so the notes of a chord can be set together or one by one.
  */
-export function velocityGroup(notes: readonly Note[], selected: readonly string[], x: number): Note[] {
+export function velocityGroup(notes: readonly Note[], selected: readonly string[], x: number, bar: Bar): Note[] {
   let start = -1;
   for (const n of notes) {
-    const left = tickX(n.start);
+    const left = tickX(n.start, bar);
     if (x >= left - 2 && x < left + 7 && n.start > start) start = n.start;
   }
   const at = notes.filter((n) => n.start === start);
@@ -167,21 +169,25 @@ export function placeClip(clip: Clip, at: number, blockTicks: number): NoteInit[
   });
 }
 
-/** A tick as bar.beat.sixteenth, all counted from 1, with the ticks past the sixteenth after a plus: "2.1.3+8". */
-export function positionText(t: number): string {
+/**
+ * A tick as bar.beat.sixteenth, all counted from 1, with the ticks past the sixteenth after a plus: "2.1.3+8". A beat
+ * is a group of the meter, so in 6/8 the sixteenths of a beat go up to 6.
+ */
+export function positionText(t: number, bar: Bar): string {
   const off = t % TICKS_PER_STEP;
-  const text = `${Math.floor(t / BAR_TICKS) + 1}.${Math.floor((t % BAR_TICKS) / BEAT_TICKS) + 1}.${
-    Math.floor((t % BEAT_TICKS) / TICKS_PER_STEP) + 1}`;
+  const step = Math.floor(t / TICKS_PER_STEP) % bar.steps;
+  const beat = beatOf(step, bar);
+  const text = `${Math.floor(t / bar.ticks) + 1}.${beat + 1}.${step - bar.beats[beat] + 1}`;
   return off ? `${text}+${off}` : text;
 }
 
 /** The tick of a position typed as bar, bar.beat or bar.beat.sixteenth, then "+ticks" if wanted; NaN if unreadable. */
-export function parsePosition(text: string): number {
+export function parsePosition(text: string, bar: Bar): number {
   const m = /^\s*(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\s*\+\s*(\d+))?\s*$/.exec(text);
   if (!m) return NaN;
-  const [bar, beat = 1, six = 1, off = 0] = m.slice(1).map((v) => (v === undefined ? undefined : Number(v)));
-  if (bar! < 1 || beat < 1 || six < 1) return NaN;
-  return (bar! - 1) * BAR_TICKS + (beat - 1) * BEAT_TICKS + (six - 1) * TICKS_PER_STEP + off;
+  const [number, beat = 1, six = 1, off = 0] = m.slice(1).map((v) => (v === undefined ? undefined : Number(v)));
+  if (number! < 1 || beat < 1 || beat > bar.beats.length || six < 1) return NaN;
+  return (number! - 1) * bar.ticks + (bar.beats[beat - 1] + six - 1) * TICKS_PER_STEP + off;
 }
 
 /** A length in ticks as steps, with up to two decimals: "1.5", "0.67", "2". */
@@ -210,11 +216,11 @@ function stripes(direction: string, length: number, runs: [string, number, numbe
 }
 
 /** The gaps between the steps as on the grid, repeating every bar. */
-export function gapsBackground(): { backgroundImage: string; backgroundSize: string } {
-  const bar = cellX(STEPS_PER_BAR);
-  const gaps: [string, number, number][] = Array.from({ length: STEPS_PER_BAR }, (_, i) =>
-    [GAP, cellX(i) + CELL_W, cellX(i + 1)]);
-  return { backgroundImage: stripes('to right', bar, gaps), backgroundSize: `${bar}px 100%` };
+export function gapsBackground(bar: Bar): { backgroundImage: string; backgroundSize: string } {
+  const width = cellX(bar.steps, bar);
+  const gaps: [string, number, number][] = Array.from({ length: bar.steps }, (_, i) =>
+    [GAP, cellX(i, bar) + CELL_W, cellX(i + 1, bar)]);
+  return { backgroundImage: stripes('to right', width, gaps), backgroundSize: `${width}px 100%` };
 }
 
 /**
@@ -222,8 +228,8 @@ export function gapsBackground(): { backgroundImage: string; backgroundSize: str
  * C and between E and F, the gaps between the steps as on the grid, and a light line at each snap position that
  * falls inside a cell.
  */
-export function sheetBackground(unit: number): { backgroundImage: string; backgroundSize: string } {
-  const bar = cellX(STEPS_PER_BAR);
+export function sheetBackground(unit: number, bar: Bar): { backgroundImage: string; backgroundSize: string } {
+  const width = cellX(bar.steps, bar);
   const octave = 12 * ROW_H;
   const rows: [string, number, number][] = [];
   for (let i = 0; i < 12; i++) {
@@ -234,15 +240,15 @@ export function sheetBackground(unit: number): { backgroundImage: string; backgr
     if (line) rows.push(['var(--face-lo)', top + ROW_H - 1, top + ROW_H]);
   }
   const lines: [string, number, number][] = [];
-  for (let t = unit; unit > 1 && t < BAR_TICKS; t += unit) {
-    if (t % TICKS_PER_STEP !== 0) lines.push(['var(--face-hi)', tickX(t), tickX(t) + 1]);
+  for (let t = unit; unit > 1 && t < bar.ticks; t += unit) {
+    if (t % TICKS_PER_STEP !== 0) lines.push(['var(--face-hi)', tickX(t, bar), tickX(t, bar) + 1]);
   }
-  const gaps = gapsBackground();
+  const gaps = gapsBackground(bar);
   const layers = [gaps.backgroundImage, stripes('to bottom', octave, rows)];
   const sizes = [gaps.backgroundSize, `100% ${octave}px`];
   if (lines.length > 0) {
-    layers.unshift(stripes('to right', bar, lines));
-    sizes.unshift(`${bar}px 100%`);
+    layers.unshift(stripes('to right', width, lines));
+    sizes.unshift(`${width}px 100%`);
   }
   return { backgroundImage: layers.join(', '), backgroundSize: sizes.join(', ') };
 }

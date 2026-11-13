@@ -2,7 +2,9 @@ import { memo, useEffect, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { tap } from '../../app/audio';
 import { addSound } from '../../app/commands';
-import { STEPS_PER_BAR, TICKS_PER_STEP, newNote } from '../../core/defaults';
+import { TICKS_PER_STEP, newNote } from '../../core/defaults';
+import { barOf } from '../../core/meter';
+import type { Bar } from '../../core/meter';
 import { OUT, paramSpec } from '../../core/modules';
 import type { FloatSpec } from '../../core/modules';
 import { MAX_NOTE, MIN_NOTE, ROOT_NOTE, noteName } from '../../core/notes';
@@ -16,13 +18,14 @@ import {
 import { Button, Icon, Led, Slider, Well, openMenu, setHint, useHint } from '../kit';
 import { cx } from '../kit/cx';
 import { SpriteImage } from '../kit/Icon';
+import { Marks, markClass } from './marks';
 import { getHeard, subscribeHeard, useHeard } from './playhead';
 import { openRoll } from './rollState';
 import type { Heard } from './playhead';
 import type { Cell, Cells } from './steps';
 import {
-  CELL_W, cellX, columnAt, fitNotes, lastNote, laneWidth, makeCell, maxLength, rememberNote, resizeCell, richCell,
-  rowCells, spanWidth, stepOver,
+  CELL_W, cellX, columnAt, fitNotes, gapAfter, lastNote, laneWidth, makeCell, maxLength, onBeat, rememberNote,
+  resizeCell, richCell, rowCells, spanWidth, stepOver,
 } from './steps';
 
 const LEVEL = paramSpec(OUT, 'level') as FloatSpec;
@@ -79,21 +82,27 @@ function currentPattern() {
   return project.patterns.find((p) => p.id === patternId)!;
 }
 
+const currentBar = () => barOf(useApp.getState().project.meter);
+
 function hitTest(target: EventTarget | null, clientX: number): Hit | null {
   const lane = (target as Element | null)?.closest?.<HTMLElement>('.h-track-lane');
   if (!lane) return null;
   const pattern = currentPattern();
+  const bar = currentBar();
   const channelId = lane.dataset.channel!;
   const cells = rowCells(pattern.notes[channelId]);
   const laneLeft = lane.firstElementChild!.getBoundingClientRect().left;
   const x = clientX - laneLeft;
-  const column = columnAt(x, patternSteps(pattern));
+  const column = columnAt(x, patternSteps(pattern, bar), bar);
   const start = column < 0 ? -1 : stepOver(cells, column);
   return { channelId, patternId: pattern.id, cells, x, column, start, laneLeft };
 }
 
-const onEdge = (hit: Hit) =>
-  hit.start >= 0 && hit.x >= cellX(hit.start) + spanWidth(hit.start, hit.cells.get(hit.start)!.span) - EDGE_PX;
+function onEdge(hit: Hit): boolean {
+  const bar = currentBar();
+  return hit.start >= 0
+    && hit.x >= cellX(hit.start, bar) + spanWidth(hit.start, hit.cells.get(hit.start)!.span, bar) - EDGE_PX;
+}
 
 const ids = (cell: Cell) => cell.notes.map((n) => n.id);
 
@@ -109,10 +118,11 @@ export function Grid() {
   const pattern = useApp((s) => s.project.patterns.find((p) => p.id === s.patternId)!);
   const selected = useApp((s) => s.step);
   const channelId = useApp((s) => s.channelId);
+  const bar = useApp((s) => barOf(s.project.meter));
   const [draft, setDraft] = useState<Draft | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const gesture = useRef<Gesture | null>(null);
-  const columns = patternSteps(pattern);
+  const columns = patternSteps(pattern, bar);
 
   useEffect(() => {
     const el = scroller.current!;
@@ -122,14 +132,13 @@ export function Grid() {
         delete el.dataset.now;
         return;
       }
-      const x = cellX(heard.step);
       el.dataset.now = '';
-      el.style.setProperty('--h-track-now', `${x}px`);
-      followPage(el, heard);
+      el.style.setProperty('--h-track-now', `${cellX(heard.step, bar)}px`);
+      followPage(el, heard, bar);
     };
     show();
     return subscribeHeard(show);
-  }, [pattern.id, columns]);
+  }, [pattern.id, columns, bar]);
 
   useEffect(() => {
     const el = scroller.current!;
@@ -188,8 +197,9 @@ export function Grid() {
     }
     const pattern = currentPattern();
     const patternId = pattern.id;
-    const n = patternSteps(pattern);
-    const column = clamp(columnAt(clamp(e.clientX - g.laneLeft, 0, laneWidth(n) - 1), n), 0, n - 1);
+    const bar = currentBar();
+    const n = patternSteps(pattern, bar);
+    const column = clamp(columnAt(clamp(e.clientX - g.laneLeft, 0, laneWidth(n, bar) - 1), n, bar), 0, n - 1);
     const dy = g.y - e.clientY;
     const { index, notes } = g.original;
     if (g.mode === 'press') {
@@ -277,7 +287,7 @@ export function Grid() {
           if ((e.target as Element).closest('.h-track-lane')) e.preventDefault();
         }}
       >
-        {channels.length > 0 && <Ruler columns={columns} />}
+        {channels.length > 0 && <Ruler columns={columns} bar={bar} />}
         {channels.map((channel, i) => (
           <Row
             key={channel.id}
@@ -285,6 +295,7 @@ export function Grid() {
             index={i}
             notes={pattern.notes[channel.id]}
             columns={columns}
+            bar={bar}
             active={channel.id === channelId}
             selected={selected?.channelId === channel.id ? selected.index : -1}
             draft={draft?.channelId === channel.id ? draft : null}
@@ -308,24 +319,32 @@ export function Grid() {
 }
 
 /** When the play position runs off the visible part of the lanes, turn the page to the bar it is in. */
-export function followPage(el: HTMLElement, heard: Heard): void {
+export function followPage(el: HTMLElement, heard: Heard, bar: Bar): void {
   const head = el.querySelector<HTMLElement>('.h-track-corner')?.offsetWidth ?? 0;
-  const x = cellX(heard.step) + LANE_PAD;
+  const x = cellX(heard.step, bar) + LANE_PAD;
   const view = el.clientWidth - head;
   if (x >= el.scrollLeft && x + CELL_W <= el.scrollLeft + view) return;
-  el.scrollLeft = cellX(heard.step - (heard.step % STEPS_PER_BAR));
+  el.scrollLeft = cellX(heard.step - (heard.step % bar.steps), bar);
 }
 
 /** Bar numbers and beat ticks over the lanes, the play marker, and whatever marks a view adds. */
-export const Ruler = memo(function Ruler({ columns, children }: { columns: number; children?: ReactNode }) {
+export const Ruler = memo(function Ruler({ columns, bar, children }: {
+  columns: number;
+  bar: Bar;
+  children?: ReactNode;
+}) {
   return (
     <div className="h-track-ruler">
       <div className="h-track-corner" />
       <div className="h-track-ticks">
-        <div className="h-track-box" style={{ width: laneWidth(columns) }}>
+        <div className="h-track-box" style={{ width: laneWidth(columns, bar) }}>
           {Array.from({ length: columns }, (_, i) => (
-            <span key={i} className="h-track-tick">
-              {i % STEPS_PER_BAR === 0 && i / STEPS_PER_BAR + 1}
+            <span
+              key={i}
+              className={cx('h-track-tick', i % bar.steps === 0 ? 'is-bar' : onBeat(i, bar) && 'is-beat')}
+              style={{ marginRight: gapAfter(i, bar) }}
+            >
+              {i % bar.steps === 0 && i / bar.steps + 1}
             </span>
           ))}
           <span className="h-track-marker">
@@ -343,32 +362,37 @@ interface RowProps {
   index: number;
   notes: Note[] | undefined;
   columns: number;
+  bar: Bar;
   active: boolean;
   selected: number;
   draft: Draft | null;
 }
 
-const Row = memo(function Row({ channel, index, notes, columns, active, selected, draft }: RowProps) {
+const Row = memo(function Row({ channel, index, notes, columns, bar, active, selected, draft }: RowProps) {
   const shown = rowCells(notes);
   if (draft) shown.set(draft.cell.index, draft.cell);
   // Notes left past the end when the pattern was shortened stay in the document but are not drawn.
   const keys = [...shown.keys()].filter((i) => i < columns).sort((a, b) => a - b);
-  const span = (i: number) => spanWidth(i, Math.min(shown.get(i)!.span, columns - i));
+  const span = (i: number) => spanWidth(i, Math.min(shown.get(i)!.span, columns - i), bar);
+  const width = laneWidth(columns, bar);
   return (
     <div className="h-track-row" data-tour={`row-${channel.sound.name}`}>
       <Header channel={channel} index={index} active={active} />
       <div className="h-track-lane" data-channel={channel.id}>
-        <div
-          className="h-track-box"
-          style={{ width: laneWidth(columns), '--cell': `var(--c${channel.color})` } as CSSProperties}
-        >
-          <EmptyCells columns={columns} />
+        <div className="h-track-box" style={{ width, '--cell': `var(--c${channel.color})` } as CSSProperties}>
+          <EmptyCells columns={columns} bar={bar} />
           <i className="h-track-now" />
+          {keys.filter((i) => shown.get(i)!.notes.some((n) => n.hold)).map((i) => {
+            const left = cellX(i, bar) + span(i);
+            return left < width && (
+              <i key={`hold${i}`} className="h-track-hold" style={{ left, width: width - left }} />
+            );
+          })}
           {keys.map((i) => (
-            <StepKey key={i} cell={shown.get(i)!} width={span(i)} />
+            <StepKey key={i} cell={shown.get(i)!} left={cellX(i, bar)} width={span(i)} />
           ))}
           {keys.includes(selected) && (
-            <i className="h-track-sel" style={{ left: cellX(selected), width: span(selected) }} />
+            <i className="h-track-sel" style={{ left: cellX(selected, bar), width: span(selected) }} />
           )}
         </div>
       </div>
@@ -376,25 +400,31 @@ const Row = memo(function Row({ channel, index, notes, columns, active, selected
   );
 });
 
-const EmptyCells = memo(function EmptyCells({ columns }: { columns: number }) {
-  return Array.from({ length: columns }, (_, i) => <i key={i} className="h-track-cell" />);
+const EmptyCells = memo(function EmptyCells({ columns, bar }: { columns: number; bar: Bar }) {
+  return Array.from({ length: columns }, (_, i) => (
+    <i key={i} className={cx('h-track-cell', onBeat(i, bar) && 'is-beat')} style={{ marginRight: gapAfter(i, bar) }} />
+  ));
 });
 
 /**
- * A cell's key: the lowest note's name (none for C3 alone), "+2" when two more notes start in the step, and a mark
- * where a note starts off the grid line.
+ * A cell's key: the lowest note's name (none for C3 alone), "+2" when two more notes start in the step, a mark
+ * where a note starts off the grid line, and the marks of the notes' extras.
  */
-function StepKey({ cell, width }: { cell: Cell; width: number }) {
+function StepKey({ cell, left, width }: { cell: Cell; left: number; width: number }) {
   const [lead, ...rest] = cell.notes;
-  const style = { left: cellX(cell.index), width, '--lit': `${Math.round(lead.vel * CELL_H)}px` } as CSSProperties;
+  const style = { left, width, '--lit': `${Math.round(lead.vel * CELL_H)}px` } as CSSProperties;
   const offsets = [...new Set(cell.notes.map((n) => n.start % TICKS_PER_STEP).filter((t) => t > 0))];
   return (
-    <div className={cx('h-track-step', width > CELL_W && 'is-long', rest.length > 0 && 'is-chord')} style={style}>
+    <div
+      className={cx('h-track-step', width > CELL_W && 'is-long', rest.length > 0 && 'is-chord', markClass(cell.notes))}
+      style={style}
+    >
       {rest.length > 0 && <span className="h-track-more">+{rest.length}</span>}
       {(lead.note !== ROOT_NOTE || rest.length > 0) && noteName(lead.note)}
       {offsets.map((t) => (
         <i key={t} className="h-track-offset" style={{ left: Math.round((t * CELL_W) / TICKS_PER_STEP) }} />
       ))}
+      <Marks notes={cell.notes} width={width} />
     </div>
   );
 }

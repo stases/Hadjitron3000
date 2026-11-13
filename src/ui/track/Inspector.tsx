@@ -1,10 +1,19 @@
+import type { ReactNode } from 'react';
 import { tap } from '../../app/audio';
+import { usePrefs } from '../../app/prefs';
 import { modKey } from '../../app/shortcuts';
-import { MAX_NOTE, MIN_NOTE, ROOT_NOTE, noteName } from '../../core/notes';
+import { LEVEL_NAMES } from '../../core/levels';
+import { barOf } from '../../core/meter';
+import { MAX_NOTE, MIN_NOTE, RATCHETS, ROOT_NOTE, noteName } from '../../core/notes';
+import type { NoteExtras } from '../../core/notes';
 import { patternSteps } from '../../core/sequencer';
-import { beginGesture, commitGesture, moveNotes, setNotesVelocity, updateNotes, useApp } from '../../state/store';
-import { Slider, Stepper } from '../kit';
-import { BAR_TICKS, parsePosition, parseSteps, positionText, stepsText } from './roll';
+import type { Note } from '../../core/types';
+import {
+  beginGesture, commitGesture, moveNotes, setNotesExtras, setNotesVelocity, updateNotes, useApp,
+} from '../../state/store';
+import { toggleFold, useShown } from '../factory/levels';
+import { Checkbox, FoldToggles, Select, Separator, Slider, Stepper } from '../kit';
+import { parsePosition, parseSteps, positionText, stepsText } from './roll';
 import { nudgeSelection, useRoll } from './rollState';
 import { maxLength, rememberNote, resizeCell, rowCells } from './steps';
 
@@ -13,11 +22,120 @@ export function Inspector({ roll }: { roll: boolean }) {
   return roll ? <NoteInspector /> : <StepInspector />;
 }
 
+const FOLD_HINTS = {
+  2: 'Shows Chance, Slide and Hold for the selected notes; the lamp lights when one of them has any of these.',
+  3: 'Shows Ratchet, which plays the selected notes as quick repeats; the lamp lights when one of them has one.',
+} as const;
+
+const RATCHET_OPTIONS = [
+  { value: '1', label: 'Off' },
+  ...RATCHETS.map((r) => ({ value: String(r), label: `${r}x` })),
+];
+
+/**
+ * The inspector's row: what is selected and its Basics, then the extras of its notes by level, and a line of help
+ * while nothing is selected. Each level is a group that wraps onto a second line when the row is too narrow. In
+ * beginner mode Shaping and Deep wait behind toggles at the right end, as in the Factory's rack units.
+ */
+function InspectorRow({ which, notes, setExtras, help, children }: {
+  which: string;
+  notes: readonly Note[];
+  setExtras: (extras: NoteExtras) => void;
+  help: string;
+  children: ReactNode;
+}) {
+  const beginner = usePrefs((p) => p.beginner);
+  const shown = useShown();
+  const off = notes.length === 0;
+  const lead: Partial<Note> = notes[0] ?? {};
+  const chance = lead.chance ?? 100;
+  const sections = [
+    {
+      level: 2 as const,
+      lit: notes.some((n) => n.chance !== undefined || n.slide || n.hold),
+      fields: (
+        <>
+          <span className="h-track-label">Chance</span>
+          <Slider
+            value={chance / 100}
+            onChange={(v) => setExtras({ chance: Math.max(1, Math.round(v * 100)) })}
+            length={60}
+            disabled={off}
+            hint="How often the selected notes play, in percent of the times the block comes round. Right is always."
+          />
+          <span className={off ? 'h-track-value h-engraved' : 'h-track-value'}>{chance} %</span>
+          <Checkbox
+            label="Slide"
+            checked={!!lead.slide}
+            onChange={(slide) => setExtras({ slide })}
+            disabled={off}
+            hint="Slide: the pitch glides into the selected notes from the note before them on this row."
+          />
+          <Checkbox
+            label="Hold"
+            checked={!!lead.hold}
+            onChange={(hold) => setExtras({ hold })}
+            disabled={off}
+            hint="Hold: a drone that sounds to the end of its place in the song, or of the block while the block plays."
+          />
+        </>
+      ),
+    },
+    {
+      level: 3 as const,
+      lit: notes.some((n) => n.ratchet !== undefined),
+      fields: (
+        <>
+          <span className="h-track-label">Ratchet</span>
+          <Select
+            value={String(lead.ratchet ?? 1)}
+            options={RATCHET_OPTIONS}
+            onChange={(v) => setExtras({ ratchet: Number(v) })}
+            width={52}
+            disabled={off}
+            hint="Ratchet: play the selected notes this many times, evenly inside their length, for rolls and stutters."
+          />
+        </>
+      ),
+    },
+  ];
+  return (
+    <div className="h-track-inspector">
+      <div className="h-track-fields">
+        <span className="h-track-group">
+          <span className="h-track-which">{which}</span>
+          {children}
+        </span>
+        {sections.filter((s) => shown('note', s.level)).map((s) => (
+          <span key={s.level} className="h-track-group" role="group" aria-label={LEVEL_NAMES[s.level]}>
+            <Separator vertical />
+            {s.fields}
+          </span>
+        ))}
+        {off && <span className="h-track-help">{help}</span>}
+      </div>
+      {beginner && (
+        <FoldToggles
+          row
+          folds={sections.map((s) => ({
+            label: LEVEL_NAMES[s.level],
+            open: shown('note', s.level),
+            lit: s.lit,
+            hint: FOLD_HINTS[s.level],
+            onToggle: () => toggleFold('note', s.level),
+          }))}
+        />
+      )}
+    </div>
+  );
+}
+
 function StepInspector() {
   const ref = useApp((s) => s.step);
   const pattern = useApp((s) => s.project.patterns.find((p) => p.id === s.patternId)!);
   const channel = useApp((s) => s.project.channels.find((c) => c.id === s.step?.channelId));
-  const columns = patternSteps(pattern);
+  const bar = useApp((s) => barOf(s.project.meter));
+  const columns = patternSteps(pattern, bar);
   const cells = rowCells(ref ? pattern.notes[ref.channelId] : undefined);
   const cell = ref && channel && ref.index < columns ? cells.get(ref.index) : undefined;
   const lead = cell?.notes[0] ?? { note: ROOT_NOTE, vel: 0.8 };
@@ -25,10 +143,12 @@ function StepInspector() {
   const off = !cell;
   const chord = cell && cell.notes.length > 1 ? `, ${cell.notes.length} notes` : '';
   return (
-    <div className="h-track-inspector">
-      <span className="h-track-which">
-        {cell ? `Step ${cell.index + 1} of ${channel!.sound.name}${chord}` : 'No step selected'}
-      </span>
+    <InspectorRow
+      which={cell ? `Step ${cell.index + 1} of ${channel!.sound.name}${chord}` : 'No step selected'}
+      notes={cell?.notes ?? []}
+      setExtras={(extras) => setNotesExtras(pattern.id, ref!.channelId, ids, extras)}
+      help="Click: add or remove · Drag: note · Drag the edge: length · Right-click: pick"
+    >
       <span className="h-track-label">Note</span>
       <Stepper
         value={lead.note}
@@ -67,12 +187,7 @@ function StepInspector() {
         }}
         hint="How many steps this note is held for."
       />
-      {off && (
-        <span className="h-track-help">
-          Click: add or remove · Drag: note · Drag the edge: length · Right-click: pick
-        </span>
-      )}
-    </div>
+    </InspectorRow>
   );
 }
 
@@ -85,16 +200,21 @@ function NoteInspector() {
   const snap = useRoll((s) => s.snap);
   const pattern = useApp((s) => s.project.patterns.find((p) => p.id === s.patternId)!);
   const channel = useApp((s) => s.project.channels.find((c) => c.id === s.channelId)!);
-  const ticks = pattern.bars * BAR_TICKS;
+  const bar = useApp((s) => barOf(s.project.meter));
+  const ticks = pattern.bars * bar.ticks;
   const notes = (pattern.notes[channel.id] ?? []).filter((n) => n.start < ticks && ids.includes(n.id));
   const lead = notes[0] ?? { start: 0, len: snap, note: ROOT_NOTE, vel: 0.8 };
   const all = notes.map((n) => n.id);
   const off = notes.length === 0;
-  const which = off ? 'No note selected'
-    : `${notes.length === 1 ? noteName(lead.note) : `${notes.length} notes`} of ${channel.sound.name}`;
   return (
-    <div className="h-track-inspector">
-      <span className="h-track-which">{which}</span>
+    <InspectorRow
+      which={off ? 'No note selected'
+        : `${notes.length === 1 ? noteName(lead.note) : `${notes.length} notes`} of ${channel.sound.name}`}
+      notes={notes}
+      setExtras={(extras) => setNotesExtras(pattern.id, channel.id, all, extras)}
+      help={`Click: add a note · Drag: move · Edges: length · Shift-drag: select · ${modKey('C')} ${modKey('V')}: `
+        + 'copy, paste'}
+    >
       <span className="h-track-label">Note</span>
       <Stepper
         value={lead.note}
@@ -141,19 +261,13 @@ function NoteInspector() {
         min={lead.start % snap}
         max={ticks - 1}
         step={snap}
-        format={positionText}
-        parse={parsePosition}
+        format={(t) => positionText(t, bar)}
+        parse={(text) => parsePosition(text, bar)}
         width={84}
         disabled={off}
         onChange={(start) => nudgeSelection(start - lead.start, 0)}
         hint="Where the first selected note starts, as bar.beat.sixteenth, with ticks after a plus (24 to a sixteenth)."
       />
-      {off && (
-        <span className="h-track-help">
-          {`Click: add a note · Drag: move · Edges: length · Shift-drag: select · ${modKey('C')} ${modKey('V')}: `
-            + 'copy, paste'}
-        </span>
-      )}
-    </div>
+    </InspectorRow>
   );
 }

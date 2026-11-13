@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { position, tap } from '../../src/app/audio';
 import { installKeys } from '../../src/app/keys';
+import { barOf } from '../../src/core/meter';
 import type { Note } from '../../src/core/types';
 import { openProject, redo, setPatternBars, setPlaying, undo, useApp } from '../../src/state/store';
 import { useHintText } from '../../src/ui/kit';
@@ -30,6 +31,7 @@ vi.mock('../../src/app/commands', () => ({
 const SUB = 3;
 const KALIMBA = 4;
 const BLOCK = 2 * 16 * 24;
+const B = barOf([4, 4]);
 
 let root: Root;
 let host: HTMLElement;
@@ -91,13 +93,13 @@ function centre(el: Element): Point {
 /** A point on the sheet `dx` pixels right of a tick, in the middle of a pitch's row. */
 function at(tick: number, pitch: number, dx = 2): Point {
   const r = sheet().getBoundingClientRect();
-  return { x: Math.round(r.left) + tickX(tick) + dx, y: Math.round(r.top) + noteY(pitch) + 6 };
+  return { x: Math.round(r.left) + tickX(tick, B) + dx, y: Math.round(r.top) + noteY(pitch) + 6 };
 }
 
 /** A point on the velocity lane at a tick, `y` pixels from its top. */
 function vel(tick: number, y: number): Point {
   const r = host.querySelector('.h-roll-vel-box')!.getBoundingClientRect();
-  return { x: Math.round(r.left) + tickX(tick) + 2, y: Math.round(r.top) + y };
+  return { x: Math.round(r.left) + tickX(tick, B) + 2, y: Math.round(r.top) + y };
 }
 
 async function drag(from: Point, ...path: Point[]) {
@@ -342,7 +344,7 @@ test('copy and paste put notes at the paste mark, cut takes them out, and repeat
 
   // A click on the ruler moves the mark; Paste goes there.
   const ruler = host.querySelector('.h-roll-head .h-track-ticks .h-track-box')!.getBoundingClientRect();
-  await click({ x: Math.round(ruler.left) + tickX(384) + 5, y: Math.round(ruler.top) + 8 });
+  await click({ x: Math.round(ruler.left) + tickX(384, B) + 5, y: Math.round(ruler.top) + 8 });
   expect(mark()).toBe('Paste at 2.1.1');
   await userEvent.keyboard('{Control>}v{/Control}');
   expect(plain(KALIMBA).slice(-2)).toEqual([[384, 24, 60], [414, 12, 64]]);
@@ -351,7 +353,7 @@ test('copy and paste put notes at the paste mark, cut takes them out, and repeat
   await userEvent.keyboard('{Control>}v{/Control}');
   expect(plain(KALIMBA).slice(-2).map((n) => n[0])).toEqual([432, 462]);
   // Notes that would land past the end of the block are left out.
-  await click({ x: Math.round(ruler.left) + tickX(BLOCK - 24) + 5, y: Math.round(ruler.top) + 8 });
+  await click({ x: Math.round(ruler.left) + tickX(BLOCK - 24, B) + 5, y: Math.round(ruler.top) + 8 });
   await userEvent.keyboard('{Control>}v{/Control}');
   expect(plain(KALIMBA).slice(-1)).toEqual([[BLOCK - 24, 24, 60]]);
   undo();
@@ -427,7 +429,7 @@ test('the roll and the grid show the same notes, whichever edits them', async ()
   await openRow(KALIMBA);
   expect(host.querySelectorAll('.h-roll-note')).toHaveLength(1);
   const key = host.querySelector('.h-roll-note')!.getBoundingClientRect();
-  expect(Math.round(key.left - sheet().getBoundingClientRect().left)).toBe(cellX(3));
+  expect(Math.round(key.left - sheet().getBoundingClientRect().left)).toBe(cellX(3, B));
   await click(at(4 * 24 + 12, 64));
   expect(host.querySelector('.h-roll-mini.is-active')!.querySelectorAll('.h-roll-mini-note')).toHaveLength(2);
   await click(centre(rollButton('Grid')));
@@ -460,7 +462,7 @@ test('the play position runs through the roll as a column under the marker', asy
   vi.mocked(position).mockReturnValue(5.6);
   flushSync(() => setPlaying(true));
   await expect.poll(() => getComputedStyle(now).display).toBe('block');
-  expect(Math.round(now.getBoundingClientRect().left - sheet().getBoundingClientRect().left)).toBe(cellX(5));
+  expect(Math.round(now.getBoundingClientRect().left - sheet().getBoundingClientRect().left)).toBe(cellX(5, B));
   expect(host.querySelector('.h-roll .h-track-marker')!.getBoundingClientRect().left)
     .toBe(now.getBoundingClientRect().left);
 });
@@ -473,7 +475,7 @@ test('a block of 32 bars with 300 notes opens, scrolls and edits quickly', async
   const started = performance.now();
   await openRow(KALIMBA);
   expect(host.querySelectorAll('.h-roll-note')).toHaveLength(300);
-  expect(sheet().getBoundingClientRect().width).toBe(laneWidth(512));
+  expect(sheet().getBoundingClientRect().width).toBe(laneWidth(512, B));
   scroller().scrollLeft = scroller().scrollWidth;
   scroller().scrollTop = 0;
   await new Promise(requestAnimationFrame);

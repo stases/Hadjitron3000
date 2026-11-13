@@ -3,10 +3,11 @@
 
 import { create } from 'zustand';
 import { tap } from '../../app/audio';
+import { barOf } from '../../core/meter';
 import { MAX_NOTE, MIN_NOTE } from '../../core/notes';
 import type { Note } from '../../core/types';
 import { addNotes, moveNotes, removeNotes, selectChannel, selectStep, useApp } from '../../state/store';
-import { BAR_TICKS, makeClip, placeClip } from './roll';
+import { makeClip, placeClip } from './roll';
 import type { Clip } from './roll';
 
 interface RollState {
@@ -34,7 +35,7 @@ useApp.subscribe((state, prev) => {
 export function rollRow(): { patternId: string; channelId: string | null; ticks: number; notes: Note[] } {
   const { project, patternId, channelId } = useApp.getState();
   const pattern = project.patterns.find((p) => p.id === patternId)!;
-  const ticks = pattern.bars * BAR_TICKS;
+  const ticks = pattern.bars * barOf(project.meter).ticks;
   const notes = channelId ? (pattern.notes[channelId] ?? []).filter((n) => n.start < ticks) : [];
   return { patternId, channelId, ticks, notes };
 }

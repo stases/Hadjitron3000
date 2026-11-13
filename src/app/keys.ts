@@ -9,13 +9,14 @@ import {
 } from '../state/store';
 import {
   closeRoll, copySelection, cutSelection, deleteSelection, nudgeSelection, paste, repeatSelection, selectAll,
-  selectNotes, useRoll,
+  selectNotes, selectedNotes, useRoll,
 } from '../ui/track/rollState';
 import { rowCells } from '../ui/track/steps';
 import { noteOff, noteOn, tap } from './audio';
 import { exportAudio, newProject, openProject, saveProject, saveProjectAs } from './commands';
 import { toggleMetronome } from './prefs';
 import { recording, toggleRecord } from './record';
+import { snapPitch, stepPitch } from './snap';
 import { IS_MAC } from './shortcuts';
 
 // Notes sounding because a key is down, by KeyboardEvent.code.
@@ -62,7 +63,6 @@ function rollCommand(e: KeyboardEvent): (() => unknown) | null {
 function rollKey(e: KeyboardEvent): boolean {
   if (!rollOpen()) return false;
   const { snap, selected } = useRoll.getState();
-  const octave = e.shiftKey ? 12 : 1;
   const bar = barOf(useApp.getState().project.meter);
   switch (e.key) {
     case 'ArrowLeft':
@@ -70,9 +70,12 @@ function rollKey(e: KeyboardEvent): boolean {
       nudgeSelection((e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? bar.ticks : snap), 0);
       return true;
     case 'ArrowUp':
-    case 'ArrowDown':
-      nudgeSelection(0, (e.key === 'ArrowDown' ? -1 : 1) * octave);
+    case 'ArrowDown': {
+      const dir = e.key === 'ArrowDown' ? -1 : 1;
+      const [lead] = selectedNotes();
+      if (lead) nudgeSelection(0, e.shiftKey ? 12 * dir : stepPitch(lead.note, dir) - lead.note);
       return true;
+    }
     case 'Backspace':
     case 'Delete':
       deleteSelection();
@@ -106,7 +109,8 @@ function stepKey(e: KeyboardEvent): boolean {
     case 'ArrowDown': {
       if (!cell) return true;
       const [lead] = cell.notes;
-      const note = clampNote(lead.note + (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 12 : 1));
+      const dir = e.key === 'ArrowUp' ? 1 : -1;
+      const note = e.shiftKey ? clampNote(lead.note + 12 * dir) : stepPitch(lead.note, dir);
       moveNotes(pattern.id, step.channelId, ids, 0, note - lead.note);
       tap(step.channelId, note, lead.vel);
       return true;
@@ -124,15 +128,17 @@ function stepKey(e: KeyboardEvent): boolean {
 
 /**
  * A piano key: play the note and, with a step selected in the Track view, write it there and move on, unless a
- * recording pass is writing what is played.
+ * recording pass is writing what is played. A note written into a step lands on the scale while Snap to Scale is on,
+ * and plays as written.
  */
 function pianoKey(e: KeyboardEvent, semitone: number): void {
   if (e.repeat || held.has(e.code)) return;
   const state = useApp.getState();
-  const note = clampNote((state.octave + 2) * 12 + semitone);
+  let note = clampNote((state.octave + 2) * 12 + semitone);
   const { step } = state;
   const pattern = state.project.patterns.find((p) => p.id === state.patternId);
   if (state.view === 'track' && step && pattern && !recording()) {
+    note = snapPitch(note);
     const cell = rowCells(pattern.notes[step.channelId]).get(step.index);
     if (cell) moveNotes(pattern.id, step.channelId, cell.notes.map((n) => n.id), 0, note - cell.notes[0].note);
     else addNote(pattern.id, step.channelId, newNote(step.index * TICKS_PER_STEP, note));

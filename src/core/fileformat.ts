@@ -9,6 +9,7 @@ import { AMP, FILTER, MODULES, OUT, PLAY, paramSpec } from './modules';
 import type { ModuleDef, ModuleKind } from './modules';
 import { MAX_NOTE, MIN_NOTE, cleanNotes, noteExtras } from './notes';
 import { coerce } from './params';
+import { readScale } from './scale';
 import type {
   Block, Channel, Duck, Lane, Mixer, ModInst, ModuleInst, Note, Params, Pattern, Placement, Project, SampleData,
   SendBus, Sound,
@@ -57,11 +58,11 @@ export function serializeSound(sound: Sound, samples: Record<string, SampleData>
 }
 
 export function serializeProject(project: Project): string {
-  const { name, bpm, swing, meter, master, mixer, channels, patterns, song, lanes } = project;
+  const { name, bpm, swing, meter, scale, master, mixer, channels, patterns, song, lanes } = project;
   return JSON.stringify({
     format: 'hadjitron3000/project',
     version: FORMAT_VERSION,
-    project: { name, bpm, swing, meter, master, mixer, channels, patterns, song, lanes },
+    project: { name, bpm, swing, meter, ...(scale && { scale }), master, mixer, channels, patterns, song, lanes },
     samples: encodeSamples(channels.flatMap((c) => soundSampleIds(c.sound)), project.samples),
   }, null, 2);
 }
@@ -240,11 +241,17 @@ function readSteps(value: unknown, label: string): Note[] {
   }));
 }
 
+/** A row's own loop length in whole steps, or undefined when it has none or the value is not a number. */
+function readLoop(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.round(Math.min(MAX_TICKS / TICKS_PER_STEP, Math.max(1, value))) : undefined;
+}
+
 function readPattern(value: unknown, ids: Set<string>, channels: Set<string>): Pattern {
   const raw = object(value, 'pattern');
   const old = raw.notes === undefined && raw.cells !== undefined;
   const rows = object(old ? raw.cells : raw.notes === undefined ? {} : raw.notes, 'pattern notes');
-  return {
+  const pattern: Pattern = {
     id: uniqueId(raw.id, ids, 'pattern'),
     name: typeof raw.name === 'string' ? raw.name : '',
     color: Math.round(number(raw.color, 0, 0, CHANNEL_COLORS - 1)),
@@ -253,6 +260,13 @@ function readPattern(value: unknown, ids: Set<string>, channels: Set<string>): P
       .map(([id, value]): [string, Note[]] => [id, (old ? readSteps : readNotes)(value, `notes for channel ${id}`)])
       .filter(([, notes]) => notes.length > 0)),
   };
+  const loops = Object.entries(object(raw.loops === undefined ? {} : raw.loops, 'pattern loops'))
+    .flatMap(([id, value]): [string, number][] => {
+      const steps = readLoop(value);
+      return channels.has(id) && steps !== undefined ? [[id, steps]] : [];
+    });
+  if (loops.length > 0) pattern.loops = Object.fromEntries(loops);
+  return pattern;
 }
 
 /**
@@ -322,7 +336,8 @@ export function parseBlock(text: string): Block {
       const track = object(value, 'block track');
       const notes = track.notes === undefined && track.steps !== undefined
         ? readSteps(track.steps, 'block steps') : readNotes(track.notes, 'block notes');
-      return { sound: readSound(track.sound, samples), notes };
+      const loop = readLoop(track.loop);
+      return { sound: readSound(track.sound, samples), notes, ...(loop !== undefined && { loop }) };
     }),
     samples,
   };
@@ -387,6 +402,7 @@ export function readProject(value: unknown, samples: Record<string, SampleData>)
       duck: readDuck(channel.duck, id, channelIds),
     };
   });
+  const scale = readScale(raw.scale);
   const patternIds = new Set<string>();
   const patterns = array(raw.patterns === undefined ? [] : raw.patterns, 'patterns')
     .map((p) => readPattern(p, patternIds, channelIds));
@@ -400,6 +416,7 @@ export function readProject(value: unknown, samples: Record<string, SampleData>)
     bpm: number(raw.bpm, 120, 40, 240),
     swing: number(raw.swing, 0, 0, 1),
     meter: readMeter(raw.meter) ?? [4, 4],
+    ...(scale && { scale }),
     master: number(raw.master, 0, -48, 6),
     mixer: readMixer(raw.mixer),
     channels,

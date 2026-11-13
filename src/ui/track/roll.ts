@@ -6,7 +6,8 @@ import { TICKS_PER_STEP } from '../../core/defaults';
 import { beatOf } from '../../core/meter';
 import type { Bar } from '../../core/meter';
 import { MAX_NOTE, MIN_NOTE, isBlackKey } from '../../core/notes';
-import type { Note, NoteInit } from '../../core/types';
+import { inScale } from '../../core/scale';
+import type { Note, NoteInit, Scale } from '../../core/types';
 import { CELL_W, cellX, columnAt, laneWidth } from './steps';
 
 /** Height of one semitone. */
@@ -49,7 +50,7 @@ export const pitchAt = (y: number) => clamp(MAX_NOTE - Math.floor(y / ROW_H), MI
 
 export const snapFloor = (t: number, unit: number) => Math.floor(t / unit) * unit;
 export const snapRound = (t: number, unit: number) => Math.round(t / unit) * unit;
-const snapCeil = (t: number, unit: number) => Math.ceil(t / unit) * unit;
+export const snapCeil = (t: number, unit: number) => Math.ceil(t / unit) * unit;
 
 /** Where a note of the block is drawn; a note longer than what is left of the block is cut at its end. */
 export function noteBox(n: Note, blockTicks: number, bar: Bar): Box {
@@ -226,17 +227,24 @@ export function gapsBackground(bar: Bar): { backgroundImage: string; backgroundS
 /**
  * The sheet's background, repeating every octave and every bar: white and black key rows with a line between B and
  * C and between E and F, the gaps between the steps as on the grid, and a light line at each snap position that
- * falls inside a cell.
+ * falls inside a cell. With a scale the rows of its notes are light, the others shaded, and its root's lighter still.
  */
-export function sheetBackground(unit: number, bar: Bar): { backgroundImage: string; backgroundSize: string } {
+export function sheetBackground(
+  unit: number, bar: Bar, scale?: Scale,
+): { backgroundImage: string; backgroundSize: string } {
   const width = cellX(bar.steps, bar);
   const octave = 12 * ROW_H;
   const rows: [string, number, number][] = [];
+  const shade = (note: number) => {
+    if (!scale) return isBlackKey(note) ? 'var(--face-lo)' : 'var(--face)';
+    if ((((note - scale.root) % 12) + 12) % 12 === 0) return 'var(--face-hi)';
+    return inScale(note, scale) ? 'var(--face)' : 'var(--face-lo)';
+  };
   for (let i = 0; i < 12; i++) {
     const note = MAX_NOTE - i;
     const top = i * ROW_H;
     const line = note % 12 === 0 || note % 12 === 5;
-    rows.push([isBlackKey(note) ? 'var(--face-lo)' : 'var(--face)', top, top + ROW_H - (line ? 1 : 0)]);
+    rows.push([shade(note), top, top + ROW_H - (line ? 1 : 0)]);
     if (line) rows.push(['var(--face-lo)', top + ROW_H - 1, top + ROW_H]);
   }
   const lines: [string, number, number][] = [];

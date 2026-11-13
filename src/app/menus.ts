@@ -13,7 +13,8 @@ import {
   saveBlockAs, saveBlockToLibrary, saveProject, saveProjectAs, saveSoundAs, saveSoundToLibrary, showAbout,
   showShortcuts,
 } from './commands';
-import { setPrefs, toggleMetronome } from './prefs';
+import { fitSelectionToScale, openRandomise } from '../ui/track/tools';
+import { setPrefs, toggleMetronome, toggleScaleSnap } from './prefs';
 import type { Prefs } from './prefs';
 import { toggleRecord } from './record';
 import { modKey } from './shortcuts';
@@ -32,6 +33,7 @@ export function buildMenus(
   const block = state.patternId;
   const win = platform.window;
   const full = state.project.patterns.length >= PATTERN_NAMES.length;
+  const { scale } = state.project;
   return [
     {
       label: 'File',
@@ -76,6 +78,26 @@ export function buildMenus(
           label: 'Record', shortcut: 'R', checked: record, disabled: state.scope === 'song', onSelect: toggleRecord,
         },
         { label: 'Metronome', shortcut: 'C', checked: prefs.metronome, onSelect: toggleMetronome },
+        'separator',
+        {
+          label: 'Snap to Scale',
+          checked: prefs.scaleSnap && !!scale,
+          disabled: !scale,
+          hint: 'New, dragged, recorded and typed notes land on the scale of the song; the roll sets the scale.',
+          onSelect: toggleScaleSnap,
+        },
+        {
+          label: 'Fit to Scale',
+          disabled: !scale || !channel,
+          hint: 'Moves the notes of the row, or those selected in the roll, that are out of the scale onto it.',
+          onSelect: fitSelectionToScale,
+        },
+        {
+          label: 'Randomise…',
+          disabled: !channel,
+          hint: 'Fills the row of the selected sound with notes drawn at random, in the scale when the song has one.',
+          onSelect: openRandomise,
+        },
       ],
     },
     {
@@ -106,7 +128,7 @@ export function buildMenus(
         {
           label: 'Beginner Mode',
           checked: prefs.beginner,
-          hint: 'Folds the Shaping and Deep controls away (in the Factory, the note inspector, the Mixer and the time '
+          hint: 'Folds the Shaping and Deep controls away (in the Factory, the Track, the Mixer and the time '
             + 'signature) and groups the add lists by level.',
           onSelect: () => setPrefs({ beginner: !prefs.beginner }),
         },

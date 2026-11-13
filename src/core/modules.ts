@@ -216,7 +216,7 @@ export const SOURCES: readonly ModuleDef[] = [
   },
 ];
 
-/** How the notes of a sound follow each other; shown in the Source unit. */
+/** How the notes of a sound follow each other, and its arpeggiator; shown in the Source unit. */
 export const PLAY: ModuleDef = {
   type: 'play',
   kind: 'play',
@@ -230,6 +230,30 @@ export const PLAY: ModuleDef = {
       ]),
     ),
     shaping(f('glide', 'Glide', 0, 2, 0, { unit: 's', taper: 'cube' })),
+    // The arpeggiator plays the notes held together one after another (core/arp.ts); Off plays them as they are.
+    shaping(
+      c('arp', 'Arp', [
+        ['off', 'Off'],
+        ['up', 'Up'],
+        ['down', 'Down'],
+        ['updown', 'Up-Down'],
+        ['random', 'Random'],
+        ['played', 'As Played'],
+      ]),
+    ),
+    shaping(
+      c('rate', 'Rate', [
+        ['1/4', '1/4'],
+        ['1/4t', '1/4 triplet'],
+        ['1/8', '1/8'],
+        ['1/8t', '1/8 triplet'],
+        ['1/16', '1/16'],
+        ['1/16t', '1/16 triplet'],
+        ['1/32', '1/32'],
+      ], '1/16'),
+    ),
+    shaping(f('octaves', 'Octaves', 1, 4, 1, { step: 1 })),
+    shaping(f('gate', 'Gate', 0.1, 1, 0.5, { unit: '%' })),
   ],
 };
 

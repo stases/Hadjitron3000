@@ -70,7 +70,7 @@ beforeAll(() => {
 beforeEach(() => {
   store.openProject(demoProject(), null);
   store.setView('track');
-  setPrefs({ quantize: 24, metronome: false, beginner: true });
+  setPrefs({ quantize: 24, metronome: false, beginner: true, scaleSnap: false });
   fake.clock = { origin: 100, bpm: 120, swing: 0 };
   fake.heard = null;
   removeKeys = installKeys();
@@ -160,6 +160,19 @@ test('with swing the pass quantizes to where the grid lines sound', () => {
   expect(plain(notes(bell)).map((n) => [n.start, n.note])).toEqual([[16, 74], [32, 72]]);
 });
 
+test('with Snap to Scale a pass writes what was played on the nearest note of the scale', () => {
+  const bell = channelOf('Bell');
+  store.setScale({ root: 3, type: 'minor' });
+  setPrefs({ scaleSnap: true });
+  store.setPlaying(true);
+  toggleRecord();
+  // E is between E flat and F, both in E flat minor: the lower wins; B flat is in it already.
+  play(bell, 64, 0, 0.1);
+  play(bell, 70, 0.25, 0.1);
+  expect(plain(notes(bell)).map((n) => [n.start, n.note])).toEqual([[0, 63], [48, 70]]);
+  setPrefs({ scaleSnap: false });
+});
+
 test('Record is off and disabled while the song plays, and says why', async () => {
   renderApp();
   const rec = button('Rec');
@@ -227,8 +240,8 @@ test('the metronome key, the Track menu and the shortcuts list the new controls'
   await expect.poll(() => $$('.h-menu-item').length).toBeGreaterThan(0);
   const items = $$('.h-menu-item');
   expect(items.map((el) => el.querySelector('.h-menu-label')!.textContent))
-    .toEqual(['Play / Stop', 'Record', 'Metronome']);
-  expect(items.map((el) => el.querySelector('.h-menu-shortcut')!.textContent)).toEqual(['Space', 'R', 'C']);
+    .toEqual(['Play / Stop', 'Record', 'Metronome', 'Snap to Scale', 'Fit to Scale', 'Randomise…']);
+  expect(items.slice(0, 3).map((el) => el.querySelector('.h-menu-shortcut')!.textContent)).toEqual(['Space', 'R', 'C']);
   expect(items[2].querySelector('.h-menu-check svg')).not.toBeNull();
   await userEvent.click(items[1]);
   expect(useRecord.getState().on).toBe(true);

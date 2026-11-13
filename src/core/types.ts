@@ -96,6 +96,11 @@ export interface Pattern {
   color: number; // index into the colour palette, 0..7
   bars: number; // 1..MAX_BARS, in the project's meter
   notes: Record<string, Note[]>; // channel id -> its notes, sorted by start, then pitch
+  /**
+   * Rows that loop on their own: channel id -> steps, 1 up to less than the block's length. The row's notes inside
+   * that many steps repeat end to end for the whole block; its notes after them are silent. Absent when no row does.
+   */
+  loops?: Record<string, number>;
 }
 
 /** A block placed on the song timeline. Blocks in different lanes play together. */
@@ -122,7 +127,7 @@ export interface Block {
   name: string;
   color: number;
   bars: number;
-  tracks: { sound: Sound; notes: Note[] }[];
+  tracks: { sound: Sound; notes: Note[]; loop?: number }[]; // loop: the row's own length in steps, when it has one
   samples: Record<string, SampleData>; // the samples its sounds use
 }
 
@@ -130,6 +135,12 @@ export interface Block {
 export interface SampleData {
   name: string;
   bytes: Uint8Array;
+}
+
+/** A key: its root as a pitch class (0 is C) and the kind of scale, one of SCALES in core/scale.ts. */
+export interface Scale {
+  root: number; // 0..11
+  type: string;
 }
 
 /** A time signature as [beats, unit]: [7, 8] is 7/8. One of METERS in core/meter.ts. */
@@ -140,6 +151,7 @@ export interface Project {
   bpm: number; // 40..240
   swing: number; // 0..1, off-beat sixteenths are delayed by swing * half a step
   meter: Meter; // the same for every bar of every block
+  scale?: Scale; // the key the views help to stay in; absent is chromatic
   master: number; // dB
   mixer: Mixer;
   channels: Channel[];

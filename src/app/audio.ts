@@ -2,6 +2,7 @@
 // Views call these functions; nothing else in the interface touches Web Audio.
 
 import { Engine, Metronome, Transport, loadProcessors, outputDelay, renderProject } from '../audio';
+import { arpOf } from '../core/arp';
 import { newChannel, newLanes } from '../core/defaults';
 import { barOf } from '../core/meter';
 import type { Owner } from '../core/mixer';
@@ -10,6 +11,7 @@ import type { Clock } from '../core/record';
 import { tickTime } from '../core/sequencer';
 import type { Block, Channel, Project, SampleData, Sound } from '../core/types';
 import { playScope, setPlaying, useApp } from '../state/store';
+import { LiveArp } from './arp';
 import { usePrefs } from './prefs';
 
 const PREVIEW_ID = 'preview';
@@ -22,6 +24,9 @@ interface BlockAudition {
 let engine: Engine | null = null;
 let transport: Transport | null = null;
 let metronome: Metronome | null = null;
+let arp: LiveArp | null = null;
+// The keys held through the arpeggiator, as "channelId:note", so that letting go goes the same way.
+const arpKeys = new Set<string>();
 // Play starts after a bar of clicks.
 let countingIn = false;
 // Counts the times Play is pressed, so that only the latest start goes ahead once the processors are in.
@@ -55,6 +60,17 @@ function boot(): Engine {
     metronome = new Metronome(engine.ctx, () => ({
       clock: transport!.clock(), bar: barOf(useApp.getState().project.meter), on: usePrefs.getState().metronome,
     }));
+    const e = engine;
+    arp = new LiveArp({
+      now: () => e.ctx.currentTime,
+      clock: () => transport!.clock(),
+      tempo: () => useApp.getState().project,
+      settings: (channelId) => {
+        const sound = heard().channels.find((c) => c.id === channelId)?.sound;
+        return sound ? arpOf(sound.play) : null;
+      },
+      play: (channelId, note, vel, time, dur) => e.play(channelId, note, vel, time, dur),
+    });
   }
   const ctx = engine.ctx as AudioContext;
   if (ctx.state === 'suspended') void ctx.resume();
@@ -162,16 +178,24 @@ function setHeld(channelId: string, note: number, on: boolean): void {
   heldListeners.forEach((listener) => listener());
 }
 
-/** Hold a note on a channel (keyboard, piano keys). */
+/** Hold a note on a channel (keyboard, piano keys); with the sound's arpeggiator on, it joins the notes it plays. */
 export function noteOn(channelId: string, note: number, vel = 0.8): void {
   const e = boot();
-  e.noteOn(channelId, note, vel);
+  const key = `${channelId}:${note}`;
+  if (arp!.takes(channelId)) {
+    arpKeys.add(key);
+    arp!.down(channelId, note, vel);
+  } else {
+    e.noteOn(channelId, note, vel);
+  }
   setHeld(channelId, note, true);
   liveListeners.forEach((listener) => listener({ channelId, note, vel, time: e.ctx.currentTime }));
 }
 
 export function noteOff(channelId: string, note: number): void {
-  engine?.noteOff(channelId, note);
+  const key = `${channelId}:${note}`;
+  if (arpKeys.delete(key)) arp?.up(channelId, note);
+  else engine?.noteOff(channelId, note);
   setHeld(channelId, note, false);
   const time = engine?.ctx.currentTime ?? 0;
   liveListeners.forEach((listener) => listener({ channelId, note, vel: null, time }));
@@ -210,9 +234,10 @@ function blockProject(block: Block): Project {
   const { bpm, swing, meter, master, mixer } = useApp.getState().project;
   const channels = block.tracks.map((track, i) => newChannel(`b${i}`, track.sound, 0));
   const notes = Object.fromEntries(block.tracks.map((track, i) => [`b${i}`, track.notes]));
+  const loops = Object.fromEntries(block.tracks.flatMap((track, i) => (track.loop ? [[`b${i}`, track.loop]] : [])));
   return {
     name: block.name, bpm, swing, meter, master, mixer, channels, song: [], lanes: newLanes(), samples: block.samples,
-    patterns: [{ id: 'block', name: block.name, color: block.color, bars: block.bars, notes }],
+    patterns: [{ id: 'block', name: block.name, color: block.color, bars: block.bars, notes, loops }],
   };
 }
 

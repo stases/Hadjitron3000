@@ -1,5 +1,7 @@
 // Recording: while Record is on and a block plays on repeat, every note played by hand on the selected sound is
-// written into the current block where it was heard and for as long as it was held. One pass, from Record on or
+// written into the current block where it was heard and for as long as it was held, on the scale while Snap to
+// Scale is on. With the sound's arpeggiator on, what is written is the keys held, not the notes it played. One pass,
+// from Record on or
 // the start of playback until Record off or stop, is one undo step.
 
 import { create } from 'zustand';
@@ -10,6 +12,7 @@ import { addNotes, useApp } from '../state/store';
 import { clock, contextTime, countIn, latency, onLiveNote } from './audio';
 import type { LiveNote } from './audio';
 import { usePrefs } from './prefs';
+import { snapPitch } from './snap';
 
 export const useRecord = create<{ on: boolean }>(() => ({ on: false }));
 
@@ -49,7 +52,7 @@ function write(channelId: string, note: number, down: Down, up: number): void {
     unit: usePrefs.getState().quantize, bar, bpm: down.clock.bpm, swing: down.clock.swing,
     length: pattern.bars * bar.ticks,
   };
-  const n = takeNote(down.tick, up, grid, note, down.vel);
+  const n = takeNote(down.tick, up, grid, snapPitch(note), down.vel);
   if (n) addNotes(pattern.id, channelId, [n], take);
 }
 

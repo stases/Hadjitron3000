@@ -432,3 +432,78 @@ test('a placement silences exactly the sounds it mutes; the same block elsewhere
   expect(heard).toEqual(['0:k', '0:h', '0:s', '0:h', '0:k', '1:k', '1:s', '1:k', '2:k', '2:k']);
   expect(eventsBetween(p, { kind: 'song' }, 0, 3 * B).every((e) => !('gain' in e))).toBe(true);
 });
+
+/** A one-bar block of 4/4 with a five-step hat against a sixteen-step kick, the hat's last note past its loop. */
+function polymeter(): Project {
+  const p = oneRow([stepNote(0, 36, 'k0'), stepNote(4, 36, 'k4'), stepNote(8, 36, 'k8'), stepNote(12, 36, 'k12')]);
+  p.channels.push(newChannel('h', newSound(), 1));
+  p.patterns[0].notes.h = [stepNote(0, 72, 'h0'), stepNote(3, 70, 'h3'), stepNote(6, 74, 'h6')];
+  p.patterns[0].loops = { h: 5 };
+  return p;
+}
+
+test('a row with a loop of its own repeats it end to end through the block, and starts again with the block', () => {
+  const p = polymeter();
+  const scope = blockScope(p);
+  const steps = (events: ReturnType<typeof eventsBetween>, id: string) =>
+    events.filter((e) => e.channelId === id).map((e) => [Math.round(e.time / stepSeconds(120)), e.note]);
+  const two = eventsBetween(p, scope, 0, 32 * T);
+  // The note on step 6 is past the loop of five steps and silent; the copies at 0, 5, 10 and 15 play steps 0 and 3,
+  // the last copy only its first step, and the second pass starts the loop again with the block.
+  const pass = [[0, 72], [3, 70], [5, 72], [8, 70], [10, 72], [13, 70], [15, 72]];
+  expect(steps(two, 'h')).toEqual([...pass, ...pass.map(([s, n]) => [s + 16, n])]);
+  expect(steps(two, 'k')).toEqual([[0, 36], [4, 36], [8, 36], [12, 36], [16, 36], [20, 36], [24, 36], [28, 36]]);
+  // Lengthened again past step 6, that note plays.
+  p.patterns[0].loops = { h: 7 };
+  expect(steps(eventsBetween(p, scope, 0, 16 * T), 'h').map(([s]) => s)).toEqual([0, 3, 6, 7, 10, 13, 14]);
+  // A loop as long as the block or longer is no loop.
+  p.patterns[0].loops = { h: 40 };
+  expect(steps(eventsBetween(p, scope, 0, 16 * T), 'h').map(([s]) => s)).toEqual([0, 3, 6]);
+});
+
+test('swing in a looped row counts from the bar, so a copy on an odd step is swung there', () => {
+  const p = polymeter();
+  p.swing = 0.6;
+  const hat = eventsBetween(p, blockScope(p), 0, 16 * T).filter((e) => e.channelId === 'h');
+  expect(hat.map((e) => e.time)).toEqual([0, 3, 5, 8, 10, 13, 15].map((s) => tickTime(s * T, 120, 0.6)));
+});
+
+test('in the song a looped row starts again with every repeat of its block, and windows find each note once', () => {
+  const p = polymeter();
+  p.swing = 0.3;
+  p.patterns[0].notes.h[1] = { ...p.patterns[0].notes.h[1], ratchet: 3, chance: 50 };
+  p.song = [{ id: 's', pattern: p.patterns[0].id, lane: 0, bar: 1, bars: 3 }];
+  for (const scope of [blockScope(p), { kind: 'song' } as const]) {
+    const end = 2 * loopSteps(p, scope) * T;
+    const whole = windowed(p, scope, end, end);
+    for (const size of [1, 5, T, 7 * T, 100]) expect(windowed(p, scope, size, end)).toEqual(whole);
+  }
+  // A chance in a copy of the loop is decided anew, from the pass and the copy.
+  p.swing = 0;
+  const h3 = p.patterns[0].notes.h[1];
+  const copies = (bar: number) => [0, 1, 2].map((k) => plays(h3, p.patterns[0].id, k === 0 ? bar : `${bar}:${k}`));
+  const heard = eventsBetween(p, { kind: 'song' }, 0, 4 * 16 * T).filter((e) => e.note === 70);
+  const expected = [1, 2, 3].flatMap((bar) => copies(bar).flatMap((on, k) => (on ? [bar * 16 + 3 + 5 * k] : [])));
+  expect([...new Set(heard.map((e) => Math.floor(e.time / stepSeconds(120) + 1e-9)))]).toEqual(expected);
+});
+
+test('an arpeggiated looped row: arpeggiator and loops together schedule each note exactly once across windows', () => {
+  const p = polymeter();
+  p.swing = 0.45;
+  p.channels[1].sound.play = { ...p.channels[1].sound.play, arp: 'updown', rate: '1/16t', octaves: 2, gate: 0.8 };
+  const a = p.patterns[0];
+  a.bars = 2;
+  a.notes.h = [
+    { id: 'c', start: 0, len: 4 * T, note: 60, vel: 0.8 }, { id: 'e', start: 2 * T, len: 9 * T, note: 64, vel: 0.8 },
+    { id: 'g', start: 3 * T, len: T, note: 67, vel: 0.8, chance: 60 },
+    { id: 'd', start: 9 * T, len: 2 * T, note: 50, vel: 0.8, hold: true },
+  ];
+  a.loops = { h: 13 };
+  p.song = [{ id: 's', pattern: a.id, lane: 0, bar: 0, bars: 5 }];
+  for (const scope of [blockScope(p), { kind: 'song' } as const]) {
+    const end = 2 * loopSteps(p, scope) * T;
+    const whole = windowed(p, scope, end, end);
+    expect(whole.length).toBeGreaterThan(40);
+    for (const size of [1, 7, T, 5 * T, 333]) expect(windowed(p, scope, size, end)).toEqual(whole);
+  }
+});

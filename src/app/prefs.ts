@@ -10,10 +10,12 @@ export interface Prefs {
   metronome: boolean;
   /** The grid notes played in are recorded on, in ticks (0 is Off). */
   quantize: number;
+  /** New, dragged, recorded and step-entered notes land on the notes of the project's scale, when it has one. */
+  scaleSnap: boolean;
 }
 
 const KEY = 'hadjitron-prefs';
-const DEFAULTS: Prefs = { beginner: true, metronome: false, quantize: 24 };
+const DEFAULTS: Prefs = { beginner: true, metronome: false, quantize: 24, scaleSnap: false };
 
 /** The stored preferences; a missing value or one of the wrong type gets its default. */
 function load(): Prefs {
@@ -40,4 +42,8 @@ export function setPrefs(change: Partial<Prefs>): void {
 
 export function toggleMetronome(): void {
   setPrefs({ metronome: !usePrefs.getState().metronome });
+}
+
+export function toggleScaleSnap(): void {
+  setPrefs({ scaleSnap: !usePrefs.getState().scaleSnap });
 }

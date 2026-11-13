@@ -151,7 +151,9 @@ test('the menus list their commands and follow the store', async () => {
   expect(disabled(await openMenu('Sound'), 'Duplicate')).toBe(true);
   await userEvent.keyboard('{Escape}');
 
-  expect(labels(await openMenu('Track'))).toEqual(['Play / Stop', 'Record', 'Metronome']);
+  expect(labels(await openMenu('Track'))).toEqual([
+    'Play / Stop', 'Record', 'Metronome', 'Snap to Scale', 'Fit to Scale', 'Randomise…',
+  ]);
   await userEvent.keyboard('{Escape}');
 
   const block = await openMenu('Block');
@@ -253,7 +255,7 @@ test('Beginner Mode in the View menu folds or shows the Factory controls and is 
   await userEvent.click(beginner);
   await expect.poll(knobs).toEqual([
     'Pitch', 'Fine', 'Voices', 'Spread', 'Width', 'Noise', 'Pulse', 'Pitch 2', 'Fine 2', 'Mix 2', 'Sub', 'Sub Oct',
-    'Glide',
+    'Glide', 'Octaves', 'Gate',
   ]);
   expect($$('.h-folds')).toHaveLength(0);
   expect((await item()).querySelector('.h-menu-check svg')).toBeNull();

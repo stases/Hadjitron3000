@@ -1,16 +1,23 @@
 import { renameBlock } from '../../app/commands';
+import { usePrefs } from '../../app/prefs';
 import { CHANNEL_COLORS, MAX_BARS, PATTERN_NAMES } from '../../core/defaults';
+import { LEVEL_NAMES } from '../../core/levels';
 import {
   addPattern, clearPattern, duplicatePattern, removePattern, selectPattern, setPatternBars, setPatternColor, useApp,
 } from '../../state/store';
-import { Button, Icon, Select, Separator, Stepper, useHint } from '../kit';
+import { toggleFold, useShown } from '../factory/levels';
+import { Button, FoldToggles, Icon, Select, Separator, Stepper, useHint } from '../kit';
 
 function usedText(times: number): string {
   if (times === 0) return 'Not in the song yet';
   return times === 1 ? 'In the song once' : `In the song ${times} times`;
 }
 
-/** The block on the grid: choose, recolour, rename, add, copy, clear and delete blocks, and set its length. */
+/**
+ * The block on the grid: choose, recolour, rename, add, copy, clear and delete blocks, and set its length. In
+ * beginner mode a Deep toggle at the right end shows the end markers of the rows, which give a row a length of its
+ * own; its lamp lights while a row of the block has one.
+ */
 export function PatternBar() {
   const patterns = useApp((s) => s.project.patterns);
   const patternId = useApp((s) => s.patternId);
@@ -18,6 +25,8 @@ export function PatternBar() {
   const usedHint = useHint('How often this block is placed in the song. The Song view arranges the blocks.');
   const pattern = patterns.find((p) => p.id === patternId)!;
   const full = patterns.length >= PATTERN_NAMES.length;
+  const beginner = usePrefs((p) => p.beginner);
+  const deep = useShown()('grid', 3);
   return (
     <div className="h-track-bar">
       <span className="h-track-label">Block</span>
@@ -72,6 +81,18 @@ export function PatternBar() {
       <span className="h-track-used" {...usedHint.props}>
         {usedText(used)}
       </span>
+      {beginner && (
+        <FoldToggles
+          row
+          folds={[{
+            label: LEVEL_NAMES[3],
+            open: deep,
+            lit: !!pattern.loops,
+            hint: 'Shows a marker at the end of each row to give it a length of its own; the lamp lights when one has.',
+            onToggle: () => toggleFold('grid', 3),
+          }]}
+        />
+      )}
     </div>
   );
 }

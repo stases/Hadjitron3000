@@ -245,7 +245,7 @@ test('a sound from before the voice path reads with the filter off, Poly play an
 
 test('the voice path round trips and is always written', () => {
   const original = newSound();
-  original.play = { mode: 'legato', glide: 0.12 };
+  original.play = { mode: 'legato', glide: 0.12, arp: 'played', rate: '1/8t', octaves: 3, gate: 0.25 };
   original.filter = { ...original.filter, on: true, slope: '24', drive: 0.3, key: 0.5, vel: -0.25 };
   original.source = {
     ...original.source, on: true, params: { ...original.source.params, wave: 'square', pw: 0.3, mix2: 0.5, sub: 0.4 },
@@ -265,13 +265,13 @@ test('the voice path round trips and is always written', () => {
 test('voice path values are checked like any other parameter', () => {
   const original = {
     ...newSound(),
-    play: { mode: 'chords', glide: 9 },
+    play: { mode: 'chords', glide: 9, arp: 'sideways', rate: '1/3', octaves: 0, gate: 2 },
     filter: { on: 'yes', slope: 48, cutoff: 1e6 },
     chain: [{ id: 'filter', type: 'drive' }],
     mods: [{ id: 'm1', type: 'env', per: 'chord', target: { module: 'filter', param: 'cutoff' }, amount: 1 }],
   };
   const parsed = parseSound(soundFile(original)).sound;
-  expect(parsed.play).toEqual({ mode: 'poly', glide: 2 });
+  expect(parsed.play).toEqual({ mode: 'poly', glide: 2, arp: 'off', rate: '1/16', octaves: 1, gate: 1 });
   expect(parsed.filter).toEqual({ ...defaultParams(FILTER), cutoff: 20000 });
   // A chain module may not take the id of a fixed unit.
   expect(parsed.chain[0].id).not.toBe('filter');
@@ -800,4 +800,42 @@ test('blocks and sounds carry no sends or ducking', () => {
   const block = JSON.parse(serializeBlock(extractBlock(original, 'a')!)).block;
   expect(Object.keys(block.tracks[0])).toEqual(['sound', 'notes']);
   expect(JSON.parse(serializeSound(original.channels[0].sound, {})).sound).not.toHaveProperty('sends');
+});
+
+test('a scale and rows of their own length are written only when set, and read back', () => {
+  const plain = JSON.parse(serializeProject(project())).project;
+  expect(plain).not.toHaveProperty('scale');
+  expect(plain.patterns.every((p: object) => !('loops' in p))).toBe(true);
+  const original = project();
+  original.scale = { root: 9, type: 'dorian' };
+  original.patterns[1].loops = { c2: 5 };
+  const text = serializeProject(original);
+  expect(JSON.parse(text).project.scale).toEqual({ root: 9, type: 'dorian' });
+  expect(JSON.parse(text).project.patterns[1].loops).toEqual({ c2: 5 });
+  expect(parseProject(text)).toStrictEqual(original);
+});
+
+test('a scale that is not offered and loops of missing rows or no number are left out; loop lengths are whole', () => {
+  for (const scale of [{ root: 13, type: 'major' }, { root: 2, type: 'lydianish' }, 'C major', null]) {
+    expect(parseProject(projectFile({ ...project(), scale }))).not.toHaveProperty('scale');
+  }
+  const file = project();
+  (file.patterns[1] as unknown as { loops: unknown }).loops = { c1: 4.6, c2: 'five', gone: 3 };
+  expect(parseProject(projectFile(file)).patterns[1].loops).toEqual({ c1: 5 });
+  (file.patterns[1] as unknown as { loops: unknown }).loops = { c1: 0, c2: 1e9 };
+  expect(parseProject(projectFile(file)).patterns[1].loops).toEqual({ c1: 1, c2: MAX_TICKS / TICKS_PER_STEP });
+  (file.patterns[1] as unknown as { loops: unknown }).loops = { c1: 'x' };
+  expect(parseProject(projectFile(file)).patterns[1]).not.toHaveProperty('loops');
+});
+
+test('a block keeps the loop of a row of its own length, and a project lends it to the block', () => {
+  const original = project();
+  original.patterns[1].loops = { c2: 7 };
+  const block = extractBlock(original, 'b')!;
+  expect(block.tracks.map((t) => t.loop)).toEqual([7]);
+  const text = serializeBlock(block);
+  expect(JSON.parse(text).block.tracks[0].loop).toBe(7);
+  expect(parseBlock(text)).toStrictEqual(block);
+  const plain = extractBlock(project(), 'b')!;
+  expect(JSON.parse(serializeBlock(plain)).block.tracks[0]).not.toHaveProperty('loop');
 });

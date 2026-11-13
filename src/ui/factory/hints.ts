@@ -34,6 +34,11 @@ export const PARAM_HINTS: Readonly<Record<string, Readonly<Record<string, string
   play: {
     mode: 'Poly plays chords; Mono plays one note at a time; Legato glides into a note while the last is still held.',
     glide: 'How long each new note takes to slide up or down from the note before it.',
+    arp: 'Plays the notes you hold one after another instead of together: up, down, both ways, at random, or in '
+      + 'the order you pressed them.',
+    rate: 'How fast the arpeggio runs, as a note value at the song tempo; T is a triplet.',
+    octaves: 'How many octaves the arpeggio climbs through before it starts again.',
+    gate: 'How long each note of the arpeggio sounds, as a share of the time to the next: short plucks, full flows.',
   },
   voicefilter: {
     on: 'Switches the filter on or off.',

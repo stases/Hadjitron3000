@@ -4,14 +4,15 @@ import { uid } from './defaults';
 import { MAX_TICKS } from './meter';
 import type { Note, NoteInit } from './types';
 
-const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+/** The names of the twelve pitch classes, from C. */
+export const PITCH_NAMES: readonly string[] = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
 export const ROOT_NOTE = 60;
 export const MIN_NOTE = 12; // C-1
 export const MAX_NOTE = 108; // C7
 
 export function noteName(note: number): string {
-  return NAMES[((note % 12) + 12) % 12] + (Math.floor(note / 12) - 2);
+  return PITCH_NAMES[((note % 12) + 12) % 12] + (Math.floor(note / 12) - 2);
 }
 
 export function noteFreq(note: number): number {
@@ -19,7 +20,7 @@ export function noteFreq(note: number): number {
 }
 
 export function isBlackKey(note: number): boolean {
-  return NAMES[((note % 12) + 12) % 12].length === 2;
+  return PITCH_NAMES[((note % 12) + 12) % 12].length === 2;
 }
 
 /** Computer keyboard as a piano: key -> semitones above the C of the current octave. */

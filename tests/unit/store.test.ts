@@ -337,8 +337,10 @@ test('the voice filter, the play controls and where a modulator works are set li
   app.setParam(a, 'play', 'mode', 'legato');
   app.setParam(a, 'play', 'glide', -1);
   app.setParam(a, 'play', 'missing', 1);
+  app.setParam(a, 'play', 'arp', 'updown');
+  app.setParam(a, 'play', 'octaves', 7);
   expect(sound(a).filter).toMatchObject({ on: true, cutoff: 20000, slope: '24' });
-  expect(sound(a).play).toEqual({ mode: 'legato', glide: 0 });
+  expect(sound(a).play).toEqual({ mode: 'legato', glide: 0, arp: 'updown', rate: '1/16', octaves: 4, gate: 0.5 });
   const env = app.addMod(a, 'env')!;
   expect(sound(a).mods[0].per).toBe('note');
   app.setModPer(a, env, 'sound');
@@ -1546,4 +1548,99 @@ test('a sound from a library or a block starts with no sends and no ducking', ()
   expect(project().channels.at(-1)).toMatchObject({ sends: [0, 0], duck: { source: null } });
   const copy = app.duplicateChannel(a)!;
   expect(project().channels.find((c) => c.id === copy)?.sends).toEqual([0.5, 0]);
+});
+
+test('the scale is set and taken away in one undo step each, and leaves the notes alone', () => {
+  const a = app.addChannel(newSound());
+  put(state().patternId, a, 0, 61);
+  app.setScale({ root: 2, type: 'minor' });
+  expect(project().scale).toEqual({ root: 2, type: 'minor' });
+  expect(row(a)[0].note).toBe(61);
+  app.setScale({ root: 14, type: 'minor' });
+  expect(project()).not.toHaveProperty('scale');
+  app.undo();
+  expect(project().scale).toEqual({ root: 2, type: 'minor' });
+  app.undo();
+  expect(project()).not.toHaveProperty('scale');
+});
+
+test('Fit to Scale moves the chosen notes onto the nearest scale notes, merging collisions, in one step', () => {
+  const a = app.addChannel(newSound());
+  const p = state().patternId;
+  const ids = [60, 61, 63, 66, 70].map((n) => put(p, a, 0, n)!);
+  const later = put(p, a, 4, 61)!;
+  const before = state().past.length;
+  app.fitToScale(p, a, ids);
+  expect(state().past.length).toBe(before);
+  app.setScale({ root: 0, type: 'major' });
+  app.fitToScale(p, a, ids);
+  // C# lands on C, which is there already, and goes; D# to D, F# to F, A# to A; the later C# was not chosen.
+  expect(row(a).map((n) => [n.start, n.note])).toEqual([[0, 60], [0, 62], [0, 65], [0, 69], [4 * T, 61]]);
+  expect(state().past.length).toBe(before + 2);
+  app.fitToScale(p, a, [later]);
+  expect(row(a).at(-1)!.note).toBe(60);
+  app.undo();
+  app.undo();
+  expect(row(a).map((n) => n.note)).toEqual([60, 61, 63, 66, 70, 61]);
+});
+
+test('a row of its own length is set in steps below the block, follows block and channel, is copied', () => {
+  const a = app.addChannel(newSound());
+  const b = app.addChannel(newSound());
+  const p = state().patternId;
+  app.setRowLoop(p, a, 5.4);
+  expect(pattern().loops).toEqual({ [a]: 5 });
+  app.setRowLoop(p, b, 0);
+  expect(pattern().loops).toEqual({ [a]: 5, [b]: 1 });
+  // As long as the block or longer is no loop of its own.
+  app.setRowLoop(p, b, 16);
+  expect(pattern().loops).toEqual({ [a]: 5 });
+  app.setRowLoop(p, b, 99);
+  expect(pattern().loops).toEqual({ [a]: 5 });
+  app.setPatternBars(p, 2);
+  app.setRowLoop(p, b, 20);
+  expect(pattern().loops).toEqual({ [a]: 5, [b]: 20 });
+  // Shortening the block drops a loop that is no longer shorter than it.
+  app.setPatternBars(p, 1);
+  expect(pattern().loops).toEqual({ [a]: 5 });
+  // Another meter keeps loops in steps.
+  app.setMeter([5, 8]);
+  expect(pattern().loops).toEqual({ [a]: 5 });
+  const copy = app.duplicatePattern(p)!;
+  expect(project().patterns.find((x) => x.id === copy)!.loops).toEqual({ [a]: 5 });
+  app.removeChannel(a);
+  expect(project().patterns.map((x) => x.loops)).toEqual([undefined, undefined]);
+  app.undo();
+  app.setRowLoop(p, a, null);
+  expect(project().patterns.map((x) => x.loops)).toEqual([undefined, { [a]: 5 }]);
+});
+
+test('a block with a looped row is inserted with its loop', () => {
+  const block: Block = {
+    name: 'Drift', color: 2, bars: 1, samples: {},
+    tracks: [{ sound: newSound(), notes: [stepNote(0)], loop: 5 }, { sound: newSound('fm'), notes: [stepNote(2)] }],
+  };
+  const id = app.insertBlock(block)!;
+  const inserted = project().patterns.find((p) => p.id === id)!;
+  expect(inserted.loops).toEqual({ [project().channels[0].id]: 5 });
+});
+
+test('a row replaced again and again with one take is one undo step, until something else changes', () => {
+  const a = app.addChannel(newSound());
+  const p = state().patternId;
+  put(p, a, 0, 60);
+  const base = pattern().notes[a];
+  const before = state().past.length;
+  const take = {};
+  app.replaceNotes(p, a, [...base, newNote(T, 62)], take);
+  app.replaceNotes(p, a, [...base, newNote(2 * T, 64), newNote(3 * T, 65)], take);
+  expect(row(a).map((n) => n.note)).toEqual([60, 64, 65]);
+  expect(pattern().notes[a][0].id).toBe(base[0].id);
+  expect(state().past.length).toBe(before + 1);
+  app.undo();
+  expect(row(a).map((n) => n.note)).toEqual([60]);
+  app.redo();
+  app.replaceNotes(p, a, [], take);
+  expect(pattern().notes).not.toHaveProperty(a);
+  expect(state().past.length).toBe(before + 2);
 });

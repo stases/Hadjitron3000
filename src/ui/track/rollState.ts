@@ -1,5 +1,6 @@
 // The piano roll's own state (whether it is open, the selected notes of its row, the snap, the paste mark, the
-// length of the next note) and the commands the keyboard and the inspector run on the selection.
+// stretch of time chosen on the ruler, the length of the next note) and the commands the keyboard and the inspector
+// run on the selection.
 
 import { create } from 'zustand';
 import { tap } from '../../app/audio';
@@ -15,10 +16,13 @@ interface RollState {
   selected: readonly string[]; // ids of notes of the roll's row
   snap: number; // ticks
   mark: number; // the tick Paste puts notes at
+  range: { from: number; to: number } | null; // ticks chosen by dragging along the ruler, for Randomise
   length: number; // ticks, the length a clicked note gets
 }
 
-export const useRoll = create<RollState>(() => ({ open: false, selected: [], snap: 24, mark: 0, length: 24 }));
+export const useRoll = create<RollState>(() => ({
+  open: false, selected: [], snap: 24, mark: 0, range: null, length: 24,
+}));
 
 // Notes copied or cut, for pasting into any row of any block.
 let clip: Clip | null = null;
@@ -28,7 +32,9 @@ let clip: Clip | null = null;
 useApp.subscribe((state, prev) => {
   const opened = state.project !== prev.project && state.past.length === 0 && state.future.length === 0;
   if ((opened || state.channelId === null) && useRoll.getState().open) closeRoll();
-  else if (state.patternId !== prev.patternId || state.channelId !== prev.channelId) useRoll.setState({ selected: [] });
+  else if (state.patternId !== prev.patternId || state.channelId !== prev.channelId) {
+    useRoll.setState({ selected: [], range: null });
+  }
 });
 
 /** The block and row the roll edits: its ids, its length in ticks and the row's notes inside it. */
@@ -54,7 +60,7 @@ export function openRoll(channelId: string, ids: readonly string[] = []): void {
 }
 
 export function closeRoll(): void {
-  useRoll.setState({ open: false, selected: [] });
+  useRoll.setState({ open: false, selected: [], range: null });
 }
 
 export function selectNotes(ids: readonly string[]): void {

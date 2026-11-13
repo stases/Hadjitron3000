@@ -11,11 +11,12 @@ import { BUS_LEVEL, DUCK_AMOUNT, DUCK_RELEASE, MAX_BUS_NAME, rackChain } from '.
 import type { Owner } from '../core/mixer';
 import { MODULES, moduleDef, paramSpec } from '../core/modules';
 import { MAX_NOTE, MIN_NOTE, cleanNotes, compareNotes, noteExtras } from '../core/notes';
+import { inScale, nearestInScale, readScale } from '../core/scale';
 import type { NoteExtras } from '../core/notes';
 import { coerce, defaultParams } from '../core/params';
 import type {
-  Block, Channel, Duck, Lane, Meter, ModInst, ModTarget, ModuleInst, Note, NoteInit, ParamValue, Params, Placement,
-  PlayScope, Project, SampleData, SendBus, Sound,
+  Block, Channel, Duck, Lane, Meter, ModInst, ModTarget, ModuleInst, Note, NoteInit, ParamValue, Params, Pattern,
+  Placement, PlayScope, Project, SampleData, Scale, SendBus, Sound,
 } from '../core/types';
 
 export type View = 'factory' | 'track' | 'song' | 'mixer';
@@ -186,7 +187,17 @@ export function setMeter(meter: Meter): void {
       const length = pattern.bars * old.ticks;
       const ends = Object.values(pattern.notes).flat().filter((n) => n.start < length).map((n) => n.start + n.len);
       pattern.bars = barsToHold(Math.max(length, ...ends), bar);
+      fitLoops(pattern, bar.steps);
     }
+  });
+}
+
+/** Set the project's key, or none (chromatic). Notes are left as they are. */
+export function setScale(scale: Scale | null): void {
+  const next = readScale(scale);
+  edit((p) => {
+    if (next) p.scale = next;
+    else delete p.scale;
   });
 }
 
@@ -226,7 +237,10 @@ export function removeChannel(channelId: string): void {
   const channel = state.project.channels[index + 1] ?? state.project.channels[index - 1];
   edit((p) => {
     p.channels.splice(index, 1);
-    for (const pattern of p.patterns) delete pattern.notes[channelId];
+    for (const pattern of p.patterns) {
+      delete pattern.notes[channelId];
+      setLoop(pattern, channelId, null);
+    }
     for (const placement of p.song) setMutes(placement, (placement.mutes ?? []).filter((id) => id !== channelId));
     for (const c of p.channels) if (c.duck.source === channelId) c.duck.source = null;
   }, undefined, state.channelId === channelId ? { channelId: channel?.id ?? null } : {});
@@ -524,6 +538,46 @@ export function updateNotes(patternId: string, channelId: string, notes: readonl
   editNotes(patternId, channelId, [...byId.keys()], (n) => byId.get(n.id)!, 'update');
 }
 
+/**
+ * Put a row's notes in place of all it has, in one change: those with an id keep it, the others get one. With
+ * `take`, the change joins the undo step of the last change with the same take as long as nothing else changed in
+ * between, so a result tried again and again is one undo step.
+ */
+export function replaceNotes(
+  patternId: string, channelId: string, notes: readonly (NoteInit & { id?: string })[], take?: object,
+): void {
+  const { project } = useApp.getState();
+  if (!project.channels.some((c) => c.id === channelId)) return;
+  const clean = cleanNotes(notes.filter(finiteNote));
+  edit((p) => {
+    const pattern = p.patterns.find((pattern) => pattern.id === patternId);
+    if (!pattern) return;
+    if (clean.length > 0) pattern.notes[channelId] = clean;
+    else delete pattern.notes[channelId];
+  }, undefined, {}, take);
+}
+
+/**
+ * Move the notes of a row with these ids that are out of the project's scale to its nearest note, in one change. A
+ * note that lands on the start and pitch of another one of the row merges into it. Nothing happens without a scale.
+ */
+export function fitToScale(patternId: string, channelId: string, ids: readonly string[]): void {
+  const { scale } = useApp.getState().project;
+  const row = chosenNotes(patternId, channelId, ids);
+  if (!scale || row.every((n) => inScale(n.note, scale))) return;
+  edit((p) => {
+    const pattern = p.patterns.find((pattern) => pattern.id === patternId)!;
+    const notes = pattern.notes[channelId];
+    const moved = new Set(row.filter((n) => !inScale(n.note, scale)).map((n) => n.id));
+    // Notes that stay go first, so they keep their place when a moved note lands on one of them.
+    const fitted = [
+      ...notes.filter((n) => !moved.has(n.id)),
+      ...notes.filter((n) => moved.has(n.id)).map((n) => ({ ...n, note: nearestInScale(n.note, scale) })),
+    ];
+    pattern.notes[channelId] = cleanNotes(fitted);
+  });
+}
+
 /** Take notes out of a row. */
 export function removeNotes(patternId: string, channelId: string, ids: readonly string[]): void {
   edit((p) => {
@@ -583,8 +637,41 @@ export function setNotesExtras(
 export function setPatternBars(patternId: string, bars: number): void {
   edit((p) => {
     const pattern = p.patterns.find((pattern) => pattern.id === patternId);
-    if (pattern) pattern.bars = clamp(Math.round(bars), 1, MAX_BARS);
+    if (!pattern) return;
+    pattern.bars = clamp(Math.round(bars), 1, MAX_BARS);
+    fitLoops(pattern, barOf(p.meter).steps);
   });
+}
+
+/** Give a row its own loop length in steps, or none. `fitLoops` drops one as long as its block. */
+function setLoop(pattern: Pattern, channelId: string, steps: number | null): void {
+  const loops = { ...pattern.loops };
+  if (steps === null) delete loops[channelId];
+  else loops[channelId] = steps;
+  if (Object.keys(loops).length > 0) pattern.loops = loops;
+  else delete pattern.loops;
+}
+
+/** Drop the loops that are not shorter than their block, with `barSteps` steps to the bar. */
+function fitLoops(pattern: Pattern, barSteps: number): void {
+  for (const [id, steps] of Object.entries(pattern.loops ?? {})) {
+    if (steps >= pattern.bars * barSteps) setLoop(pattern, id, null);
+  }
+}
+
+/**
+ * Let a row of a block loop on its own every `steps` steps, from 1 up to the block's length, which means no loop of
+ * its own; null takes the loop away. The notes after the loop stay in the row, silent.
+ */
+export function setRowLoop(patternId: string, channelId: string, steps: number | null): void {
+  if (steps !== null && !Number.isFinite(steps)) return;
+  edit((p) => {
+    const pattern = p.patterns.find((pattern) => pattern.id === patternId);
+    if (!pattern || !p.channels.some((c) => c.id === channelId)) return;
+    const length = pattern.bars * barOf(p.meter).steps;
+    setLoop(pattern, channelId, steps === null ? null : clamp(Math.round(steps), 1, length));
+    fitLoops(pattern, barOf(p.meter).steps);
+  }, JSON.stringify(['loop', patternId, channelId]));
 }
 
 export function renamePattern(patternId: string, name: string): void {
@@ -612,7 +699,10 @@ function insertPattern(copyId?: string): string | null {
   if (!name || !source) return null;
   const pattern = newPattern(name, copyId === undefined ? nextColor(state.project.patterns) : source.color);
   pattern.bars = source.bars;
-  if (copyId !== undefined) pattern.notes = structuredClone(source.notes);
+  if (copyId !== undefined) {
+    pattern.notes = structuredClone(source.notes);
+    if (source.loops) pattern.loops = { ...source.loops };
+  }
   edit((p) => { p.patterns.push(pattern); }, undefined, { patternId: pattern.id, step: null });
   return pattern.id;
 }
@@ -641,7 +731,9 @@ export function insertBlock(block: Block): string | null {
       used.add(channel.id);
       const notes = cleanNotes(track.notes);
       if (notes.length > 0) pattern.notes[channel.id] = notes;
+      if (track.loop !== undefined) setLoop(pattern, channel.id, track.loop);
     }
+    fitLoops(pattern, barOf(p.meter).steps);
     p.patterns.push(pattern);
     mergeSamples(p.samples, copy.samples);
   }, undefined, { patternId: pattern.id, step: null });

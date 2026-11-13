@@ -9,6 +9,7 @@ export type DialogKind =
   | { kind: 'rename'; patternId: string }
   | { kind: 'sounds'; placementId: string }
   | { kind: 'export' }
+  | { kind: 'randomise' }
   | { kind: 'about' }
   | { kind: 'shortcuts' }
   | { kind: 'update' }

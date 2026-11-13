@@ -170,7 +170,8 @@ test('beginner mode shows Basics and folds the rest into labelled sections that 
   expect(fold('Source', 'Shaping').getAttribute('aria-pressed')).toBe('true');
   expect(sections('Source')).toEqual(['Shaping']);
   const shaping = [
-    'Fine', 'Voices', 'Spread', 'Noise', 'Pulse', 'Pitch 2', 'Fine 2', 'Mix 2', 'Sub', 'Sub Oct', 'Glide',
+    'Fine', 'Voices', 'Spread', 'Noise', 'Pulse', 'Pitch 2', 'Fine 2', 'Mix 2', 'Sub', 'Sub Oct', 'Glide', 'Octaves',
+    'Gate',
   ];
   expect(knobs('Source')).toEqual(['Pitch', ...shaping]);
   await userEvent.click(fold('Source', 'Deep'));
@@ -206,7 +207,7 @@ test('the sampler folds its controls by the same rules', async () => {
   expect(unit('Source').textContent).toContain('Load...');
   expect(unit('Source').textContent).not.toContain('Loop');
   await userEvent.click(fold('Source', 'Shaping'));
-  expect(knobs('Source')).toEqual(['Pitch', 'Start', 'End', 'Fine', 'Crossfade', 'Glide']);
+  expect(knobs('Source')).toEqual(['Pitch', 'Start', 'End', 'Fine', 'Crossfade', 'Glide', 'Octaves', 'Gate']);
   expect(unit('Source').querySelector('.h-rack-section')!.textContent).toContain('Mode');
   expect(unit('Source').querySelector('.h-rack-section')!.textContent).toContain('Reverse');
   await userEvent.click(fold('Source', 'Deep'));
@@ -218,7 +219,7 @@ test('pro mode shows every control in table order with no sections', () => {
   show('Warm Pad');
   expect(knobs('Source')).toEqual([
     'Pitch', 'Fine', 'Voices', 'Spread', 'Width', 'Noise', 'Pulse', 'Pitch 2', 'Fine 2', 'Mix 2', 'Sub', 'Sub Oct',
-    'Glide',
+    'Glide', 'Octaves', 'Gate',
   ]);
   expect(knobs('Filter')).toEqual(['Cutoff', 'Reso', 'Drive', 'Key', 'Velocity']);
   expect(knobs('Reverb')).toEqual(['Size', 'Tone', 'Mix']);

@@ -18,7 +18,7 @@ const LABELS: Readonly<Record<string, Readonly<Record<string, string>>>> = { del
 
 /**
  * Controls that only work in some settings: Time and Rate with Sync at Free, Pulse with a square wave, the
- * sampler's Crossfade with Loop on.
+ * sampler's Crossfade with Loop on, and the arpeggiator's Rate, Octaves and Gate while it is on.
  */
 const IDLE: Readonly<Record<string, Readonly<Record<string, (p: Params) => boolean>>>> = {
   sample: { xfade: (p) => !p.loop },
@@ -26,12 +26,13 @@ const IDLE: Readonly<Record<string, Readonly<Record<string, (p: Params) => boole
   lfo: { rate: (p) => p.sync !== 'free' },
   phaser: { rate: (p) => p.sync !== 'free' },
   osc: { pw: (p) => p.wave !== 'square' && !(p.wave2 === 'square' && (p.mix2 as number) > 0) },
+  play: { rate: (p) => p.arp === 'off', octaves: (p) => p.arp === 'off', gate: (p) => p.arp === 'off' },
 };
 
 /** Captions over neighbouring controls that belong together. */
 const GROUPS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   osc: { wave2: 'Osc 2', pitch2: 'Osc 2', fine2: 'Osc 2', mix2: 'Osc 2', sub: 'Sub', subOct: 'Sub' },
-  play: { mode: 'Play', glide: 'Play' },
+  play: { mode: 'Play', glide: 'Play', arp: 'Play', rate: 'Play', octaves: 'Play', gate: 'Play' },
 };
 
 /** The wave parameter of each drawing: a drawing is shown next to its wave while that is set to Draw. */

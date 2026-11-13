@@ -258,6 +258,43 @@ test('select: keyboard', async () => {
   expect(onValue).toHaveBeenLastCalledWith('lowpass');
 });
 
+test('select: headings cannot be chosen, and More… shows the items kept back', async () => {
+  const onChange = vi.fn();
+  const options = [
+    { heading: 'Basics' }, { value: 'a', label: 'Alpha' }, { heading: 'Shaping' }, { value: 'b', label: 'Beta' },
+  ];
+  const more = [{ heading: 'Deep' }, { value: 'c', label: 'Gamma' }];
+  const host = render(<Select value="a" options={options} more={more} onChange={onChange} />);
+  const field = byRole(host, 'combobox');
+  const rows = () => [...openList()!.children].map((el) => el.textContent);
+  await userEvent.click(field);
+  expect(rows()).toEqual(['Basics', 'Alpha', 'Shaping', 'Beta', 'More…']);
+  expect(openList()!.querySelectorAll('[role="option"]')).toHaveLength(3);
+  await userEvent.click(openList()!.children[2]);
+  expect(openList()).not.toBeNull();
+  expect(onChange).not.toHaveBeenCalled();
+
+  await userEvent.click(openList()!.children[4]);
+  expect(rows()).toEqual(['Basics', 'Alpha', 'Shaping', 'Beta', 'Deep', 'Gamma']);
+  expect(openList()!.querySelector('.is-active')!.textContent).toBe('Gamma');
+  await userEvent.keyboard('{ArrowUp}{Enter}');
+  expect(onChange).toHaveBeenLastCalledWith('b');
+
+  field.focus();
+  await userEvent.keyboard('{ArrowDown}');
+  expect(onChange).toHaveBeenLastCalledWith('b');
+  await userEvent.keyboard('{End}');
+  expect(onChange).toHaveBeenLastCalledWith('c');
+});
+
+test('select: a value among the kept-back items opens the list with them shown', async () => {
+  const options = [{ value: 'a', label: 'Alpha' }];
+  const host = render(<Select value="c" options={options} more={[{ value: 'c', label: 'Gamma' }]} onChange={vi.fn()} />);
+  expect(byRole(host, 'combobox').textContent).toBe('Gamma');
+  await userEvent.click(byRole(host, 'combobox'));
+  expect([...openList()!.children].map((el) => el.textContent)).toEqual(['Alpha', 'Gamma']);
+});
+
 function menus(spy: (what: string) => void): { label: string; items: MenuItem[] }[] {
   return [
     {
@@ -320,6 +357,38 @@ test('menu bar: disabled items do nothing; submenus and arrow keys work', async 
   await userEvent.keyboard('{Enter}');
   expect(spy).toHaveBeenLastCalledWith('undo');
   expect(openMenus()).toHaveLength(0);
+});
+
+test('menu: headings are skipped and cannot be chosen, and an item shows its hint while highlighted', async () => {
+  const spy = vi.fn();
+  const items: MenuItem[] = [
+    { heading: 'Basics' },
+    { label: 'Filter', onSelect: () => spy('filter'), hint: 'Adds a filter.' },
+    { heading: 'Shaping' },
+    { label: 'Drive', onSelect: () => spy('drive') },
+  ];
+  const host = render(
+    <>
+      <MenuBar menus={[{ label: 'Add', items }]} />
+      <HintProbe />
+    </>,
+  );
+  await userEvent.click(host.querySelector('.h-menubar-item')!);
+  expect([...document.querySelectorAll('.h-menu-heading')].map((el) => el.textContent)).toEqual(['Basics', 'Shaping']);
+  await userEvent.click(document.querySelector('.h-menu-heading')!);
+  expect(spy).not.toHaveBeenCalled();
+  expect(openMenus()).toHaveLength(1);
+
+  await userEvent.hover(item('Filter'));
+  expect(host.querySelector('[data-testid="hint"]')!.textContent).toBe('Adds a filter.');
+  await userEvent.keyboard('{ArrowDown}');
+  expect(item('Drive').classList.contains('is-active')).toBe(true);
+  expect(host.querySelector('[data-testid="hint"]')!.textContent).toBe('');
+  await userEvent.keyboard('{ArrowDown}');
+  expect(item('Filter').classList.contains('is-active')).toBe(true);
+  await userEvent.keyboard('{Enter}');
+  expect(spy).toHaveBeenLastCalledWith('filter');
+  expect(host.querySelector('[data-testid="hint"]')!.textContent).toBe('');
 });
 
 test('dialog: Escape closes it, the app behind gets no input, Tab stays inside', async () => {

@@ -11,9 +11,16 @@ interface Option {
   label: string;
 }
 
+/** An option, or the title of the options below it, which cannot be chosen. */
+export type SelectItem = Option | { heading: string };
+/** A row of the open list: an item, or the More… row that shows the hidden items. */
+type Row = SelectItem | 'more';
+
 interface SelectProps {
   value: string;
-  options: Option[];
+  options: SelectItem[];
+  /** Items kept behind a More… row at the end of the list until it is chosen or the value is one of them. */
+  more?: SelectItem[];
   onChange: (value: string) => void;
   width?: number;
   hint?: string;
@@ -22,6 +29,9 @@ interface SelectProps {
 
 const VISIBLE_ROWS = 10;
 const ROW = 16;
+
+const isOption = (row: Row | undefined): row is Option => typeof row === 'object' && 'value' in row;
+const selectable = (row: Row | undefined) => row === 'more' || isOption(row);
 
 /** The paper list with the selection bar; the open select and the gallery both draw it. */
 export function SelectList({
@@ -32,7 +42,7 @@ export function SelectList({
   onRowEnter,
   onRowClick,
 }: {
-  options: Option[];
+  options: Row[];
   active: number;
   style?: CSSProperties;
   listRef?: Ref<HTMLDivElement>;
@@ -40,32 +50,49 @@ export function SelectList({
   onRowClick?: (index: number) => void;
 }) {
   return (
-    <div className="h-select-list" role="listbox" data-h-popup ref={listRef} style={style}>
-      {options.map((o, i) => (
-        <div
-          key={o.value}
-          className={cx('h-select-option', i === active && 'is-active')}
-          role="option"
-          aria-selected={i === active}
-          onPointerEnter={() => onRowEnter?.(i)}
-          onClick={() => onRowClick?.(i)}
-        >
-          {o.label}
-        </div>
-      ))}
+    <div
+      className="h-select-list"
+      role="listbox"
+      data-h-popup
+      ref={listRef}
+      style={style}
+      onPointerDown={(e) => e.preventDefault()}
+    >
+      {options.map((o, i) =>
+        typeof o === 'object' && 'heading' in o ? (
+          <div key={`heading:${o.heading}`} className="h-select-heading" role="presentation">
+            {o.heading}
+          </div>
+        ) : (
+          <div
+            key={o === 'more' ? 'more' : o.value}
+            className={cx('h-select-option', i === active && 'is-active')}
+            role="option"
+            aria-selected={i === active}
+            onPointerEnter={() => onRowEnter?.(i)}
+            onClick={() => onRowClick?.(i)}
+          >
+            {o === 'more' ? 'More…' : o.label}
+          </div>
+        ),
+      )}
     </div>
   );
 }
 
-export function Select({ value, options, onChange, width = 120, hint, disabled }: SelectProps) {
+export function Select({ value, options, more = [], onChange, width = 120, hint, disabled }: SelectProps) {
   const hover = useHint(hint);
   const field = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [active, setActive] = useState(0);
   const [place, setPlace] = useState<{ left: number; top: number } | null>(null);
-  const index = options.findIndex((o) => o.value === value);
-  const current = options[index];
+  const values = [...options, ...more].filter(isOption);
+  const index = values.findIndex((o) => o.value === value);
+  const current = values[index];
+  const rowsFor = (all: boolean): Row[] => (all ? [...options, ...more] : more.length ? [...options, 'more'] : options);
+  const rows = rowsFor(expanded);
 
   useOutsidePointer(open, () => setOpen(false), field);
 
@@ -75,7 +102,7 @@ export function Select({ value, options, onChange, width = 120, hint, disabled }
     const h = list.current.offsetHeight;
     const below = r.bottom + h <= innerHeight;
     setPlace({ left: Math.round(r.left), top: Math.round(below ? r.bottom : r.top - h) });
-  }, [open]);
+  }, [open, expanded]);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -84,34 +111,50 @@ export function Select({ value, options, onChange, width = 120, hint, disabled }
   }, [open, active]);
 
   const show = () => {
-    setActive(Math.max(0, index));
+    const all = more.some((o) => isOption(o) && o.value === value);
+    const at = rowsFor(all).findIndex((o) => isOption(o) && o.value === value);
+    setExpanded(all);
+    setActive(at >= 0 ? at : rowsFor(all).findIndex(selectable));
     setPlace(null);
     setOpen(true);
   };
-  const choose = (i: number) => {
-    setOpen(false);
-    if (options[i] && options[i].value !== value) onChange(options[i].value);
-  };
-  const jump = (from: number, letter: string) => {
-    for (let k = 1; k <= options.length; k++) {
-      const i = (from + k) % options.length;
-      if (options[i].label.toLowerCase().startsWith(letter)) return i;
+  const pick = (row: Row | undefined) => {
+    if (row === 'more') {
+      setExpanded(true);
+      setActive(rowsFor(true).findIndex((o, i) => i >= options.length && isOption(o)));
+      return;
     }
-    return -1;
+    if (!isOption(row)) return;
+    setOpen(false);
+    if (row.value !== value) onChange(row.value);
   };
+  const choose = (i: number) => pick(rows[i]);
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (disabled) return;
+    // Open, the keys move through the rows of the list; closed, through every option.
+    const nav: Row[] = open ? rows : values;
     const at = open ? active : index;
-    const move = (i: number) => (open ? setActive(i) : choose(i));
-    const last = options.length - 1;
+    const move = (i: number) => (i < 0 ? undefined : open ? setActive(i) : pick(nav[i]));
+    const step = (from: number, dir: 1 | -1) => {
+      for (let i = from + dir; i >= 0 && i < nav.length; i += dir) if (selectable(nav[i])) return i;
+      return from;
+    };
+    const jump = (letter: string) => {
+      for (let k = 1; k <= nav.length; k++) {
+        const i = (at + k) % nav.length;
+        const row = nav[i];
+        if (isOption(row) && row.label.toLowerCase().startsWith(letter)) return i;
+      }
+      return -1;
+    };
     if (e.key === 'ArrowDown' && e.altKey) {
       if (open) choose(active);
       else show();
-    } else if (e.key === 'ArrowDown') move(Math.min(last, at + 1));
-    else if (e.key === 'ArrowUp') move(Math.max(0, at - 1));
-    else if (e.key === 'Home') move(0);
-    else if (e.key === 'End') move(last);
+    } else if (e.key === 'ArrowDown') move(step(at, 1));
+    else if (e.key === 'ArrowUp') move(step(at, -1));
+    else if (e.key === 'Home') move(step(-1, 1));
+    else if (e.key === 'End') move(step(nav.length, -1));
     else if (e.key === 'Enter' || e.key === ' ' || e.key === 'F4') {
       if (open) choose(active);
       else show();
@@ -120,7 +163,7 @@ export function Select({ value, options, onChange, width = 120, hint, disabled }
       setOpen(false);
       return;
     } else if (e.key.length === 1 && /\S/.test(e.key) && !e.ctrlKey && !e.metaKey) {
-      const i = jump(at, e.key.toLowerCase());
+      const i = jump(e.key.toLowerCase());
       if (i < 0) return;
       move(i);
     } else return;
@@ -154,7 +197,7 @@ export function Select({ value, options, onChange, width = 120, hint, disabled }
       {open &&
         createPortal(
           <SelectList
-            options={options}
+            options={rows}
             active={active}
             listRef={list}
             style={{

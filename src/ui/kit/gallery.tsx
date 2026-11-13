@@ -4,9 +4,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { LEVEL_NAMES, byLevel } from '../../core/levels';
 import { EFFECTS, MODS, SOURCES } from '../../core/modules';
 import { DIVISIONS, sweep, timebase } from '../../core/scope';
-import type { ModuleDef } from '../../core/modules';
+import type { ModuleDef, ParamSpec } from '../../core/modules';
 import { defaultParams } from '../../core/params';
 import type { Params } from '../../core/types';
 import {
@@ -494,6 +495,18 @@ function MenusSection() {
             ]}
             active={1}
           />
+          <MenuPanel
+            items={[
+              { heading: 'Basics' },
+              { label: 'Filter' },
+              { label: 'Delay' },
+              { heading: 'Shaping' },
+              { label: 'Drive' },
+              'separator',
+              { label: 'Deep', items: [] },
+            ]}
+            active={2}
+          />
         </div>
       </div>
     </GroupBox>
@@ -621,6 +634,38 @@ function ModuleRack({ def, led, moves }: { def: ModuleDef; led?: boolean; moves?
   );
 }
 
+/** A unit in beginner mode: Basics in the row, the other levels behind fold toggles (Shaping open). */
+function FoldedRack({ def }: { def: ModuleDef }) {
+  const defaults = defaultParams(def);
+  const [params, setParams] = useState<Params>(() => ({ ...defaults, voices: 3 }));
+  const [open, setOpen] = useState<Record<number, boolean>>({ 2: true });
+  const groups = byLevel(def.params);
+  const control = (p: ParamSpec) => (
+    <ParamControl
+      key={p.id}
+      spec={p}
+      value={params[p.id]}
+      onChange={(v) => setParams({ ...params, [p.id]: v })}
+      hint={`${p.label}.`}
+    />
+  );
+  return (
+    <RackUnit
+      name={def.label}
+      folds={([2, 3] as const).map((level) => ({
+        label: LEVEL_NAMES[level],
+        open: !!open[level],
+        lit: groups[level].some((p) => params[p.id] !== defaults[p.id]),
+        hint: `${LEVEL_NAMES[level]} controls.`,
+        onToggle: () => setOpen({ ...open, [level]: !open[level] }),
+        children: groups[level].map(control),
+      }))}
+    >
+      {groups[1].map(control)}
+    </RackUnit>
+  );
+}
+
 function RackSection() {
   const fm = SOURCES.find((d) => d.type === 'fm')!;
   const osc = SOURCES.find((d) => d.type === 'osc')!;
@@ -629,6 +674,7 @@ function RackSection() {
     <GroupBox label="Rack units" className="g-wide">
       <div className="g-rack">
         <ModuleRack def={osc} />
+        <FoldedRack def={osc} />
         <ModuleRack def={fm} />
         <ModuleRack def={sampler} />
         {EFFECTS.map((d) => (

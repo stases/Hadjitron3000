@@ -1,20 +1,15 @@
+import { usePrefs } from '../../app/prefs';
 import { MODULES, SOURCES } from '../../core/modules';
-import type { ChoiceSpec, ParamSpec } from '../../core/modules';
+import type { ParamSpec } from '../../core/modules';
 import type { Params } from '../../core/types';
 import { setParam, setSourceType } from '../../state/store';
-import { ParamControl } from '../kit';
+import { ParamControl, Select } from '../kit';
 import { PARAM_HINTS } from './hints';
+import { sourceItems } from './levels';
+import type { Cell } from './levels';
 
 /** In the module table both delay controls are called "time"; side by side they read SYNC and TIME. */
 const LABELS: Readonly<Record<string, Readonly<Record<string, string>>>> = { delay: { sync: 'Sync', time: 'Time' } };
-
-const SOURCE_SPEC: ChoiceSpec = {
-  kind: 'choice',
-  id: 'type',
-  label: 'Type',
-  options: SOURCES.map((d) => [d.type, d.label] as const),
-  def: 'osc',
-};
 
 interface ControlProps {
   channelId: string;
@@ -48,23 +43,30 @@ export function Param(props: ControlProps) {
 }
 
 /** A cell for every parameter of a module, in the order of the module table. */
-export function Params({ channelId, moduleId, type, params }: Omit<ControlProps, 'spec'>) {
+export function paramCells(channelId: string, moduleId: string, type: string, params: Params): Cell[] {
   return MODULES[type].params
     .filter((spec) => spec.kind !== 'sample')
-    .map((spec) => (
-      <Param key={spec.id} channelId={channelId} moduleId={moduleId} type={type} spec={spec} params={params} />
-    ));
+    .map((spec) => ({
+      ids: [spec.id],
+      node: <Param key={spec.id} channelId={channelId} moduleId={moduleId} type={type} spec={spec} params={params} />,
+    }));
 }
 
 export function SourceSelect({ channelId, type }: { channelId: string; type: string }) {
+  const beginner = usePrefs((p) => p.beginner);
+  const { options, more } = sourceItems(beginner, SOURCES);
   return (
     <div className="h-factory-cell is-wide">
-      <ParamControl
-        spec={SOURCE_SPEC}
-        value={type}
-        onChange={(v) => setSourceType(channelId, v as string)}
-        hint="What makes the sound: a tone, an FM pair, plain noise or a recording."
-      />
+      <div className="h-param">
+        <span className="h-param-label">Type</span>
+        <Select
+          value={type}
+          options={options}
+          more={more}
+          onChange={(v) => setSourceType(channelId, v)}
+          hint="What makes the sound: a tone, an FM pair, plain noise or a recording."
+        />
+      </div>
     </div>
   );
 }

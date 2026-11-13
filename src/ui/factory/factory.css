@@ -86,8 +86,10 @@
 
 .h-factory-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
-  gap: 8px;
+  gap: 6px 8px;
+  min-width: 0;
 }
 
 .h-factory-sampler {

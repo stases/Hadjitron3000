@@ -438,6 +438,16 @@
   background: var(--sel);
 }
 
+.h-select-heading {
+  height: 16px;
+  padding: 3px 4px 1px;
+  font: var(--font-small);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--ink-soft);
+}
+
 .h-stepper-readout,
 .h-stepper-input {
   flex: 1;
@@ -778,6 +788,20 @@
   box-shadow: inset 0 1px var(--lo), inset 0 -1px var(--hi);
 }
 
+.h-menu-heading {
+  height: 16px;
+  padding: 3px 6px 1px;
+  font: var(--font-small);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--ink-soft);
+}
+
+.h-menu-item + .h-menu-heading {
+  margin-top: 4px;
+}
+
 /* Progress bar */
 
 .h-progress {
@@ -901,17 +925,69 @@ button.h-led:focus-visible {
   margin: 2px -8px 0 0;
 }
 
-.h-rack-controls {
-  margin-bottom: 2px;
+/* The controls, then each open fold beside them, wrapping onto more lines when the unit is too narrow. */
+.h-rack-body {
   display: flex;
   flex: 1;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 6px 14px;
+  min-width: 0;
+}
+
+.h-rack-controls {
+  min-width: 0;
+  margin-bottom: 2px;
+  display: flex;
   align-items: flex-end;
   gap: 14px;
+}
+
+/* An open fold: a groove down its left edge, its name at the top and its controls below. */
+.h-rack-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding-left: 10px;
+  box-shadow: inset 1px 0 var(--lo), inset 2px 0 var(--hi);
+}
+
+.h-rack-section-label {
+  font: var(--font-small);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* The right edge: fold toggles at the top, move and remove buttons at the bottom, both 61px wide. */
+.h-rack-side {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-self: stretch;
+  gap: 4px;
+}
+
+.h-rack-folds {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.h-rack-folds .h-button {
+  justify-content: flex-start;
+  width: 61px;
+  height: 17px;
+  padding: 0 3px 1px;
+  font: var(--font-small);
+  text-transform: uppercase;
 }
 
 .h-rack-buttons {
   display: flex;
   gap: 2px;
+  margin-top: auto;
 }
 
 .h-screw {

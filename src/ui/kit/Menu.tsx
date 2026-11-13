@@ -3,21 +3,27 @@ import type { CSSProperties, Ref } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { cx } from './cx';
+import { setHint } from './hint';
 import { Icon } from './Icon';
 import { useOutsidePointer } from './popup';
 
-export type MenuItem =
-  | {
-      label: string;
-      shortcut?: string;
-      onSelect?(): void;
-      disabled?: boolean;
-      checked?: boolean;
-      items?: MenuItem[];
-    }
-  | 'separator';
+export interface MenuCommand {
+  label: string;
+  shortcut?: string;
+  onSelect?(): void;
+  disabled?: boolean;
+  checked?: boolean;
+  items?: MenuItem[];
+  /** Shown in the status bar while the item is highlighted. */
+  hint?: string;
+}
 
-const selectable = (item: MenuItem | undefined) => !!item && item !== 'separator' && !item.disabled;
+/** A command, a line between groups, or the title of the group below it, which cannot be chosen. */
+export type MenuItem = MenuCommand | 'separator' | { heading: string };
+
+const command = (item: MenuItem | undefined): item is MenuCommand =>
+  !!item && item !== 'separator' && !('heading' in item);
+const selectable = (item: MenuItem | undefined): item is MenuCommand => command(item) && !item.disabled;
 
 function nextSelectable(items: MenuItem[], from: number, dir: 1 | -1): number {
   for (let k = 1; k <= items.length; k++) {
@@ -44,6 +50,10 @@ export function MenuPanel({ items, active, style, panelRef, onItemEnter, onItemC
       {items.map((item, i) =>
         item === 'separator' ? (
           <div key={i} className="h-menu-separator" role="separator" />
+        ) : 'heading' in item ? (
+          <div key={i} className="h-menu-heading" role="presentation">
+            {item.heading}
+          </div>
         ) : (
           <div
             key={i}
@@ -87,6 +97,14 @@ function MenuPopup({ items, x, y, flipX, flipY, keyboard, onClose, onBack, onNav
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const subRef = useRef(sub);
   subRef.current = sub;
+  const activeItem = items[active];
+  const hint = command(activeItem) ? activeItem.hint : undefined;
+
+  useEffect(() => {
+    if (!hint) return;
+    setHint(hint);
+    return () => setHint(null);
+  }, [hint]);
 
   useLayoutEffect(() => {
     const el = panel.current;
@@ -107,7 +125,7 @@ function MenuPopup({ items, x, y, flipX, flipY, keyboard, onClose, onBack, onNav
 
   const choose = (index: number, kb: boolean) => {
     const item = items[index];
-    if (!selectable(item) || item === 'separator') return;
+    if (!selectable(item)) return;
     if (item.items) {
       setActive(index);
       openSub(index, kb);
@@ -127,7 +145,7 @@ function MenuPopup({ items, x, y, flipX, flipY, keyboard, onClose, onBack, onNav
           setActive(nextSelectable(items, active, e.key === 'ArrowDown' ? 1 : -1));
           break;
         case 'ArrowRight':
-          if (item && item !== 'separator' && item.items) openSub(active, true);
+          if (command(item) && item.items) openSub(active, true);
           else onNavigate?.(1);
           break;
         case 'ArrowLeft':
@@ -152,7 +170,7 @@ function MenuPopup({ items, x, y, flipX, flipY, keyboard, onClose, onBack, onNav
     return () => window.removeEventListener('keydown', onKey, true);
   });
 
-  const subItems = sub && items[sub.index];
+  const subItems = sub ? items[sub.index] : undefined;
   return createPortal(
     <>
       <MenuPanel
@@ -162,7 +180,7 @@ function MenuPopup({ items, x, y, flipX, flipY, keyboard, onClose, onBack, onNav
         style={{ position: 'fixed', left: pos?.left ?? x, top: pos?.top ?? y, visibility: pos ? undefined : 'hidden' }}
         onItemEnter={(i) => {
           const item = items[i];
-          if (!selectable(item) || item === 'separator') {
+          if (!selectable(item)) {
             setActive(-1);
             setSub(null);
             return;
@@ -174,7 +192,7 @@ function MenuPopup({ items, x, y, flipX, flipY, keyboard, onClose, onBack, onNav
         onItemClick={(i) => choose(i, false)}
         onPointerLeave={() => !subRef.current && setActive(-1)}
       />
-      {sub && subItems && subItems !== 'separator' && subItems.items && (
+      {sub && command(subItems) && subItems.items && (
         <MenuPopup
           key={sub.index}
           items={subItems.items}

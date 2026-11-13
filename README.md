@@ -84,6 +84,8 @@ A project holds up to twenty-six blocks. A block can also travel to other projec
 
 A sound is a rack of units, read from top to bottom. The source makes the tone: an oscillator, an FM pair, noise, or a sampler that plays an audio file. The amp envelope shapes its loudness over time. After that come as many effects as you like, in any order: filter, drive, delay and reverb. Modulators (envelopes and LFOs) move a knob of your choice for you, for example the filter cutoff or the pitch. The output unit sets level and pan.
 
+Every control and every unit has a level: Basics, Shaping or Deep. Basics is what you need for a sound that works, Shaping changes its character, and Deep is for the controls that take some explaining. The program starts in beginner mode, where each unit shows its Basics and keeps the rest behind small Shaping and Deep buttons at its right edge; press one to open that section beside the others. A lamp on the button lights when a control inside is no longer at its default, so nothing you hear is hidden. The Effect and Modulator lists and the source type are grouped by level too. Beginner Mode in the View menu turns all of this off and shows every control at once, and the program remembers your choice.
+
 Drag a knob up or down to turn it, hold Shift for fine steps, and double-click it to put it back. The status bar at the bottom of the window explains whatever is under the pointer.
 
 Play the sound on the piano at the bottom with the mouse, or on the computer keyboard: the row A S D F G H J K L plays the white keys and W E T Y U O P the black ones. Z and X change the octave.

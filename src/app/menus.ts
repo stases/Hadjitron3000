@@ -13,10 +13,12 @@ import {
   saveBlockAs, saveBlockToLibrary, saveProject, saveProjectAs, saveSoundAs, saveSoundToLibrary, showAbout,
   showShortcuts,
 } from './commands';
+import { setPrefs } from './prefs';
+import type { Prefs } from './prefs';
 import { modKey } from './shortcuts';
 import { startLesson } from './tour/tourStore';
 
-export function buildMenus(state: AppState): { label: string; tour?: string; items: MenuItem[] }[] {
+export function buildMenus(state: AppState, prefs: Prefs): { label: string; tour?: string; items: MenuItem[] }[] {
   const channel = state.channelId;
   const onChannel = (run: (id: string) => unknown) => ({
     disabled: !channel,
@@ -92,6 +94,13 @@ export function buildMenus(state: AppState): { label: string; tour?: string; ite
         { label: 'Factory', shortcut: modKey('1'), checked: state.view === 'factory', onSelect: () => setView('factory') },
         { label: 'Track', shortcut: modKey('2'), checked: state.view === 'track', onSelect: () => setView('track') },
         { label: 'Song', shortcut: modKey('3'), checked: state.view === 'song', onSelect: () => setView('song') },
+        'separator',
+        {
+          label: 'Beginner Mode',
+          checked: prefs.beginner,
+          hint: 'Folds the Shaping and Deep controls of each unit away and groups the add lists by level.',
+          onSelect: () => setPrefs({ beginner: !prefs.beginner }),
+        },
       ],
     },
     {

@@ -4,16 +4,20 @@ import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { userEvent } from 'vitest/browser';
 import { channelScope, noteOff, noteOn } from '../../src/app/audio';
-import { MODULES, modTargets } from '../../src/core/modules';
+import { usePrefs } from '../../src/app/prefs';
+import { newSound } from '../../src/core/defaults';
+import { EFFECTS, MODULES, modTargets } from '../../src/core/modules';
+import type { ModuleDef } from '../../src/core/modules';
 import { encodeWav } from '../../src/core/wav';
 import { preset } from '../../src/presets';
 import { demoProject } from '../../src/presets/projects';
 import {
-  addEffect, moveEffect, openProject, removeModule, replaceSound, selectChannel, setModuleOn, setParam, setSample,
-  setSourceType, useApp,
+  addEffect, moveEffect, openProject, removeModule, replaceSound, selectChannel, setModTarget, setModuleOn, setParam,
+  setSample, setSourceType, useApp,
 } from '../../src/state/store';
 import { FactoryView } from '../../src/ui/factory';
 import { PARAM_HINTS } from '../../src/ui/factory/hints';
+import { addMenu, sourceItems, useFolds } from '../../src/ui/factory/levels';
 
 // What the mocked channel tap plays: a sine of this many hertz at the given note, or silence.
 const tapped = vi.hoisted(() => ({ freq: 0, note: null as number | null }));
@@ -48,6 +52,8 @@ let root: Root;
 let host: HTMLElement;
 
 beforeEach(() => {
+  usePrefs.setState({ beginner: true });
+  useFolds.setState({}, true);
   openProject(demoProject(), null);
   host = document.createElement('div');
   host.style.cssText = 'display: flex; flex-direction: column; width: 1260px; height: 600px';
@@ -71,6 +77,30 @@ const sound = () => state().project.channels.find((c) => c.id === state().channe
 const units = () => [...host.querySelectorAll<HTMLElement>('.h-rack')].map((u) => u.getAttribute('aria-label'));
 const unit = (name: string) => host.querySelector<HTMLElement>(`.h-rack[aria-label="${name}"]`)!;
 const show = (name: string) => flushSync(() => selectChannel(channel(name).id));
+const pro = () => flushSync(() => usePrefs.setState({ beginner: false }));
+const knobs = (name: string) =>
+  [...unit(name).querySelectorAll('[role="slider"]')].map((k) => k.getAttribute('aria-label'));
+const folds = (name: string) => [...unit(name).querySelectorAll<HTMLElement>('.h-rack-folds .h-button')];
+const fold = (name: string, level: string) => folds(name).find((b) => b.textContent === level)!;
+const lit = (name: string, level: string) => fold(name, level).querySelector('.h-led')!.classList.contains('is-on');
+const sections = (name: string) =>
+  [...unit(name).querySelectorAll('.h-rack-section-label')].map((l) => l.textContent);
+const optionTexts = () => [...document.querySelectorAll('.h-select-option')].map((o) => o.textContent);
+/** The open menu as text: headings in capitals, a submenu with an arrow. */
+const menuText = () =>
+  [...document.querySelectorAll('.h-menu')[0].children].map((el) =>
+    el.classList.contains('h-menu-heading')
+      ? el.textContent!.toUpperCase()
+      : el.classList.contains('h-menu-separator')
+        ? '-'
+        : `${el.textContent}${el.getAttribute('aria-haspopup') === 'true' ? ' >' : ''}`,
+  );
+const addList = async (label: string) => {
+  await userEvent.click(host.querySelector(`[data-tour="add-${label}"] .h-button`)!);
+  const text = menuText();
+  await userEvent.keyboard('{Escape}');
+  return text;
+};
 
 test('the list selects channels and the header follows', async () => {
   const row = [...host.querySelectorAll('[role="option"]')].find((r) => r.textContent === 'Clap')!;
@@ -122,7 +152,126 @@ test('dragging a knob sets its parameter and the type select changes the source'
   await expect.poll(() => unit('Source').querySelector('.h-select-text')?.textContent).toBe('Noise');
 });
 
-test('the modulator target list matches modTargets', async () => {
+test('beginner mode shows Basics and folds the rest into labelled sections that stay open', async () => {
+  flushSync(() => replaceSound(state().channelId!, newSound('osc', 'Test')));
+  expect(knobs('Source')).toEqual(['Pitch']);
+  expect(folds('Source').map((b) => b.textContent)).toEqual(['Shaping', 'Deep']);
+  expect(lit('Source', 'Shaping')).toBe(false);
+  expect(sections('Source')).toEqual([]);
+  expect(folds('Amp')).toEqual([]);
+  expect(folds('Output')).toEqual([]);
+  expect(knobs('Amp')).toEqual(['Attack', 'Decay', 'Sustain', 'Release']);
+
+  await userEvent.click(fold('Source', 'Shaping'));
+  expect(fold('Source', 'Shaping').getAttribute('aria-pressed')).toBe('true');
+  expect(sections('Source')).toEqual(['Shaping']);
+  expect(knobs('Source')).toEqual(['Pitch', 'Fine', 'Voices', 'Spread', 'Noise']);
+  await userEvent.click(fold('Source', 'Deep'));
+  expect(sections('Source')).toEqual(['Shaping', 'Deep']);
+  expect(knobs('Source')).toEqual(['Pitch', 'Fine', 'Voices', 'Spread', 'Noise', 'Width']);
+
+  show('Warm Pad');
+  expect(sections('Source')).toEqual(['Shaping', 'Deep']);
+  await userEvent.click(fold('Source', 'Shaping'));
+  await userEvent.click(fold('Source', 'Deep'));
+  expect(knobs('Source')).toEqual(['Pitch']);
+});
+
+test('a folded section with a changed control lights its lamp', async () => {
+  const id = state().channelId!;
+  flushSync(() => replaceSound(id, newSound('osc', 'Test')));
+  flushSync(() => setParam(id, 'source', 'width', 0.9));
+  expect(lit('Source', 'Shaping')).toBe(false);
+  expect(lit('Source', 'Deep')).toBe(true);
+  flushSync(() => setParam(id, 'source', 'width', 0.5));
+  expect(lit('Source', 'Deep')).toBe(false);
+
+  const delay = addEffect(id, 'delay')!;
+  await expect.poll(() => folds('Delay').length).toBe(1);
+  expect(lit('Delay', 'Shaping')).toBe(false);
+  flushSync(() => setParam(id, delay, 'pingpong', true));
+  expect(lit('Delay', 'Shaping')).toBe(true);
+});
+
+test('the sampler folds its controls by the same rules', async () => {
+  flushSync(() => setSourceType(state().channelId!, 'sample'));
+  expect(knobs('Source')).toEqual(['Pitch', 'Start', 'End']);
+  expect(unit('Source').textContent).toContain('Load...');
+  expect(unit('Source').textContent).not.toContain('Loop');
+  await userEvent.click(fold('Source', 'Shaping'));
+  expect(knobs('Source')).toEqual(['Pitch', 'Start', 'End', 'Fine']);
+  expect(unit('Source').querySelector('.h-rack-section')!.textContent).toContain('Reverse');
+  await userEvent.click(fold('Source', 'Deep'));
+  expect(unit('Source').querySelectorAll('.h-rack-section')[1].textContent).toContain('Play');
+});
+
+test('pro mode shows every control in table order with no sections', () => {
+  pro();
+  show('Warm Pad');
+  expect(knobs('Source')).toEqual(['Pitch', 'Fine', 'Voices', 'Spread', 'Width', 'Noise']);
+  expect(knobs('Reverb')).toEqual(['Size', 'Tone', 'Mix']);
+  expect(host.querySelectorAll('.h-rack-folds, .h-rack-section')).toHaveLength(0);
+});
+
+test('the add lists and the source list are grouped by level in beginner mode and flat in pro mode', async () => {
+  expect(await addList('effect')).toEqual(['BASICS', 'Filter', 'Delay', 'Reverb', 'SHAPING', 'Drive']);
+  expect(await addList('modulator')).toEqual(['BASICS', 'Envelope', 'LFO']);
+  await userEvent.click(unit('Source').querySelector('[role="combobox"]')!);
+  expect([...document.querySelector('.h-select-list')!.children].map((el) => el.textContent)).toEqual([
+    'Basics', 'Oscillator', 'Noise', 'Sampler', 'Shaping', 'FM Pair',
+  ]);
+  await userEvent.keyboard('{Escape}');
+
+  pro();
+  expect(await addList('effect')).toEqual(['Filter', 'Drive', 'Delay', 'Reverb']);
+  expect(await addList('modulator')).toEqual(['Envelope', 'LFO']);
+  await userEvent.click(unit('Source').querySelector('[role="combobox"]')!);
+  expect(optionTexts()).toEqual(['Oscillator', 'FM Pair', 'Noise', 'Sampler']);
+  expect(document.querySelector('.h-select-heading')).toBeNull();
+});
+
+test('Deep modules wait one step away: in a submenu of the add list and behind More… in the source list', () => {
+  const defs: ModuleDef[] = [...EFFECTS, { type: 'deepfx', kind: 'effect', label: 'Deep One', level: 3, params: [] }];
+  const add = vi.fn();
+  const menu = addMenu(true, defs, add);
+  expect(menu.slice(-2, -1)).toEqual(['separator']);
+  const deep = menu.at(-1) as { label: string; items: { label: string; onSelect(): void }[] };
+  expect(deep.label).toBe('Deep');
+  expect(deep.items.map((i) => i.label)).toEqual(['Deep One']);
+  deep.items[0].onSelect();
+  expect(add).toHaveBeenCalledWith('deepfx');
+  expect(addMenu(false, defs, add)).toHaveLength(defs.length);
+
+  const sources = sourceItems(true, defs);
+  expect(sources.options).not.toContainEqual({ value: 'deepfx', label: 'Deep One' });
+  expect(sources.more).toEqual([{ heading: 'Deep' }, { value: 'deepfx', label: 'Deep One' }]);
+  expect(sourceItems(false, defs).more).toEqual([]);
+});
+
+test('in beginner mode a modulator offers only targets whose control is on screen, and its current one', async () => {
+  show('Warm Pad');
+  const id = channel('Warm Pad').id;
+  const delay = addEffect(id, 'delay')!;
+  await expect.poll(() => folds('Delay').length).toBe(1);
+  const targets = async () => {
+    await userEvent.click(unit('LFO').querySelector('[role="combobox"]')!);
+    const labels = optionTexts();
+    await userEvent.keyboard('{Escape}');
+    return labels;
+  };
+  expect(await targets()).not.toContain('Delay · Time');
+  expect(await targets()).toContain('Delay · Mix');
+  await userEvent.click(fold('Delay', 'Shaping'));
+  expect(await targets()).toContain('Delay · Time');
+  await userEvent.click(fold('Delay', 'Shaping'));
+
+  flushSync(() => setModTarget(id, sound().mods[0].id, { module: delay, param: 'time' }));
+  expect(await targets()).toContain('Delay · Time');
+  expect(unit('LFO').querySelector('.h-select-text')!.textContent).toBe('Delay · Time');
+});
+
+test('the modulator target list matches modTargets in pro mode', async () => {
+  pro();
   flushSync(() => replaceSound(state().channelId!, preset('Soft Keys')));
   await userEvent.click(unit('Envelope').querySelector('[role="combobox"]')!);
   const labels = [...document.querySelectorAll('.h-select-option')].map((o) => o.textContent);

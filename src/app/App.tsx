@@ -12,6 +12,7 @@ import { position, sampleRate } from './audio';
 import { documentName, dropFiles } from './commands';
 import { Dialogs } from './Dialogs';
 import { buildMenus } from './menus';
+import { usePrefs } from './prefs';
 import { Tour } from './tour/Tour';
 import { Transport } from './Transport';
 import './app.css';
@@ -24,7 +25,8 @@ const TABS = [
 
 function Menus() {
   const state = useApp();
-  return <MenuBar menus={buildMenus(state)} />;
+  const prefs = usePrefs();
+  return <MenuBar menus={buildMenus(state, prefs)} />;
 }
 
 /** Re-renders on every animation frame while `on`. */

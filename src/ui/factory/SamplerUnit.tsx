@@ -9,6 +9,8 @@ import { setParam, useApp } from '../../state/store';
 import { Button, Display, RackUnit, setHint, tokenColor, useHint } from '../kit';
 import { Control, Param, SourceSelect } from './controls';
 import { PARAM_HINTS } from './hints';
+import { useLevels } from './levels';
+import type { Cell } from './levels';
 
 const WAVE_W = 500;
 const WAVE_H = 76;
@@ -162,31 +164,41 @@ export function SamplerUnit({ channelId, source }: { channelId: string; source: 
     spec: paramSpec(MODULES.sample, pid)!,
     params: source.params,
   });
+  const cells: Cell[] = [
+    {
+      ids: ['sample'],
+      node: (
+        <div key="sample" className="h-factory-cell is-wide">
+          <div className="h-param">
+            <span className="h-param-label">Sample</span>
+            <Button onClick={() => void loadSample(channelId)} hint={PARAM_HINTS.sample.sample}>
+              Load...
+            </Button>
+          </div>
+        </div>
+      ),
+    },
+    ...['pitch', 'fine', 'start', 'end'].map((pid) => ({ ids: [pid], node: <Param key={pid} {...props(pid)} /> })),
+    {
+      ids: ['loop', 'reverse'],
+      node: (
+        <div key="loop" className="h-factory-cell is-wide is-stack">
+          <Control {...props('loop')} />
+          <Control {...props('reverse')} />
+        </div>
+      ),
+    },
+    { ids: ['mode'], node: <Param key="mode" {...props('mode')} /> },
+  ];
+  const { row, folds } = useLevels('sample', source.params, cells);
   return (
-    <RackUnit name="Source">
+    <RackUnit name="Source" folds={folds}>
       <div className="h-factory-sampler">
         <div className="h-factory-row">
           <SourceSelect channelId={channelId} type="sample" />
           <Waveform channelId={channelId} source={source} />
         </div>
-        <div className="h-factory-row">
-          <div className="h-factory-cell is-wide">
-            <div className="h-param">
-              <span className="h-param-label">Sample</span>
-              <Button onClick={() => void loadSample(channelId)} hint={PARAM_HINTS.sample.sample}>
-                Load...
-              </Button>
-            </div>
-          </div>
-          {['pitch', 'fine', 'start', 'end'].map((pid) => (
-            <Param key={pid} {...props(pid)} />
-          ))}
-          <div className="h-factory-cell is-wide is-stack">
-            <Control {...props('loop')} />
-            <Control {...props('reverse')} />
-          </div>
-          <Param {...props('mode')} />
-        </div>
+        <div className="h-factory-row">{row}</div>
       </div>
     </RackUnit>
   );

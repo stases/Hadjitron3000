@@ -105,7 +105,8 @@ const MAKE_A_SOUND: TourStep[] = [
   {
     title: 'The cutoff',
     text: 'Cutoff is where the filter starts to cut. Turn it down to about 300 Hz and play a few notes: the sound '
-      + 'goes dark and round. A little more Reso adds a whistle right at the cutoff.',
+      + 'goes dark and round. Press Shaping at the right of the unit for more: a little Reso adds a whistle right '
+      + 'at the cutoff.',
     target: 'unit-filter',
     view: 'factory',
     done: (look) => Number(effect(look, 'filter')?.params.cutoff ?? Infinity) <= 600,

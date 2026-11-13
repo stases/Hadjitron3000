@@ -2,6 +2,7 @@
 // The audio engine, the file format and the interface are all driven by this table,
 // so a new module starts here (and gets its audio in src/audio/modules).
 
+import type { Levelled } from './levels';
 import type { ModTarget, Sound } from './types';
 
 export type Taper = 'lin' | 'log' | 'cube';
@@ -14,7 +15,7 @@ export interface ModSpec {
   unit: string; // label of the display unit
 }
 
-export interface FloatSpec {
+export interface FloatSpec extends Levelled {
   kind: 'float';
   id: string;
   label: string;
@@ -27,7 +28,7 @@ export interface FloatSpec {
   mod?: ModSpec; // present when the parameter can be a modulation target
 }
 
-export interface ChoiceSpec {
+export interface ChoiceSpec extends Levelled {
   kind: 'choice';
   id: string;
   label: string;
@@ -35,7 +36,7 @@ export interface ChoiceSpec {
   def: string;
 }
 
-export interface BoolSpec {
+export interface BoolSpec extends Levelled {
   kind: 'bool';
   id: string;
   label: string;
@@ -43,7 +44,7 @@ export interface BoolSpec {
 }
 
 /** Holds a sample id (a key of Project.samples), or '' when no sample is loaded. */
-export interface SampleSpec {
+export interface SampleSpec extends Levelled {
   kind: 'sample';
   id: string;
   label: string;
@@ -52,7 +53,8 @@ export interface SampleSpec {
 export type ParamSpec = FloatSpec | ChoiceSpec | BoolSpec | SampleSpec;
 export type ModuleKind = 'source' | 'amp' | 'effect' | 'mod' | 'out';
 
-export interface ModuleDef {
+/** A module and each of its parameters have a level (src/core/levels.ts), Basics when not given. */
+export interface ModuleDef extends Levelled {
   type: string;
   kind: ModuleKind;
   label: string;
@@ -76,10 +78,12 @@ const c = (id: string, label: string, options: ChoiceSpec['options'], def = opti
   def,
 });
 const b = (id: string, label: string, def: boolean): BoolSpec => ({ kind: 'bool', id, label, def });
+const shaping = <T extends ParamSpec>(spec: T): T => ({ ...spec, level: 2 });
+const deep = <T extends ParamSpec>(spec: T): T => ({ ...spec, level: 3 });
 
 const percent: ModSpec = { depth: 1, span: 100, unit: '%' };
 const pitch = f('pitch', 'Pitch', -24, 24, 0, { unit: 'st', step: 1, mod: { depth: 4800, span: 48, unit: 'st' } });
-const fine = f('fine', 'Fine', -100, 100, 0, { unit: 'ct', step: 1 });
+const fine = shaping(f('fine', 'Fine', -100, 100, 0, { unit: 'ct', step: 1 }));
 const adsr = (attack: number, decay: number, sustain: number, release: number): FloatSpec[] => [
   f('attack', 'Attack', 0, 5, attack, { unit: 's', taper: 'cube' }),
   f('decay', 'Decay', 0, 5, decay, { unit: 's', taper: 'cube' }),
@@ -103,20 +107,21 @@ export const SOURCES: readonly ModuleDef[] = [
       c('wave', 'Wave', WAVES, 'sawtooth'),
       pitch,
       fine,
-      f('voices', 'Voices', 1, 7, 1, { step: 1 }),
-      f('spread', 'Spread', 0, 100, 15, { unit: 'ct' }),
-      f('width', 'Width', 0, 1, 0.5, { unit: '%' }),
-      f('noise', 'Noise', 0, 1, 0, { unit: '%' }),
+      shaping(f('voices', 'Voices', 1, 7, 1, { step: 1 })),
+      shaping(f('spread', 'Spread', 0, 100, 15, { unit: 'ct' })),
+      deep(f('width', 'Width', 0, 1, 0.5, { unit: '%' })),
+      shaping(f('noise', 'Noise', 0, 1, 0, { unit: '%' })),
     ],
   },
   {
     type: 'fm',
     kind: 'source',
     label: 'FM Pair',
+    level: 2,
     params: [
       pitch,
       fine,
-      f('ratio', 'Ratio', 0.25, 16, 2, { taper: 'log', unit: 'x', step: 0.01 }),
+      deep(f('ratio', 'Ratio', 0.25, 16, 2, { taper: 'log', unit: 'x', step: 0.01 })),
       f('amount', 'Amount', 0, 12, 2, { taper: 'cube', mod: { depth: 12, span: 12, unit: '' } }),
     ],
   },
@@ -142,12 +147,14 @@ export const SOURCES: readonly ModuleDef[] = [
       fine,
       f('start', 'Start', 0, 1, 0, { unit: '%' }),
       f('end', 'End', 0, 1, 1, { unit: '%' }),
-      b('loop', 'Loop', false),
-      b('reverse', 'Reverse', false),
-      c('mode', 'Play', [
-        ['oneshot', 'One shot'],
-        ['gate', 'Gate'],
-      ]),
+      shaping(b('loop', 'Loop', false)),
+      shaping(b('reverse', 'Reverse', false)),
+      deep(
+        c('mode', 'Play', [
+          ['oneshot', 'One shot'],
+          ['gate', 'Gate'],
+        ]),
+      ),
     ],
   },
 ];
@@ -166,21 +173,24 @@ export const EFFECTS: readonly ModuleDef[] = [
         ['bandpass', 'Band pass'],
       ]),
       f('cutoff', 'Cutoff', 20, 20000, 2000, { taper: 'log', unit: 'Hz', mod: { depth: 6000, span: 5, unit: 'oct' } }),
-      f('reso', 'Reso', 0, 1, 0.15, { unit: '%' }),
+      shaping(f('reso', 'Reso', 0, 1, 0.15, { unit: '%' })),
     ],
   },
   {
     type: 'drive',
     kind: 'effect',
     label: 'Drive',
+    level: 2,
     params: [
-      c('shape', 'Shape', [
-        ['soft', 'Soft'],
-        ['hard', 'Hard'],
-        ['fold', 'Fold'],
-      ]),
+      shaping(
+        c('shape', 'Shape', [
+          ['soft', 'Soft'],
+          ['hard', 'Hard'],
+          ['fold', 'Fold'],
+        ]),
+      ),
       f('amount', 'Amount', 0, 1, 0.3, { unit: '%' }),
-      f('tone', 'Tone', 200, 20000, 12000, { taper: 'log', unit: 'Hz' }),
+      shaping(f('tone', 'Tone', 200, 20000, 12000, { taper: 'log', unit: 'Hz' })),
       f('mix', 'Mix', 0, 1, 1, { unit: '%' }),
     ],
   },
@@ -205,10 +215,10 @@ export const EFFECTS: readonly ModuleDef[] = [
         ],
         '1/8d',
       ),
-      f('time', 'Time', 0.001, 2, 0.3, { taper: 'log', unit: 's', mod: { depth: 0.02, span: 20, unit: 'ms' } }),
-      f('feedback', 'Feedback', 0, 0.95, 0.4, { unit: '%' }),
-      f('tone', 'Tone', 200, 20000, 4000, { taper: 'log', unit: 'Hz' }),
-      b('pingpong', 'Ping pong', false),
+      shaping(f('time', 'Time', 0.001, 2, 0.3, { taper: 'log', unit: 's', mod: { depth: 0.02, span: 20, unit: 'ms' } })),
+      shaping(f('feedback', 'Feedback', 0, 0.95, 0.4, { unit: '%' })),
+      shaping(f('tone', 'Tone', 200, 20000, 4000, { taper: 'log', unit: 'Hz' })),
+      shaping(b('pingpong', 'Ping pong', false)),
       f('mix', 'Mix', 0, 1, 0.3, { unit: '%', mod: percent }),
     ],
   },
@@ -218,7 +228,7 @@ export const EFFECTS: readonly ModuleDef[] = [
     label: 'Reverb',
     params: [
       f('size', 'Size', 0.2, 10, 2, { taper: 'log', unit: 's' }),
-      f('tone', 'Tone', 500, 20000, 6000, { taper: 'log', unit: 'Hz' }),
+      shaping(f('tone', 'Tone', 500, 20000, 6000, { taper: 'log', unit: 'Hz' })),
       f('mix', 'Mix', 0, 1, 0.25, { unit: '%', mod: percent }),
     ],
   },

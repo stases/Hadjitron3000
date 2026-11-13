@@ -169,8 +169,9 @@ test('the menus list their commands and follow the store', async () => {
   await userEvent.click(button('Close'));
 
   const view = await openMenu('View');
-  expect(labels(view)).toEqual(['Factory', 'Track', 'Song']);
-  expect(view.map((el) => el.querySelector('.h-menu-shortcut')!.textContent)).toEqual(['Ctrl+1', 'Ctrl+2', 'Ctrl+3']);
+  expect(labels(view)).toEqual(['Factory', 'Track', 'Song', 'Beginner Mode']);
+  expect(view.slice(0, 3).map((el) => el.querySelector('.h-menu-shortcut')!.textContent))
+    .toEqual(['Ctrl+1', 'Ctrl+2', 'Ctrl+3']);
   await userEvent.click(view[2]);
   expect(state().view).toBe('song');
   expect($('.h-tab.is-selected').textContent).toBe('Song');
@@ -230,6 +231,32 @@ test('Check for Updates says when there is nothing new, and why it cannot update
   await expect.poll(() => document.querySelector('.h-app-update-error')?.textContent)
     .toBe('Could not reach GitHub.\noffline');
   expect(updates.build).not.toHaveBeenCalled();
+});
+
+test('Beginner Mode in the View menu folds or shows the Factory controls and is remembered', async () => {
+  localStorage.clear();
+  renderApp();
+  store.setView('factory');
+  store.selectChannel(state().project.channels.find((c) => c.sound.name === 'Warm Pad')!.id);
+  const knobs = () => $$('.h-rack[aria-label="Source"] [role="slider"]').map((k) => k.getAttribute('aria-label'));
+  const item = async () => (await openMenu('View')).find((el) => el.textContent === 'Beginner Mode')!;
+  await expect.poll(knobs).toEqual(['Pitch']);
+  const beginner = await item();
+  expect(beginner.querySelector('.h-menu-check svg')).not.toBeNull();
+  await userEvent.hover(beginner);
+  expect($('.h-statusbar').textContent).toContain('groups the add lists by level');
+
+  await userEvent.click(beginner);
+  await expect.poll(knobs).toEqual(['Pitch', 'Fine', 'Voices', 'Spread', 'Width', 'Noise']);
+  expect($$('.h-rack-folds')).toHaveLength(0);
+  expect((await item()).querySelector('.h-menu-check svg')).toBeNull();
+  await userEvent.keyboard('{Escape}');
+  expect(JSON.parse(localStorage.getItem('hadjitron-prefs')!)).toEqual({ beginner: false });
+  expect(state().past).toHaveLength(0);
+
+  await userEvent.click(await item());
+  await expect.poll(knobs).toEqual(['Pitch']);
+  expect(JSON.parse(localStorage.getItem('hadjitron-prefs')!)).toEqual({ beginner: true });
 });
 
 test('the tempo follows dragging, the wheel and typing', async () => {

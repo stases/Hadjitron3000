@@ -13,12 +13,15 @@ import {
   saveBlockAs, saveBlockToLibrary, saveProject, saveProjectAs, saveSoundAs, saveSoundToLibrary, showAbout,
   showShortcuts,
 } from './commands';
-import { setPrefs } from './prefs';
+import { setPrefs, toggleMetronome } from './prefs';
 import type { Prefs } from './prefs';
+import { toggleRecord } from './record';
 import { modKey } from './shortcuts';
 import { startLesson } from './tour/tourStore';
 
-export function buildMenus(state: AppState, prefs: Prefs): { label: string; tour?: string; items: MenuItem[] }[] {
+export function buildMenus(
+  state: AppState, prefs: Prefs, record: boolean,
+): { label: string; tour?: string; items: MenuItem[] }[] {
   const channel = state.channelId;
   const onChannel = (run: (id: string) => unknown) => ({
     disabled: !channel,
@@ -69,6 +72,10 @@ export function buildMenus(state: AppState, prefs: Prefs): { label: string; tour
       label: 'Track',
       items: [
         { label: 'Play / Stop', shortcut: 'Space', onSelect: () => setPlaying(!state.playing) },
+        {
+          label: 'Record', shortcut: 'R', checked: record, disabled: state.scope === 'song', onSelect: toggleRecord,
+        },
+        { label: 'Metronome', shortcut: 'C', checked: prefs.metronome, onSelect: toggleMetronome },
       ],
     },
     {

@@ -30,6 +30,8 @@ export const SHORTCUT_GROUPS: { label: string; keys: [string, string][] }[] = [
       ['Space', 'Play or stop'],
       ['A W S E D F T G Y H U J K O L P', 'Play the selected sound like a piano'],
       ['Z, X', 'Octave down, up'],
+      ['R', 'Record into the block; when stopped, after a bar of clicks'],
+      ['C', 'Metronome on or off'],
     ],
   },
   {

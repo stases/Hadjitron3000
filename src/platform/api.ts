@@ -18,6 +18,12 @@ export interface SavedFile {
   path: string | null;
 }
 
+/** Where a set of exported files goes: a folder the user chose in Electron; the browser downloads each file. */
+export interface Folder {
+  /** Write a file by its plain name (no folders in it), replacing one of that name. */
+  write(name: string, bytes: Uint8Array): Promise<void>;
+}
+
 /** A folder of named files of one kind (~/Documents/Hadjitron 3000/Sounds or /Blocks in Electron). */
 export interface Library {
   list(): Promise<string[]>; // names without extension, sorted
@@ -59,6 +65,9 @@ export interface Platform {
     bytes: Uint8Array;
     path?: string | null;
   }): Promise<SavedFile | null>;
+
+  /** Ask where a set of audio files should go. Resolves to null when the user cancels. */
+  chooseFolder(opts: { title: string }): Promise<Folder | null>;
 
   library: Library; // the user's sounds, .h3s
   blocks: Library; // the user's blocks, .h3b

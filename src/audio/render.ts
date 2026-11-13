@@ -3,7 +3,9 @@
 import { createMp3Encoder } from 'wasm-media-encoders';
 import { TICKS_PER_STEP, defaultMixer, newChannel, newLanes } from '../core/defaults';
 import { eventsBetween, loopSteps, stepSeconds } from '../core/sequencer';
-import type { ModuleInst, NoteEvent, Pcm, PlayScope, Project, SampleData, Sound } from '../core/types';
+import type {
+  Channel, ModuleInst, NoteEvent, Pcm, PlayScope, Project, SampleData, Sound,
+} from '../core/types';
 import { Engine } from './engine';
 import { playEvent } from './transport';
 import { SHORT_TAILS, delayTime } from './modules/effects';
@@ -108,6 +110,43 @@ export async function renderProject(
   const events = eventsBetween(project, scope, 0, steps * TICKS_PER_STEP);
   const buf = await render(project, events, loopSeconds + tail, sampleRate, onProgress);
   return trimmed(buf, Math.round(loopSeconds * sampleRate));
+}
+
+/**
+ * One render for each sound heard in the scope (one the mix lets through that has notes there), each that sound
+ * soloed through the normal graph: its effects, the master level and the soft clipper apply as in the mix. They all
+ * get the tail of the whole project and the length of the longest, so they line up.
+ */
+export async function renderStems(
+  project: Project,
+  scope: PlayScope,
+  opts: { loops?: number; tail?: number; onProgress?: (fraction: number, channel: Channel) => void } = {},
+): Promise<{ channel: Channel; pcm: Pcm }[]> {
+  const { loops, tail, onProgress } = opts;
+  const solo = project.channels.some((c) => c.solo);
+  const heard = new Set(eventsBetween(project, scope, 0, loopSteps(project, scope) * TICKS_PER_STEP)
+    .map((e) => e.channelId));
+  const channels = project.channels.filter((c) => heard.has(c.id) && (solo ? c.solo : !c.mute));
+  const stems: { channel: Channel; pcm: Pcm }[] = [];
+  for (const [index, channel] of channels.entries()) {
+    const alone = { ...project, channels: project.channels.map((c) => ({ ...c, solo: c.id === channel.id })) };
+    const pcm = await renderProject(alone, scope, {
+      loops, tail, onProgress: (f) => onProgress?.((index + f) / channels.length, channel),
+    });
+    stems.push({ channel, pcm });
+  }
+  const length = Math.max(0, ...stems.map((s) => s.pcm.channels[0].length));
+  return stems.map(({ channel, pcm }) => ({
+    channel,
+    pcm: {
+      sampleRate: pcm.sampleRate,
+      channels: pcm.channels.map((data) => {
+        const padded = new Float32Array(length);
+        padded.set(data);
+        return padded;
+      }),
+    },
+  }));
 }
 
 export async function renderSound(

@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -53,6 +53,12 @@ async function shell(argv: string[] = [], platform = 'linux', installed: string 
     quit: vi.fn(),
   });
   const openPath = vi.fn(async (_directory: string) => '');
+  const showOpenDialog = vi.fn(async (_win: unknown, _opts: unknown) =>
+    ({ canceled: true, filePaths: [] as string[] }));
+  type RequestHandler = (contents: unknown, permission: string, callback: (granted: boolean) => void,
+    details: { requestingUrl: string }) => void;
+  type CheckHandler = (contents: unknown, permission: string, origin: string) => boolean;
+  const permissions: { request?: RequestHandler; check?: CheckHandler } = {};
   const event = { sender: webContents, senderFrame: webContents.mainFrame };
   const invoke = (channel: string, args: unknown[] = [], sender = event) =>
     Promise.resolve().then(() => {
@@ -68,7 +74,13 @@ async function shell(argv: string[] = [], platform = 'linux', installed: string 
       windowOptions = options;
       return win;
     },
-    dialog: {},
+    dialog: { showOpenDialog },
+    session: {
+      defaultSession: {
+        setPermissionRequestHandler: (handler: RequestHandler) => { permissions.request = handler; },
+        setPermissionCheckHandler: (handler: CheckHandler) => { permissions.check = handler; },
+      },
+    },
     ipcMain: { handle: (channel: string, handler: Handler) => handlers.set(channel, handler) },
     Menu: { setApplicationMenu: vi.fn(), buildFromTemplate: vi.fn() },
     protocol: { registerSchemesAsPrivileged: vi.fn(), handle: vi.fn() },
@@ -89,7 +101,10 @@ async function shell(argv: string[] = [], platform = 'linux', installed: string 
       Uint8Array, URL, console,
     });
   }
-  return { app, bridge, invoke, event, openPath, handlers, windowOptions: () => windowOptions };
+  return {
+    app, bridge, invoke, event, openPath, showOpenDialog, permissions, webContents, handlers,
+    windowOptions: () => windowOptions,
+  };
 }
 
 test.each([
@@ -211,4 +226,64 @@ test('Electron offers updates only in an installed application on a Mac', async 
   ]);
   await expect(mac.invoke('update-restart')).rejects.toThrow('Nothing to install');
   await expect(mac.invoke('update-build')).rejects.toThrow('Cannot write to /Applications.');
+});
+
+test('Electron grants MIDI to the app itself and refuses every other permission', async () => {
+  const shellUnderTest = await shell();
+  const { permissions, webContents } = shellUnderTest;
+  await vi.waitFor(() => expect(shellUnderTest.windowOptions()).toBeDefined());
+  const request = (permission: string, url: string, contents: unknown = webContents) => {
+    let granted: boolean | undefined;
+    permissions.request!(contents, permission, (answer) => { granted = answer; }, { requestingUrl: url });
+    return granted;
+  };
+  expect(request('midi', 'app://hadjitron/')).toBe(true);
+  expect(request('midi', 'app://hadjitron/index.html#x')).toBe(true);
+  // Electron names even a request without system exclusive messages 'midiSysex'.
+  expect(request('midiSysex', 'app://hadjitron/')).toBe(true);
+  expect(request('midiSysex', 'https://example.com/')).toBe(false);
+  for (const permission of ['media', 'notifications', 'geolocation', 'clipboard-read', 'fullscreen', 'openExternal']) {
+    expect(request(permission, 'app://hadjitron/'), permission).toBe(false);
+  }
+  for (const url of ['https://example.com/', 'app://other/', 'file:///tmp/x.html', 'not a url']) {
+    expect(request('midi', url), url).toBe(false);
+  }
+  expect(request('midi', 'app://hadjitron/', {})).toBe(false);
+  expect(permissions.check!(webContents, 'midi', 'app://hadjitron')).toBe(true);
+  expect(permissions.check!(null, 'midi', 'app://hadjitron')).toBe(true);
+  expect(permissions.check!(webContents, 'notifications', 'app://hadjitron')).toBe(false);
+  expect(permissions.check!(webContents, 'midi', 'https://example.com')).toBe(false);
+});
+
+test('Electron writes exported files only by plain audio names into a folder the user chose', async () => {
+  const { bridge, invoke, event, showOpenDialog } = await shell();
+  expect(await bridge.chooseFolder({ title: 'Export' })).toBeNull();
+  const folder = path.join(documents, 'Stems');
+  await mkdir(folder);
+  showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [folder] });
+  const chosen = await bridge.chooseFolder({ title: 'Export' });
+  expect(showOpenDialog.mock.calls[1][1]).toMatchObject({ properties: ['openDirectory', 'createDirectory'] });
+  const bytes = new Uint8Array([1, 2, 3]);
+  await chosen!.write('Song - Kick.wav', bytes);
+  await chosen!.write('Song - Bass.MP3', bytes);
+  await chosen!.write('Song - Kick.wav', new Uint8Array([4]));
+  expect(new Uint8Array(await readFile(path.join(folder, 'Song - Kick.wav')))).toEqual(new Uint8Array([4]));
+  expect(new Uint8Array(await readFile(path.join(folder, 'Song - Bass.MP3')))).toEqual(bytes);
+
+  for (const name of ['', '.', '..', '../up.wav', 'sub/x.wav', 'sub\\x.wav', 'a\0b.wav', '.hidden.wav', 'x.txt',
+    'x.wav.h3k', 'x', null, 1]) {
+    await expect(chosen!.write(name as string, bytes), String(name)).rejects.toThrow();
+  }
+  await expect(invoke('folder-write', [1, 'x.wav', [1, 2]])).rejects.toThrow('Invalid arguments');
+  // Only folders handed out by the dialog can be written to.
+  for (const id of [0, 2, '1', null, folder]) {
+    await expect(invoke('folder-write', [id, 'x.wav', bytes])).rejects.toThrow('Unknown folder');
+  }
+  await expect(invoke('folder-write', [1, 'x.wav'])).rejects.toThrow('Invalid arguments');
+  await expect(invoke('folder-write', [1, 'x.wav', bytes], { ...event, sender: {} as typeof event.sender }))
+    .rejects.toThrow('Untrusted sender');
+  await expect(invoke('folder-choose', [{ title: 1 }])).rejects.toThrow('Invalid arguments');
+  await expect(invoke('folder-choose', [])).rejects.toThrow('Invalid arguments');
+  expect((await readdir(folder)).sort()).toEqual(['Song - Bass.MP3', 'Song - Kick.wav']);
+  expect(await readdir(documents)).not.toContain('up.wav');
 });

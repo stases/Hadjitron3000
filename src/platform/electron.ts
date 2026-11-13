@@ -6,6 +6,7 @@ export function electronPlatform(bridge: Hadji): Platform {
     kind: 'electron',
     openFile: bridge.openFile,
     saveFile: bridge.saveFile,
+    chooseFolder: bridge.chooseFolder,
     library: bridge.library,
     blocks: bridge.blocks,
     window: bridge.frame === 'native' ? null : bridge.window,

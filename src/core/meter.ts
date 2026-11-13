@@ -46,6 +46,21 @@ export function beatOf(s: number, bar: Bar): number {
   return beat;
 }
 
+/**
+ * The beats that start on ticks in [from, to), with bars counted from tick 0 both ways (a count-in has negative
+ * ticks); the first beat of each bar is its downbeat.
+ */
+export function beatsBetween(from: number, to: number, bar: Bar): { tick: number; downbeat: boolean }[] {
+  const beats: { tick: number; downbeat: boolean }[] = [];
+  for (let start = Math.floor(from / bar.ticks) * bar.ticks; start < to; start += bar.ticks) {
+    for (const step of bar.beats) {
+      const tick = start + step * TICKS_PER_STEP;
+      if (tick >= from && tick < to) beats.push({ tick, downbeat: step === 0 });
+    }
+  }
+  return beats;
+}
+
 /** The meter a value names, or null when it is not one of METERS. */
 export function readMeter(value: unknown): Meter | null {
   const meter = Array.isArray(value) && value.length === 2

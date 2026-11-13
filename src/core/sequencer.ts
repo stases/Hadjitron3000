@@ -27,6 +27,16 @@ export function tickTime(tick: number, bpm: number, swing: number): number {
   return step * s + frac * s + swing * s * 0.5 * lean;
 }
 
+/** The tick that sounds `seconds` after the start of playback, fractional: the inverse of `tickTime`. */
+export function timeTick(seconds: number, bpm: number, swing: number): number {
+  const s = stepSeconds(bpm);
+  const pair = Math.floor(seconds / (2 * s));
+  const rest = seconds - pair * 2 * s;
+  const first = s * (1 + swing / 2);
+  const steps = rest < first ? rest / first : 1 + (rest - first) / (2 * s - first);
+  return (2 * pair + steps) * TICKS_PER_STEP;
+}
+
 export function patternSteps(pattern: Pattern, bar: Bar): number {
   return pattern.bars * bar.steps;
 }

@@ -25,6 +25,16 @@
   margin: 0;
 }
 
+.h-app-midi {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font: var(--font-small);
+  color: var(--ink-soft);
+}
+
 .h-app-tempo .h-lcd {
   display: block;
 }

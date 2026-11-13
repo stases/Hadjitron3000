@@ -1,11 +1,16 @@
 // The audio controller: the one place where the store meets the engine.
 // Views call these functions; nothing else in the interface touches Web Audio.
 
-import { Engine, Transport, renderProject } from '../audio';
+import { Engine, Metronome, Transport, outputDelay, renderProject } from '../audio';
 import { newChannel, newLanes } from '../core/defaults';
+import { barOf } from '../core/meter';
 import type { Owner } from '../core/mixer';
+import { heardTick } from '../core/record';
+import type { Clock } from '../core/record';
+import { tickTime } from '../core/sequencer';
 import type { Block, Channel, Project, SampleData, Sound } from '../core/types';
-import { playScope, useApp } from '../state/store';
+import { playScope, setPlaying, useApp } from '../state/store';
+import { usePrefs } from './prefs';
 
 const PREVIEW_ID = 'preview';
 const BLOCK_TAIL_SECONDS = 2;
@@ -16,6 +21,9 @@ interface BlockAudition {
 
 let engine: Engine | null = null;
 let transport: Transport | null = null;
+let metronome: Metronome | null = null;
+// Play starts after a bar of clicks.
+let countingIn = false;
 // A library sound being auditioned. It lives in the engine only, never in the project.
 let preview: { channel: Channel; samples: Record<string, SampleData> } | null = null;
 // A library block being auditioned: rendered offline on its own, then played as one buffer.
@@ -35,6 +43,9 @@ function boot(): Engine {
     engine = new Engine(new AudioContext({ latencyHint: 'interactive' }));
     engine.setProject(heard());
     transport = new Transport(engine, () => ({ project: heard(), scope: playScope(useApp.getState()) }));
+    metronome = new Metronome(engine.ctx, () => ({
+      clock: transport!.clock(), bar: barOf(useApp.getState().project.meter), on: usePrefs.getState().metronome,
+    }));
   }
   const ctx = engine.ctx as AudioContext;
   if (ctx.state === 'suspended') void ctx.resume();
@@ -48,11 +59,63 @@ export function initAudio(): void {
     if (state.playing === prev.playing) return;
     if (state.playing) {
       boot();
-      transport!.start();
+      const { project } = state;
+      transport!.start(countingIn ? tickTime(barOf(project.meter).ticks, project.bpm, project.swing) : 0);
+      metronome!.start();
     } else {
       transport?.stop();
+      metronome?.stop();
     }
+    countingIn = false;
   });
+}
+
+/** Start playing after one bar of clicks, so the first note can be played on time. */
+export function countIn(): void {
+  countingIn = true;
+  setPlaying(true);
+}
+
+/** Whether the audio context exists, so that sound may be made without a click or a key press first. */
+export function audioStarted(): boolean {
+  return engine !== null;
+}
+
+/** The transport's clock while it plays, or null. */
+export function clock(): Clock | null {
+  return transport?.clock() ?? null;
+}
+
+/** How long sound takes from the context's clock to the ear, in seconds. */
+export function latency(): number {
+  return engine ? outputDelay(engine.ctx) : 0;
+}
+
+/** The audio context's clock, 0 before there is one. */
+export function contextTime(): number {
+  return engine?.ctx.currentTime ?? 0;
+}
+
+/** The tick being heard right now, fractional and negative during the count-in; null when stopped. */
+export function heardNow(): number | null {
+  const c = clock();
+  return c && heardTick(c, contextTime(), latency());
+}
+
+/** A note played by hand: its channel, pitch, velocity (null when it is let go) and context time. */
+export interface LiveNote {
+  channelId: string;
+  note: number;
+  vel: number | null;
+  time: number;
+}
+
+const liveListeners = new Set<(e: LiveNote) => void>();
+
+/** Hear about every note played and let go by hand (keyboard, piano keys, MIDI). Returns the unsubscribe function. */
+export function onLiveNote(listener: (e: LiveNote) => void): () => void {
+  liveListeners.add(listener);
+  return () => liveListeners.delete(listener);
 }
 
 // Notes held right now, as "channelId:note", so the on-screen keyboard can light its keys.
@@ -69,13 +132,17 @@ function setHeld(channelId: string, note: number, on: boolean): void {
 
 /** Hold a note on a channel (keyboard, piano keys). */
 export function noteOn(channelId: string, note: number, vel = 0.8): void {
-  boot().noteOn(channelId, note, vel);
+  const e = boot();
+  e.noteOn(channelId, note, vel);
   setHeld(channelId, note, true);
+  liveListeners.forEach((listener) => listener({ channelId, note, vel, time: e.ctx.currentTime }));
 }
 
 export function noteOff(channelId: string, note: number): void {
   engine?.noteOff(channelId, note);
   setHeld(channelId, note, false);
+  const time = engine?.ctx.currentTime ?? 0;
+  liveListeners.forEach((listener) => listener({ channelId, note, vel: null, time }));
 }
 
 export function isHeld(channelId: string, note: number): boolean {

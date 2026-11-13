@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { MAX_BARS, TICKS_PER_STEP } from '../../src/core/defaults';
 import {
-  DEFAULT_METER, MAX_TICKS, METERS, barOf, barsToHold, beatOf, meterText, readMeter,
+  DEFAULT_METER, MAX_TICKS, METERS, barOf, barsToHold, beatOf, beatsBetween, meterText, readMeter,
 } from '../../src/core/meter';
 
 test.each([
@@ -47,4 +47,19 @@ test('bars to hold a length are rounded up and kept between one and the most bar
   expect(barsToHold(336, bar)).toBe(1);
   expect(barsToHold(337, bar)).toBe(2);
   expect(barsToHold(1e9, bar)).toBe(MAX_BARS);
+});
+
+test('beatsBetween lists the beats of a range with their downbeats, the count-in included', () => {
+  const four = barOf([4, 4]);
+  expect(beatsBetween(-384, 0, four)).toEqual([
+    { tick: -384, downbeat: true }, { tick: -288, downbeat: false }, { tick: -192, downbeat: false },
+    { tick: -96, downbeat: false },
+  ]);
+  expect(beatsBetween(90, 200, four)).toEqual([{ tick: 96, downbeat: false }, { tick: 192, downbeat: false }]);
+  expect(beatsBetween(96, 96, four)).toEqual([]);
+  // 7/8 groups its seven eighths four, four and six steps.
+  expect(beatsBetween(0, 2 * 336, barOf([7, 8])).map((b) => [b.tick, b.downbeat])).toEqual([
+    [0, true], [96, false], [192, false], [336, true], [432, false], [528, false],
+  ]);
+  expect(beatsBetween(0, 288, barOf([6, 8])).map((b) => b.tick)).toEqual([0, 144]);
 });

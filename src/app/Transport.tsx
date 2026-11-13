@@ -1,15 +1,21 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { PointerEvent } from 'react';
+import { TICKS_PER_STEP } from '../core/defaults';
 import { LEVEL_NAMES } from '../core/levels';
-import { DEFAULT_METER, METERS, meterText } from '../core/meter';
+import { DEFAULT_METER, METERS, barOf, beatOf, meterText } from '../core/meter';
 import type { FloatSpec } from '../core/modules';
 import { formatValue, fromNorm, toNorm } from '../core/params';
+import { QUANTIZE } from '../core/record';
 import { setBpm, setMaster, setMeter, setPlaying, setScope, setSwing, useApp } from '../state/store';
 import { toggleFold, useShown } from '../ui/factory/levels';
-import { Button, FoldToggles, Icon, Knob, Lcd, Meter, Scope, Select, Separator, Toolbar, setHint } from '../ui/kit';
-import { levels, scope } from './audio';
+import {
+  Button, FoldToggles, Icon, Knob, Lcd, Led, Meter, Scope, Select, Separator, Toolbar, setHint, useHint,
+} from '../ui/kit';
+import { heardNow, levels, scope } from './audio';
 import { fail } from './dialogStore';
-import { usePrefs } from './prefs';
+import { useMidi } from './midi';
+import { setPrefs, toggleMetronome, usePrefs } from './prefs';
+import { toggleRecord, useRecord } from './record';
 
 const SWING: FloatSpec = { kind: 'float', id: 'swing', label: 'Swing', min: 0, max: 1, def: 0, unit: '%' };
 const MASTER: FloatSpec = {
@@ -163,6 +169,79 @@ function TimeSignature() {
   );
 }
 
+/** The Record lamp: lit while recording, and blinking on each beat of the count-in. */
+function useRecordLamp(on: boolean, playing: boolean): boolean {
+  const [dark, setDark] = useState(false);
+  useEffect(() => {
+    if (!on || !playing) return;
+    let frame = requestAnimationFrame(function poll() {
+      const tick = heardNow() ?? 0;
+      const bar = barOf(useApp.getState().project.meter);
+      const step = Math.floor((tick + bar.ticks) / TICKS_PER_STEP);
+      // Lit for the first two steps of each beat of the count-in.
+      setDark(tick < 0 && step - bar.beats[beatOf(Math.max(0, step), bar)] >= 2);
+      frame = requestAnimationFrame(poll);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      setDark(false);
+    };
+  }, [on, playing]);
+  return on && !dark;
+}
+
+const RECORD_HINT = 'Records what you play on the selected sound into the block as it loops; '
+  + 'when stopped, a bar of clicks counts you in (R).';
+const SONG_HINT = 'Recording works while a block plays on repeat; press Block to record into it.';
+
+/** Record, the quantize grid of what it writes, and the metronome. */
+function Recorder() {
+  const on = useRecord((r) => r.on);
+  const playing = useApp((s) => s.playing);
+  const song = useApp((s) => s.scope === 'song');
+  const quantize = usePrefs((p) => p.quantize);
+  const metronome = usePrefs((p) => p.metronome);
+  const lit = useRecordLamp(on, playing);
+  return (
+    <>
+      <Button pressed={on} disabled={song} onClick={toggleRecord} hint={song ? SONG_HINT : RECORD_HINT}>
+        <Led on={lit} color="red" />
+        Rec
+      </Button>
+      <Select
+        value={String(quantize)}
+        options={QUANTIZE.map((q) => ({ value: String(q.ticks), label: q.label }))}
+        onChange={(value) => setPrefs({ quantize: Number(value) })}
+        width={60}
+        hint="Quantize: what you record moves to the nearest line of this grid, as the swing plays it (T is a triplet)."
+      />
+      <Button
+        square
+        pressed={metronome}
+        onClick={toggleMetronome}
+        hint="Metronome: a click on every beat while playing, a higher one on the first beat of the bar (C)."
+      >
+        <Icon name="metronome" />
+      </Button>
+    </>
+  );
+}
+
+/** A lamp that blinks on every note from a MIDI keyboard; its hint names the keyboards connected. */
+function MidiLamp() {
+  const { devices, lit, blocked } = useMidi();
+  const hint = devices.length === 0 ? 'No MIDI keyboard connected.'
+    : blocked ? `MIDI: ${devices.join(', ')}. Click anywhere once so the browser lets the app make sound.`
+      : `MIDI: ${devices.join(', ')}. Every key plays the selected sound.`;
+  const hover = useHint(hint);
+  return (
+    <span className="h-app-midi" {...hover.props}>
+      <Led on={lit} color="green" />
+      MIDI
+    </span>
+  );
+}
+
 function TransportKnob({ spec, value, onChange, hint }: {
   spec: FloatSpec;
   value: number;
@@ -196,12 +275,20 @@ function useTapTempo(): () => void {
   };
 }
 
+// Below this window width the scope gives up some of its width, so the whole bar fits from 1024 pixels on.
+const WIDE = matchMedia('(min-width: 1100px)');
+const subscribeWide = (listener: () => void) => {
+  WIDE.addEventListener('change', listener);
+  return () => WIDE.removeEventListener('change', listener);
+};
+
 export function Transport() {
   const playing = useApp((s) => s.playing);
   const swing = useApp((s) => s.project.swing);
   const master = useApp((s) => s.project.master);
   const playScope = useApp((s) => s.scope);
   const tapTempo = useTapTempo();
+  const wide = useSyncExternalStore(subscribeWide, () => WIDE.matches);
 
   return (
     <Toolbar className="h-app-transport">
@@ -242,8 +329,10 @@ export function Transport() {
         </Button>
       </div>
       <Separator vertical />
+      <Recorder />
       <div className="h-app-spacer" />
-      <Scope read={scope} width={150} height={30} />
+      <MidiLamp />
+      <Scope read={scope} width={wide ? 150 : 110} height={30} />
       <Meter read={levels} />
       <TransportKnob spec={MASTER} value={master} onChange={setMaster} hint="Volume of everything you hear and export." />
     </Toolbar>

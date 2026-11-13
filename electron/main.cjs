@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, Menu, protocol, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, protocol, session, shell } = require('electron');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { validateLibraryName, appFilePath, contentType } = require('./paths.cjs');
@@ -16,6 +16,8 @@ let pendingClose = null;
 let unresponsive = false;
 let lastDirectory = null;
 const pendingFiles = [];
+// Folders the user chose for an export, by the number the page writes into them with.
+const folders = new Map();
 // Updating needs an installed application (from `npm run app`) inside a .app bundle.
 const install = app.isPackaged ? updates.readInstall(__dirname) : null;
 const bundle = install && process.platform === 'darwin' ? updates.bundleOf(app.getPath('exe')) : null;
@@ -165,6 +167,24 @@ function registerRequests() {
     if (opts.path == null) lastDirectory = path.dirname(file);
     return { name: path.basename(file), path: file };
   });
+  handle('folder-choose', 1, async (opts) => {
+    assert(opts && typeof opts === 'object');
+    text(opts.title);
+    const result = await dialog.showOpenDialog(win, {
+      title: opts.title, properties: ['openDirectory', 'createDirectory'], defaultPath: await dialogDirectory(),
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    lastDirectory = result.filePaths[0];
+    folders.set(folders.size + 1, lastDirectory);
+    return folders.size;
+  });
+  handle('folder-write', 3, async (id, name, bytes) => {
+    assert(folders.has(id), 'Unknown folder');
+    validateLibraryName(name);
+    assert(/^[^.].*\.(wav|mp3)$/i.test(name), 'Invalid file name');
+    assert(bytes instanceof Uint8Array);
+    await fs.writeFile(path.join(folders.get(id), name), bytes);
+  });
   registerLibrary('library', 'Sounds', '.h3s');
   registerLibrary('blocks', 'Blocks', '.h3b');
   handle('window-minimize', 0, () => win.minimize());
@@ -241,6 +261,28 @@ async function serve(request) {
   } catch {
     return new Response(null, { status: 404 });
   }
+}
+
+function fromApp(url) {
+  try {
+    const target = new URL(url);
+    return target.protocol === appURL.protocol && target.host === appURL.host;
+  } catch {
+    return false;
+  }
+}
+
+// The app's own page may use MIDI; every other permission is refused, and so is any other page. The page asks for
+// MIDI without system exclusive messages, but Electron hands even that request over as 'midiSysex', so both names
+// are answered alike.
+const MIDI = ['midi', 'midiSysex'];
+
+function setPermissions() {
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    callback(MIDI.includes(permission) && webContents === win?.webContents && fromApp(details.requestingUrl));
+  });
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission, origin) =>
+    MIDI.includes(permission) && fromApp(origin));
 }
 
 function openExternal(url) {
@@ -333,6 +375,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('window-all-closed', () => app.quit());
   app.whenReady().then(() => {
     protocol.handle('app', serve);
+    setPermissions();
     registerRequests();
     setMenu();
     createWindow();

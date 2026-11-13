@@ -11,11 +11,12 @@ import { Icon, MenuBar, Separator, StatusBar, StatusField, TabPage, Tabs, Window
 import { MixerView } from '../ui/mixer';
 import { SongView } from '../ui/song';
 import { TrackView } from '../ui/track';
-import { position, sampleRate } from './audio';
+import { heardNow, position, sampleRate } from './audio';
 import { documentName, dropFiles } from './commands';
 import { Dialogs } from './Dialogs';
 import { buildMenus } from './menus';
 import { usePrefs } from './prefs';
+import { useRecord } from './record';
 import { Tour } from './tour/Tour';
 import { Transport } from './Transport';
 import './app.css';
@@ -34,7 +35,8 @@ const VIEWS: Record<View, ComponentType> = {
 function Menus() {
   const state = useApp();
   const prefs = usePrefs();
-  return <MenuBar menus={buildMenus(state, prefs)} />;
+  const record = useRecord((r) => r.on);
+  return <MenuBar menus={buildMenus(state, prefs, record)} />;
 }
 
 /** Re-renders on every animation frame while `on`. */
@@ -62,8 +64,8 @@ function useSampleRate(): number {
 }
 
 /**
- * What Play plays, the block or the song, and then where the transport is (bar.beat) while playing or how long
- * it is while stopped.
+ * What Play plays, the block or the song, and then where the transport is (bar.beat, or the beat of the count-in)
+ * while playing or how long it is while stopped.
  */
 function playText(state: AppState): [string, string] {
   const { project, scope } = state;
@@ -72,8 +74,10 @@ function playText(state: AppState): [string, string] {
   if (scope === 'song' && project.song.length === 0) return ['The song is empty', ''];
   const what = scope === 'song' ? 'Song' : `Block ${pattern.name}`;
   if (!state.playing) return [what, scope === 'song' ? bars(songBars(project)) : bars(pattern.bars)];
-  const step = Math.max(0, Math.floor(position()));
   const bar = barOf(project.meter);
+  const tick = heardNow() ?? 0;
+  if (tick < 0) return [what, `count-in ${beatOf(Math.floor((tick + bar.ticks) / TICKS_PER_STEP), bar) + 1}`];
+  const step = Math.max(0, Math.floor(position()));
   const at = scope === 'song' ? step % (songBars(project) * bar.steps)
     : heardAt(project, playScope(state), step * TICKS_PER_STEP)[0].tick / TICKS_PER_STEP;
   return [what, `${Math.floor(at / bar.steps) + 1}.${beatOf(at % bar.steps, bar) + 1}`];

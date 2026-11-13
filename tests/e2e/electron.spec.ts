@@ -14,6 +14,16 @@ test('the shell serves the app, persists sounds and blocks, and updates the docu
     await page.waitForLoadState('domcontentloaded');
     await expect(page).toHaveURL('app://hadjitron/');
     expect(await page.evaluate(() => window.hadji?.frame)).toBe('custom');
+    // MIDI is granted to the app (which asks for it without system exclusive messages); other permissions are refused.
+    const permission = (descriptor: object) => page.evaluate(
+      async (d) => (await navigator.permissions.query(d as PermissionDescriptor)).state, descriptor,
+    );
+    expect(await permission({ name: 'midi' })).toBe('granted');
+    expect(await permission({ name: 'notifications' })).toBe('denied');
+    expect(await permission({ name: 'geolocation' })).toBe('denied');
+    // Without a sound card the machine may not support MIDI, but the app is never refused it.
+    expect(await page.evaluate(() => navigator.requestMIDIAccess({ sysex: false })
+      .then(() => 'granted', (error: DOMException) => error.name))).not.toBe('NotAllowedError');
     try {
       const bytes = Array.from(new TextEncoder().encode('{"format":"h3s","version":1}'));
       await page.evaluate(async ({ name, bytes }) => {

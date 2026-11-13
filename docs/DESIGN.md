@@ -56,6 +56,8 @@ Buttons are 23px high with 10px of side padding; small square buttons are 19 to 
 
 A knob is a 36px canvas: a round putty cap with a light upper-left edge and a shaded lower-right edge, a short ink pointer, and a ring of eleven dots around it that light up in amber up to the current value. Under it sits the caption and the value. Knobs are dragged up and down (about 150px for the full range, Shift for a tenth of that), reset to their default on double-click, follow the scroll wheel, and take arrow keys when focused.
 
+A toggle with a lamp, such as Record, is a button with a `Led` beside its label: red for Record, lit while recording and blinking on the beats of a count-in. The MIDI lamp is a green `Led` over a small caption that lights for a moment with every note.
+
 Every control has a hint: one plain sentence shown in the status bar while the pointer is over it, and its live value while it is being dragged. There are no tooltips.
 
 Scrollbars are the Windows 98 kind: a dithered track, a raised thumb, and raised arrow buttons.

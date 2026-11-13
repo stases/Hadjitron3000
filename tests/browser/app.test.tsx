@@ -151,7 +151,7 @@ test('the menus list their commands and follow the store', async () => {
   expect(disabled(await openMenu('Sound'), 'Duplicate')).toBe(true);
   await userEvent.keyboard('{Escape}');
 
-  expect(labels(await openMenu('Track'))).toEqual(['Play / Stop']);
+  expect(labels(await openMenu('Track'))).toEqual(['Play / Stop', 'Record', 'Metronome']);
   await userEvent.keyboard('{Escape}');
 
   const block = await openMenu('Block');
@@ -258,12 +258,12 @@ test('Beginner Mode in the View menu folds or shows the Factory controls and is 
   expect($$('.h-folds')).toHaveLength(0);
   expect((await item()).querySelector('.h-menu-check svg')).toBeNull();
   await userEvent.keyboard('{Escape}');
-  expect(JSON.parse(localStorage.getItem('hadjitron-prefs')!)).toEqual({ beginner: false });
+  expect(JSON.parse(localStorage.getItem('hadjitron-prefs')!)).toMatchObject({ beginner: false });
   expect(state().past).toHaveLength(0);
 
   await userEvent.click(await item());
   await expect.poll(knobs).toEqual(['Pitch']);
-  expect(JSON.parse(localStorage.getItem('hadjitron-prefs')!)).toEqual({ beginner: true });
+  expect(JSON.parse(localStorage.getItem('hadjitron-prefs')!)).toMatchObject({ beginner: true });
 });
 
 test('the tempo follows dragging, the wheel and typing', async () => {

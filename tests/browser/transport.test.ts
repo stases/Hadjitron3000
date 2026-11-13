@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'vitest';
-import { Engine, Transport } from '../../src/audio';
+import { Engine, Transport, outputDelay } from '../../src/audio';
 import { stepSeconds } from '../../src/core/sequencer';
 import type { PlayScope, Project } from '../../src/core/types';
 import { adsr, peak, project, sound } from './helpers';
@@ -48,7 +48,8 @@ test('the transport schedules every step on time and reports the audible step', 
   // The position moves at the tempo: one step per 62.5 ms.
   expect(Math.abs(p2 - p1 - (t2 - t1) / step)).toBeLessThan(0.05);
   // Step 0 was scheduled at calls[0]; the audible step is the clock minus the output latency from there.
-  expect(Math.abs(p2 - (t2 - (ctx.outputLatency || 0) - calls[0]) / step)).toBeLessThan(0.05);
+  expect(outputDelay(ctx)).toBe(ctx.baseLatency + (ctx.outputLatency || 0));
+  expect(Math.abs(p2 - (t2 - outputDelay(ctx) - calls[0]) / step)).toBeLessThan(0.05);
   // Notes are scheduled up to 120 ms ahead of the clock, one per step, evenly spaced.
   expect(calls.length).toBeGreaterThan(p2);
   expect(calls.length).toBeLessThan(p2 + 0.12 / step + 2);
@@ -104,4 +105,23 @@ test('in 7/8 the block comes round every fourteen steps', async () => {
   transport.stop();
   expect(calls.length).toBeGreaterThanOrEqual(2);
   expect(calls[1] - calls[0]).toBeCloseTo(14 * stepSeconds(240), 9);
+});
+
+test('a count-in starts tick 0 a bar later and the clock counts from there', async () => {
+  const { calls, transport } = await setup(everyStep(240));
+  expect(transport.clock()).toBeNull();
+  const before = ctx.currentTime;
+  transport.start(1);
+  const clock = transport.clock()!;
+  expect(clock.bpm).toBe(240);
+  expect(clock.origin).toBeGreaterThanOrEqual(before + 1);
+  expect(clock.origin).toBeLessThan(before + 1.1);
+  await sleep(300);
+  // Nothing plays during the count-in, and the playhead waits on step 0.
+  expect(calls).toEqual([]);
+  expect(transport.position()).toBe(0);
+  await sleep(1000);
+  expect(calls[0]).toBeCloseTo(clock.origin, 9);
+  transport.stop();
+  expect(transport.clock()).toBeNull();
 });

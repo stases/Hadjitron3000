@@ -59,6 +59,8 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 let lastChange: { key: string; time: number } | null = null;
 // While a gesture is open every change is part of one undo step; `pushed` once its first change is in the history.
 let gesture: { pushed: boolean } | null = null;
+// The last change a recording pass made; the pass's next notes join its undo step while it is still the document.
+let lastTake: { take: object; project: Project } | null = null;
 
 function equal(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true;
@@ -88,12 +90,18 @@ function edit(
   recipe: (project: Project) => void,
   key?: string,
   selection: Partial<Pick<AppState, 'channelId' | 'patternId' | 'placementId' | 'step'>> = {},
+  take?: object,
 ): void {
   useApp.setState((state) => {
     const project = produce(state.project, recipe);
     if (equal(project, state.project)) return state;
     let merge: boolean;
-    if (gesture) {
+    if (take) {
+      merge = lastTake?.take === take && lastTake.project === state.project;
+      lastTake = { take, project };
+      lastChange = null;
+      if (gesture) gesture.pushed = false;
+    } else if (gesture) {
       merge = gesture.pushed;
       gesture.pushed = true;
     } else {
@@ -111,6 +119,7 @@ function edit(
 /** The history moved or was replaced: the next change starts a new undo step. */
 function forgetLastChange(): void {
   lastChange = null;
+  lastTake = null;
   if (gesture) gesture.pushed = false;
 }
 
@@ -481,9 +490,12 @@ export function addNote(patternId: string, channelId: string, note: NoteInit): s
 
 /**
  * Add several notes to a row in one change. Returns the ids of those added; a note that starts outside the block
- * range or on the start and pitch of another note of the row (or of one before it in the list) is left out.
+ * range or on the start and pitch of another note of the row (or of one before it in the list) is left out. With
+ * `take`, a recording pass, the change joins the pass's undo step as long as nothing else changed in between.
  */
-export function addNotes(patternId: string, channelId: string, notes: readonly NoteInit[]): string[] {
+export function addNotes(
+  patternId: string, channelId: string, notes: readonly NoteInit[], take?: object,
+): string[] {
   const { project } = useApp.getState();
   const pattern = project.patterns.find((p) => p.id === patternId);
   if (!pattern || !project.channels.some((c) => c.id === channelId)) return [];
@@ -499,7 +511,8 @@ export function addNotes(patternId: string, channelId: string, notes: readonly N
   const kept = new Set(clean.map((n) => n.id));
   const added = fresh.flatMap((n) => (kept.has(n.id) ? [n.id] : []));
   if (added.length > 0) {
-    edit((p) => { p.patterns.find((pattern) => pattern.id === patternId)!.notes[channelId] = clean; });
+    const write = (p: Project) => { p.patterns.find((pattern) => pattern.id === patternId)!.notes[channelId] = clean; };
+    edit(write, undefined, {}, take);
   }
   return added;
 }

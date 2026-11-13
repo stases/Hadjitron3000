@@ -1,6 +1,8 @@
 import { afterEach, expect, test, vi } from 'vitest';
 
 /** A fresh copy of the preferences module over the given storage. */
+const DEFAULTS = { beginner: true, metronome: false, quantize: 24 };
+
 async function load(storage: Partial<Storage>) {
   vi.stubGlobal('localStorage', storage);
   vi.resetModules();
@@ -30,17 +32,19 @@ afterEach(() => {
 
 test('beginner mode is on when nothing is stored', async () => {
   const { usePrefs } = await load(memory());
-  expect(usePrefs.getState()).toEqual({ beginner: true });
+  expect(usePrefs.getState()).toEqual(DEFAULTS);
 });
 
 test('a change is stored under one key and read back on the next start', async () => {
   const storage = memory();
   const first = await load(storage);
   first.setPrefs({ beginner: false });
+  first.toggleMetronome();
+  first.setPrefs({ quantize: 16 });
   expect(first.usePrefs.getState().beginner).toBe(false);
   expect(Object.keys(storage.data)).toEqual(['hadjitron-prefs']);
   const second = await load(storage);
-  expect(second.usePrefs.getState()).toEqual({ beginner: false });
+  expect(second.usePrefs.getState()).toEqual({ beginner: false, metronome: true, quantize: 16 });
 });
 
 test('broken storage leaves the defaults and never throws', async () => {
@@ -48,13 +52,13 @@ test('broken storage leaves the defaults and never throws', async () => {
     throw new Error('denied');
   };
   const broken = await load({ getItem: fail, setItem: fail });
-  expect(broken.usePrefs.getState()).toEqual({ beginner: true });
+  expect(broken.usePrefs.getState()).toEqual(DEFAULTS);
   expect(() => broken.setPrefs({ beginner: false })).not.toThrow();
   expect(broken.usePrefs.getState().beginner).toBe(false);
 
-  for (const stored of ['not json', 'null', '[1]', '{"beginner":"no"}']) {
+  for (const stored of ['not json', 'null', '[1]', '{"beginner":"no","metronome":1,"quantize":"8"}']) {
     const { usePrefs } = await load(memory({ 'hadjitron-prefs': stored }));
-    expect(usePrefs.getState(), stored).toEqual({ beginner: true });
+    expect(usePrefs.getState(), stored).toEqual(DEFAULTS);
   }
 });
 
@@ -62,6 +66,6 @@ test('storage that is missing altogether leaves the defaults', async () => {
   vi.stubGlobal('localStorage', undefined);
   vi.resetModules();
   const { usePrefs, setPrefs } = await import('../../src/app/prefs');
-  expect(usePrefs.getState()).toEqual({ beginner: true });
+  expect(usePrefs.getState()).toEqual(DEFAULTS);
   expect(() => setPrefs({ beginner: false })).not.toThrow();
 });

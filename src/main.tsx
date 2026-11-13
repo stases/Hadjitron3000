@@ -4,11 +4,15 @@ import { initAudio } from './app/audio';
 import { confirmDiscard, openFile } from './app/commands';
 import { openDialog } from './app/dialogStore';
 import { installKeys } from './app/keys';
+import { initMidi } from './app/midi';
+import { initRecord } from './app/record';
 import { restoreSession, watchSession } from './app/session';
 import { platform } from './platform';
 import './ui/theme/base.css';
 
 initAudio();
+initRecord();
+void initMidi();
 if (await restoreSession()) openDialog({ kind: 'welcome' });
 watchSession();
 installKeys();

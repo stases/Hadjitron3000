@@ -2,6 +2,7 @@
 // window of ticks at a time, so each note is scheduled exactly once.
 
 import { TICKS_PER_STEP } from '../core/defaults';
+import type { Clock } from '../core/record';
 import { eventsBetween, stepSeconds, tickTime } from '../core/sequencer';
 import type { NoteEvent, PlayScope, Project } from '../core/types';
 import type { Engine } from './engine';
@@ -10,6 +11,11 @@ const TICK_MS = 25;
 const LOOKAHEAD = 0.12;
 // The first step sounds this long after start(), so it is not already late when scheduled.
 const START_DELAY = 0.05;
+
+/** How long sound takes from the context's clock to the speakers: its processing latency and the device's. */
+export function outputDelay(ctx: BaseAudioContext): number {
+  return ctx instanceof AudioContext ? (ctx.baseLatency || 0) + (ctx.outputLatency || 0) : 0;
+}
 
 /** Start one note of the sequencer at context time `time`; live playback and export both play notes here. */
 export function playEvent(engine: Engine, e: NoteEvent, time: number): void {
@@ -33,12 +39,13 @@ export class Transport {
     return this.timer !== undefined;
   }
 
-  start(): void {
+  /** Start from tick 0, `lead` seconds from now (the count-in). */
+  start(lead = 0): void {
     this.stop();
     const { project } = this.read();
     this.bpm = project.bpm;
     this.swing = project.swing;
-    this.origin = this.engine.ctx.currentTime + START_DELAY;
+    this.origin = this.engine.ctx.currentTime + START_DELAY + lead;
     this.next = 0;
     this.timer = setInterval(() => this.tick(), TICK_MS);
     this.tick();
@@ -51,11 +58,15 @@ export class Transport {
     this.engine.stopAll();
   }
 
+  /** The clock the transport counts ticks on while it runs, or null when stopped. */
+  clock(): Clock | null {
+    return this.timer === undefined ? null : { origin: this.origin, bpm: this.bpm, swing: this.swing };
+  }
+
   position(): number {
     if (this.timer === undefined) return -1;
     const ctx = this.engine.ctx;
-    const latency = ctx instanceof AudioContext ? ctx.outputLatency || 0 : 0;
-    return Math.max(0, (ctx.currentTime - latency - this.origin) / stepSeconds(this.bpm));
+    return Math.max(0, (ctx.currentTime - outputDelay(ctx) - this.origin) / stepSeconds(this.bpm));
   }
 
   private tick(): void {

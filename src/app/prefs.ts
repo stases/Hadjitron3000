@@ -6,21 +6,22 @@ import { create } from 'zustand';
 export interface Prefs {
   /** Beginner mode folds Shaping and Deep controls into sections and groups the add lists by level. */
   beginner: boolean;
+  /** The metronome clicks on every beat while playing. */
+  metronome: boolean;
+  /** The grid notes played in are recorded on, in ticks (0 is Off). */
+  quantize: number;
 }
 
 const KEY = 'hadjitron-prefs';
-const DEFAULTS: Prefs = { beginner: true };
+const DEFAULTS: Prefs = { beginner: true, metronome: false, quantize: 24 };
 
 /** The stored preferences; a missing value or one of the wrong type gets its default. */
 function load(): Prefs {
   try {
     const stored: unknown = JSON.parse(localStorage.getItem(KEY) ?? '{}');
     const saved = (stored && typeof stored === 'object' ? stored : {}) as Record<string, unknown>;
-    const prefs = { ...DEFAULTS };
-    for (const key of Object.keys(DEFAULTS) as (keyof Prefs)[]) {
-      if (typeof saved[key] === typeof DEFAULTS[key]) prefs[key] = saved[key] as Prefs[typeof key];
-    }
-    return prefs;
+    return Object.fromEntries(Object.entries(DEFAULTS).map(([key, value]) =>
+      [key, typeof saved[key] === typeof value ? saved[key] : value])) as Prefs;
   } catch {
     return { ...DEFAULTS };
   }
@@ -35,4 +36,8 @@ export function setPrefs(change: Partial<Prefs>): void {
   } catch {
     // Not remembered beyond this run; the app works the same.
   }
+}
+
+export function toggleMetronome(): void {
+  setPrefs({ metronome: !usePrefs.getState().metronome });
 }

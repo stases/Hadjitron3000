@@ -1,4 +1,5 @@
-// The one global keyboard handler: menu shortcuts, the computer-keyboard piano, step entry and the piano roll.
+// The one global keyboard handler: menu shortcuts, the computer-keyboard piano, step entry, the piano roll, Record
+// and the metronome.
 
 import { TICKS_PER_STEP, newNote } from '../core/defaults';
 import { barOf } from '../core/meter';
@@ -13,6 +14,8 @@ import {
 import { rowCells } from '../ui/track/steps';
 import { noteOff, noteOn, tap } from './audio';
 import { exportAudio, newProject, openProject, saveProject, saveProjectAs } from './commands';
+import { toggleMetronome } from './prefs';
+import { recording, toggleRecord } from './record';
 import { IS_MAC } from './shortcuts';
 
 // Notes sounding because a key is down, by KeyboardEvent.code.
@@ -119,14 +122,17 @@ function stepKey(e: KeyboardEvent): boolean {
   return false;
 }
 
-/** A piano key: play the note and, with a step selected in the Track view, write it there and move on. */
+/**
+ * A piano key: play the note and, with a step selected in the Track view, write it there and move on, unless a
+ * recording pass is writing what is played.
+ */
 function pianoKey(e: KeyboardEvent, semitone: number): void {
   if (e.repeat || held.has(e.code)) return;
   const state = useApp.getState();
   const note = clampNote((state.octave + 2) * 12 + semitone);
   const { step } = state;
   const pattern = state.project.patterns.find((p) => p.id === state.patternId);
-  if (state.view === 'track' && step && pattern) {
+  if (state.view === 'track' && step && pattern && !recording()) {
     const cell = rowCells(pattern.notes[step.channelId]).get(step.index);
     if (cell) moveNotes(pattern.id, step.channelId, cell.notes.map((n) => n.id), 0, note - cell.notes[0].note);
     else addNote(pattern.id, step.channelId, newNote(step.index * TICKS_PER_STEP, note));
@@ -165,6 +171,10 @@ function onKeyDown(e: KeyboardEvent): void {
     if (!e.repeat) setPlaying(!useApp.getState().playing);
   } else if (key === 'z' || key === 'x') {
     if (!e.repeat) setOctave(useApp.getState().octave + (key === 'z' ? -1 : 1));
+  } else if (key === 'r') {
+    if (!e.repeat) toggleRecord();
+  } else if (key === 'c') {
+    if (!e.repeat) toggleMetronome();
   } else if (Object.hasOwn(KEY_SEMITONES, key)) {
     pianoKey(e, KEY_SEMITONES[key]);
   } else if (!rollKey(e) && !stepKey(e)) {

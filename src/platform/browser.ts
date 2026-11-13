@@ -28,6 +28,18 @@ function createLibrary(database: string, storeName: string): Library {
   };
 }
 
+function download(name: string, bytes: Uint8Array): void {
+  const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: 'application/octet-stream' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  link.hidden = true;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export const browserPlatform: Platform = {
   kind: 'browser',
   openFile: ({ filters }) => new Promise((resolve, reject) => {
@@ -52,17 +64,10 @@ export const browserPlatform: Platform = {
     input.click();
   }),
   saveFile: async ({ defaultName, bytes }) => {
-    const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: 'application/octet-stream' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = defaultName;
-    link.hidden = true;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    download(defaultName, bytes);
     return { name: defaultName, path: null };
   },
+  chooseFolder: async () => ({ write: async (name, bytes) => download(name, bytes) }),
   library: createLibrary('hadjitron-library', 'sounds'),
   blocks: createLibrary('hadjitron-block-library', 'blocks'),
   window: null,

@@ -44,6 +44,10 @@ contextBridge.exposeInMainWorld('hadji', {
   frame: process.argv.includes('--hadjitron-native-frame') ? 'native' : 'custom',
   openFile: (opts) => invoke('file-open', opts),
   saveFile: (opts) => invoke('file-save', opts),
+  chooseFolder: async (opts) => {
+    const id = await invoke('folder-choose', opts);
+    return id === null ? null : { write: (name, bytes) => invoke('folder-write', id, name, bytes) };
+  },
   library: library('library'),
   blocks: library('blocks'),
   window: {

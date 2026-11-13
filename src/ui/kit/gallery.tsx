@@ -228,6 +228,9 @@ function ButtonsSection() {
         <Button square onClick={noop}>
           <Icon name="stop" />
         </Button>
+        <Button square pressed onClick={noop}>
+          <Icon name="metronome" />
+        </Button>
         <Button square onClick={noop}>
           <Icon name="folder" />
         </Button>

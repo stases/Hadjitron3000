@@ -214,14 +214,16 @@ test('the time signature redraws the grid, the roll and the song, and changes in
 
 test('in beginner mode the time signature waits behind a Deep toggle, lit when the song is not in 4/4', async () => {
   const transport = host.querySelector<HTMLElement>('.h-app-transport')!;
-  expect(transport.querySelector('.h-select')).toBeNull();
+  // The other select of the transport is Record's quantize grid.
+  const selects = () => [...transport.querySelectorAll('.h-select')].map((s) => s.textContent);
+  expect(selects()).toEqual(['1/16']);
   expect(toggles(transport).map((t) => t.textContent)).toEqual(['Deep']);
   expect(lamps(transport)).toEqual([false]);
   flushSync(() => store.setMeter([6, 8]));
   expect(lamps(transport)).toEqual([true]);
   await userEvent.click(toggles(transport)[0]);
-  expect(transport.querySelector('.h-select')!.textContent).toBe('6/8');
+  expect(selects()).toEqual(['6/8', '1/16']);
   flushSync(() => setPrefs({ beginner: false }));
   expect(toggles(transport)).toEqual([]);
-  expect(transport.querySelector('.h-select')!.textContent).toBe('6/8');
+  expect(selects()).toEqual(['6/8', '1/16']);
 });

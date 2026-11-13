@@ -47,7 +47,7 @@ import {
 } from './index';
 import type { IconName, ListItem, MenuItem } from './index';
 import { SpriteImage } from './Icon';
-import { EMBLEM, EMBLEM_DRAFTS, ICONS } from './icons';
+import { EMBLEM, ICONS } from './icons';
 import { MenuPanel } from './Menu';
 import { SelectList } from './Select';
 import './gallery.css';
@@ -728,18 +728,10 @@ function IconsSection() {
         ))}
       </div>
       <div className="g-emblems">
-        {EMBLEM_DRAFTS.map((d, i) => (
-          <div key={d.name} className="g-emblem">
-            <SpriteImage sprite={d.big} />
-            <span className="g-emblem-title">
-              <SpriteImage sprite={d.small} />
-            </span>
-            <span className="g-icon-name">
-              {String.fromCharCode(65 + i)}: {d.name}
-              {d.big === EMBLEM ? ' (in use)' : ''}
-            </span>
-          </div>
-        ))}
+        <SpriteImage sprite={EMBLEM} />
+        <span className="g-emblem-title">
+          <Icon name="app" />
+        </span>
       </div>
     </GroupBox>
   );

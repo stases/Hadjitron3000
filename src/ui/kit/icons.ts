@@ -158,7 +158,7 @@ const WARNING = [
   '................................',
   '................................',
 ];
-const EMBLEMA = [
+const EMBLEM_ROWS = [
   '................................................',
   '................................................',
   '................................................',
@@ -208,108 +208,8 @@ const EMBLEMA = [
   '................................................',
   '................................................',
 ];
-const EMBLEMB = [
-  '................................................',
-  '................................................',
-  '................................................',
-  '.........kkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.........',
-  '.........khhhhhhhhhhhhhhhhhhhhhhhhhhhlk.........',
-  '.........khfffffffffffffffffffffffffflkss.......',
-  '.........khfffffffffffffffffffffffffflkss.......',
-  '.........khfflllllllllllllllllllllhfflkss.......',
-  '.........khfflkkkkkkkkkkkkkkkkkkkkhfflkss.......',
-  '.........khfflkcccccccccccccccccckhfflkss.......',
-  '.........khfflkcccccccccccccccccckhfflkss.......',
-  '.........khfflkcccaaccccccccaaccckhfflkss.......',
-  '.........khfflkcccaaccccccccaaccckhfflkss.......',
-  '.........khfflkcccccccccccccccccckhfflkss.......',
-  '.........khfflkcccccccccccccccccckhfflkss.......',
-  '.........khfflkcccccccccccccccccckhfflkss.......',
-  '.........khfflkcaacccccccccccccackhfflkss.......',
-  '.........khfflkccaacccccccccccaackhfflkss.......',
-  '.........khfflkcccaacccccccccaacckhfflkss.......',
-  '.........khfflkccccaacccccccaaccckhfflkss.......',
-  '.........khfflkcccccaaacccaaacccckhfflkss.......',
-  '.........khfflkcccccccaaaaacccccckhfflkss.......',
-  '.........khfflkcccccccccccccccccckhfflkss.......',
-  '.........khfflkcccccccccccccccccckhfflkss.......',
-  '.........khfflkcccccccccccccccccckhfflkss.......',
-  '.........khfflkkkkkkkkkkkkkkkkkkkkhfflkss.......',
-  '.........khffhhhhhhhhhhhhhhhhhhhhhhfflkss.......',
-  '.........khfffffffffffffffffffffffffflkss.......',
-  '.........khfffffffffffffffffffffffffflkss.......',
-  '.........khfffffffffffffffffffffffffflkss.......',
-  '.........khfffffffffffffffffffffffffflkss.......',
-  '.........khfffaaffffffkkkkkkkkkkkkffflkss.......',
-  '.........khfffffffffffhhhhhhhhhhhhffflkss.......',
-  '.........khfffffffffffffffffffffffffflkss.......',
-  '.........khfffffffffffffffffffffffffflkss.......',
-  '.........khfffffffffffffffffffffffffflkss.......',
-  '.........khfffffffffffffffffffffffffflkss.......',
-  '.........kllllllllllllllllllllllllllllkss.......',
-  '.........kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkss.......',
-  '.......kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.......',
-  '.......khhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhlk.......',
-  '.......kllllllllllllllllllllllllllllllllkss.....',
-  '.......kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkss.....',
-  '.........ssssssssssssssssssssssssssssssssss.....',
-  '.........ssssssssssssssssssssssssssssssssss.....',
-  '................................................',
-  '................................................',
-  '................................................',
-];
-const EMBLEMC = [
-  '................................................',
-  '................................................',
-  '..............................kk................',
-  '..............................kk................',
-  '...............................kss..............',
-  '................................ks..............',
-  '.................................k..............',
-  '.................................ks.............',
-  '..................................ks............',
-  '...................................k............',
-  '...................................ks...........',
-  '....................................ks..........',
-  '.....................................s..........',
-  '...kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk....',
-  '...khhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhlk....',
-  '...khffffffffffffffffffffffffffffffffffffflkss..',
-  '...khffffffffffffffffffffffffffffffffffffflkss..',
-  '...khfflllllllllllllllllllhffffffffffffffflkss..',
-  '...khfflkkkkkkkkkkkkkkkkkkhfffLLLLLLLLLLfflkss..',
-  '...khfflkcccccccccccccccckhffffffffffffffflkss..',
-  '...khfflkcccaaccccaaccccckhffffffffffffffflkss..',
-  '...khfflkccaaaccccaaccccckhfffLLLLLLLLLLfflkss..',
-  '...khfflkccacaccccaaacccckhffffffffffffffflkss..',
-  '...khfflkccacacccaacacccckhffffffffffffffflkss..',
-  '...khfflkccacaaccaccacccckhfffLLLLLLLLLLfflkss..',
-  '...khfflkcdadcacdadcacdcdkhffffffffffffffflkss..',
-  '...khfflkcaaccaccaccaccackhffffffffffffffflkss..',
-  '...khfflkcccccaccaccaacackhfffLLLLLLLLLLfflkss..',
-  '...khfflkcccccacaacccacackhffffffffffffffflkss..',
-  '...khfflkcccccaaaccccacackhffffffffffffffflkss..',
-  '...khfflkccccccaaccccaaackhfffLLLLLLLLLLfflkss..',
-  '...khfflkccccccaaccccaacckhffffffffffffffflkss..',
-  '...khfflkcccccccccccccccckhffffffffffffffflkss..',
-  '...khfflkkkkkkkkkkkkkkkkkkhfffLLLLLLLLLLfflkss..',
-  '...khffhhhhhhhhhhhhhhhhhhhhffffffffffffffflkss..',
-  '...khffffffffffffffffffffffffffffffffffffflkss..',
-  '...khffffffffffffffffffffffffffffffffffffflkss..',
-  '...khffffffffffffffffffffffffffffffffffffflkss..',
-  '...klllllllllllllllllllllllllllllllllllllllkss..',
-  '...kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkss..',
-  '.....kkkkkkssssssssssssssssssssssssskkkkkkssss..',
-  '.....kkkkkkssssssssssssssssssssssssskkkkkkssss..',
-  '.......ssssss.........................ssssss....',
-  '.......ssssss.........................ssssss....',
-  '................................................',
-  '................................................',
-  '................................................',
-  '................................................',
-];
 
-const APP_A = [
+const APP_ROWS = [
   '................',
   '.....kkkkkk.....',
   '.....k....k.....',
@@ -327,53 +227,11 @@ const APP_A = [
   '..kk........kk..',
   '................',
 ];
-const APP_B = [
-  '................',
-  '...kkkkkkkkkk...',
-  '...khhhhhhhlk...',
-  '...khkkkkkklk...',
-  '...khkaccaklk...',
-  '...khkccccklk...',
-  '...khkaccaklk...',
-  '...khkcaacklk...',
-  '...khkkkkkklk...',
-  '...khfffffflk...',
-  '...khakkkkflk...',
-  '...kllllllllk...',
-  '..kkkkkkkkkkkk..',
-  '..khhhhhhhhhlk..',
-  '..kkkkkkkkkkkk..',
-  '................',
-];
-const APP_C = [
-  '............k...',
-  '...........k....',
-  '..........k.....',
-  '.kkkkkkkkkkkkkk.',
-  '.khhhhhhhhhhhlk.',
-  '.khkkkkkkfffflk.',
-  '.khkcacckfLLLlk.',
-  '.khkacackfffflk.',
-  '.khkcccakfLLLlk.',
-  '.khkcccckfffflk.',
-  '.khkkkkkkfLLLlk.',
-  '.khfffffffffflk.',
-  '.khlllllllllllk.',
-  '.kkkkkkkkkkkkkk.',
-  '..kk........kk..',
-  '................',
-];
 
 const machine = (rows: string[]): Sprite => ({ rows, colors: MACHINE });
 
-/** Emblem drafts for the design lead: a 48 px About-box emblem and its 16 px title-bar icon. */
-export const EMBLEM_DRAFTS = [
-  { name: 'Desk unit', big: machine(EMBLEMA), small: machine(APP_A) },
-  { name: 'Cabinet', big: machine(EMBLEMB), small: machine(APP_B) },
-  { name: 'Radio', big: machine(EMBLEMC), small: machine(APP_C) },
-];
-
-export const EMBLEM = EMBLEM_DRAFTS[1].big;
+/** The app's emblem at 48 px, for the About box and the app icon. */
+export const EMBLEM = machine(EMBLEM_ROWS);
 
 export const ICONS = {
   play: one([
@@ -732,7 +590,7 @@ export const ICONS = {
   warning: { rows: WARNING, colors: MESSAGE },
   error: { rows: ERROR, colors: MESSAGE },
   question: { rows: QUESTION, colors: MESSAGE },
-  app: EMBLEM_DRAFTS[1].small,
+  app: machine(APP_ROWS),
 } satisfies Record<string, Sprite>;
 
 export type IconName = keyof typeof ICONS;

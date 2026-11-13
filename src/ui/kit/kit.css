@@ -231,6 +231,18 @@
   color: var(--ink-soft);
 }
 
+.h-knob.is-side {
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  column-gap: 4px;
+  align-items: center;
+  justify-items: start;
+}
+
+.h-knob.is-side canvas {
+  grid-row: span 2;
+}
+
 .h-knob:focus-visible {
   outline: none;
 }

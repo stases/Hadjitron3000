@@ -213,13 +213,6 @@
   margin-top: 12px;
 }
 
-.g-emblem {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-
 .g-emblem-title {
   padding: 2px;
   background: linear-gradient(90deg, var(--title-a), var(--title-b));

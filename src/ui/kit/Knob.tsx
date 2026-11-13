@@ -13,6 +13,8 @@ interface KnobProps {
   display: string;
   hint?: string;
   small?: boolean;
+  /** Caption and value to the right of the knob instead of under it, for toolbars. */
+  side?: boolean;
   steps?: number;
   disabled?: boolean;
   /** The ring lights from the centre outwards, for values whose middle is zero. */
@@ -28,7 +30,7 @@ const WHEEL_END_MS = 300;
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 export function Knob(props: KnobProps) {
-  const { value, label, display, hint, small, steps, disabled, bipolar } = props;
+  const { value, label, display, hint, small, side, steps, disabled, bipolar } = props;
   const canvas = useRef<HTMLCanvasElement>(null);
   const root = useRef<HTMLDivElement>(null);
   const latest = useRef(props);
@@ -128,7 +130,7 @@ export function Knob(props: KnobProps) {
   return (
     <div
       ref={root}
-      className={cx('h-knob', small && 'is-small', disabled && 'is-disabled')}
+      className={cx('h-knob', small && 'is-small', side && 'is-side', disabled && 'is-disabled')}
       role="slider"
       aria-label={label}
       aria-valuemin={0}

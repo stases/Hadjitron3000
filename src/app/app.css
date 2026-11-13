@@ -1,0 +1,184 @@
+/* The app shell: the main window, the transport bar and the dialogs. */
+
+.h-app {
+  position: fixed;
+  inset: 0;
+  min-width: 0;
+}
+
+.h-app-spacer {
+  flex: 1;
+}
+
+.h-app-joined {
+  display: flex;
+}
+
+/* Transport bar */
+
+.h-app-transport {
+  gap: 8px;
+  padding: 4px 4px 5px;
+}
+
+.h-app-transport .h-separator.is-vertical {
+  margin: 0;
+}
+
+.h-app-tempo .h-lcd {
+  display: block;
+}
+
+.h-app-bpm {
+  display: inline-block;
+  width: 5ch;
+  text-align: right;
+}
+
+input.h-app-bpm {
+  height: 24px;
+  padding: 0;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  text-shadow: inherit;
+  background: none;
+  caret-color: currentColor;
+  outline: none;
+}
+
+input.h-app-bpm::selection {
+  color: var(--crt);
+  background: var(--amber);
+}
+
+/* Tabs and the view */
+
+.h-app-views {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 4px 2px 4px;
+}
+
+.h-app-views > .h-tabpage {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.h-app-view {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.h-app-view > * {
+  flex: 1;
+  min-height: 0;
+}
+
+.h-app-drop {
+  position: absolute;
+  inset: 26px 2px 4px;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  background: var(--dither);
+  outline: 1px dotted var(--ink);
+  outline-offset: -5px;
+}
+
+.h-app-drop-card {
+  padding: 12px 16px;
+  background: var(--face);
+  box-shadow: var(--bevel-window);
+}
+
+/* Dialogs */
+
+.h-app-library {
+  display: flex;
+  gap: 10px;
+}
+
+.h-app-library-list {
+  width: 230px;
+}
+
+.h-app-library-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.h-app-library-buttons .h-button {
+  min-width: 96px;
+}
+
+.h-app-library-note {
+  margin: 8px 0 0;
+  color: var(--ink-soft);
+}
+
+.h-app-form {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: start;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.h-app-export-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.h-app-about {
+  display: flex;
+  gap: 16px;
+  padding: 4px 2px 0;
+}
+
+.h-app-about p {
+  margin: 0 0 8px;
+}
+
+.h-app-about-name {
+  letter-spacing: 1px;
+  text-shadow: 1px 0 0 currentColor;
+}
+
+.h-app-about-credits {
+  color: var(--ink-soft);
+}
+
+.h-app-shortcuts {
+  display: grid;
+  grid-template-columns: auto auto;
+  column-gap: 24px;
+  padding: 2px 10px 8px 8px;
+  background: var(--paper);
+  box-shadow: var(--bevel-sunken);
+}
+
+.h-app-shortcuts > span {
+  padding: 1px 0;
+  white-space: nowrap;
+}
+
+.h-app-shortcuts-head {
+  grid-column: 1 / -1;
+  padding: 8px 0 2px;
+  font: var(--font-small);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--lo);
+}

@@ -12,6 +12,7 @@ const MAX_VOICES = 24;
 // A stolen or stopped voice fades out over 1.25 times this (5 ms).
 const QUICK_RELEASE = 0.004;
 const MUTE_TAU = 0.003;
+export const CHANNEL_TAP_SIZE = 32768;
 
 interface Voice {
   note: number;
@@ -60,6 +61,7 @@ export class ChannelGraph {
   private readonly level: GainNode;
   private readonly panner: StereoPannerNode;
   private readonly gain: GainNode;
+  private analyser: AnalyserNode | null = null;
   private audible: boolean;
 
   constructor(
@@ -156,6 +158,24 @@ export class ChannelGraph {
     glide(this.gain.gain, audible ? 1 : 0, this.ctx.currentTime, MUTE_TAU);
   }
 
+  /** The channel's output after level and pan, summed to mono, ahead of mute and solo. Made on first use. */
+  tap(): AnalyserNode {
+    if (!this.analyser) {
+      this.analyser = new AnalyserNode(this.ctx, {
+        fftSize: CHANNEL_TAP_SIZE, channelCount: 1, channelCountMode: 'explicit',
+      });
+      this.panner.connect(this.analyser);
+    }
+    return this.analyser;
+  }
+
+  /** The lowest note sounding at `t`, release tails included, or null. */
+  sounding(t: number): number | null {
+    let low: number | null = null;
+    for (const v of this.voices) if (!v.done && v.env.t0 <= t && v.stopAt > t) low = Math.min(low ?? v.note, v.note);
+    return low;
+  }
+
   /** Start a note at `t`, held for `gate` seconds (Infinity for a live note). */
   start(note: number, vel: number, t: number, gate: number): void {
     this.retriggerEnvelopes(note, t, gate);
@@ -210,7 +230,10 @@ export class ChannelGraph {
     for (const mod of this.mods) mod.node.stop(t + 0.03);
     for (const fx of this.effects.values()) fx.dispose();
     this.slot.until = t + 0.2;
-    setTimeout(() => this.gain.disconnect(), 100);
+    setTimeout(() => {
+      this.gain.disconnect();
+      this.panner.disconnect();
+    }, 100);
   }
 
   private release(v: Voice, t: number, release: number): void {

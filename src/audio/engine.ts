@@ -1,8 +1,8 @@
-// The engine: one graph per channel, a master bus with a soft clipper, and a tap for meters.
+// The engine: one graph per channel, a master bus with a soft clipper, and taps for meters and scopes.
 
 import type { Project } from '../core/types';
 import { dbToGain, glide } from './automation';
-import { ChannelGraph, structureKey } from './channel';
+import { CHANNEL_TAP_SIZE, ChannelGraph, structureKey } from './channel';
 import { Bus } from './mix';
 import { decodeSample } from './samples';
 
@@ -36,6 +36,7 @@ export class Engine {
   private readonly clipper: WaveShaperNode;
   private readonly taps: AnalyserNode[];
   private readonly tapData = new Float32Array(TAP_SIZE);
+  private readonly channelData = new Float32Array(CHANNEL_TAP_SIZE);
   private readonly channels = new Map<string, ChannelGraph>();
   private readonly decodes = new Map<string, Promise<unknown>>();
   private project: Project | undefined;
@@ -127,6 +128,21 @@ export class Engine {
     const n = Math.min(out.length, TAP_SIZE);
     out.fill(0);
     out.set(this.tapData.subarray(TAP_SIZE - n), out.length - n);
+  }
+
+  /** The latest output of one channel, mono and before mute and solo, for the Factory's scope. */
+  channelScope(channelId: string, out: Float32Array): void {
+    const tap = this.channels.get(channelId)?.tap();
+    const n = Math.min(out.length, CHANNEL_TAP_SIZE);
+    out.fill(0);
+    if (!tap) return;
+    tap.getFloatTimeDomainData(this.channelData);
+    out.set(this.channelData.subarray(CHANNEL_TAP_SIZE - n), out.length - n);
+  }
+
+  /** The lowest note a channel is playing now, live or from the transport, or null. */
+  soundingNote(channelId: string): number | null {
+    return this.channels.get(channelId)?.sounding(this.ctx.currentTime) ?? null;
   }
 
   dispose(): void {

@@ -12,7 +12,8 @@ const LETTERS: Readonly<Record<number, string>> = Object.fromEntries(
 );
 
 /** The piano keys, as many whole octaves as fit, spread over the full width with whole-pixel key widths. */
-function Keys({ channelId, low }: { channelId: string | null; low: number }) {
+export function Piano({ channelId }: { channelId: string | null }) {
+  const low = (useApp((s) => s.octave) + 2) * 12;
   const root = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const pressed = useRef<{ channelId: string; note: number | null } | null>(null);
@@ -100,21 +101,18 @@ function Keys({ channelId, low }: { channelId: string | null; low: number }) {
   );
 }
 
-export function Keyboard({ channelId }: { channelId: string | null }) {
+/** The octave the keyboard starts at. */
+export function OctaveSwitch() {
   const octave = useApp((s) => s.octave);
-  const low = (octave + 2) * 12;
   return (
-    <>
-      <div className="h-factory-octave">
-        <Button square disabled={octave <= 0} onClick={() => setOctave(octave - 1)} hint={`${HINT_OCTAVE} down.`}>
-          <Icon name="left" />
-        </Button>
-        <Lcd>{noteName(low)}</Lcd>
-        <Button square disabled={octave >= 6} onClick={() => setOctave(octave + 1)} hint={`${HINT_OCTAVE} up.`}>
-          <Icon name="right" />
-        </Button>
-      </div>
-      <Keys channelId={channelId} low={low} />
-    </>
+    <div className="h-factory-octave">
+      <Button square disabled={octave <= 0} onClick={() => setOctave(octave - 1)} hint={`${HINT_OCTAVE} down.`}>
+        <Icon name="left" />
+      </Button>
+      <Lcd>{noteName((octave + 2) * 12)}</Lcd>
+      <Button square disabled={octave >= 6} onClick={() => setOctave(octave + 1)} hint={`${HINT_OCTAVE} up.`}>
+        <Icon name="right" />
+      </Button>
+    </div>
   );
 }

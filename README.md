@@ -86,6 +86,8 @@ Drag a knob up or down to turn it, hold Shift for fine steps, and double-click i
 
 Play the sound on the piano at the bottom with the mouse, or on the computer keyboard: the row A S D F G H J K L plays the white keys and W E T Y U O P the black ones. Z and X change the octave.
 
+The scope beside the piano shows the wave of the selected sound as you play it, standing still like on an old oscilloscope, so you can watch the shape change while you turn a knob. The number in its corner is the time per division; it follows the note you play, so a few cycles always fit.
+
 Save to Library keeps a sound for other projects. The library is the folder `Documents/Hadjitron 3000/Sounds`, and the Sound Library window lists it together with the seventeen factory sounds.
 
 ```

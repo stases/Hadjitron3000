@@ -160,6 +160,17 @@ export function scope(out: Float32Array): void {
   else out.fill(0);
 }
 
+/** The latest output of one channel, whether it is muted or not, for the Factory's scope. */
+export function channelScope(channelId: string, out: Float32Array): void {
+  if (engine) engine.channelScope(channelId, out);
+  else out.fill(0);
+}
+
+/** The lowest note a channel is playing now, from the keyboard or the transport, or null. */
+export function soundingNote(channelId: string): number | null {
+  return engine?.soundingNote(channelId) ?? null;
+}
+
 export function sampleRate(): number {
   return engine?.ctx.sampleRate ?? 0;
 }

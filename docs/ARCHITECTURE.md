@@ -53,6 +53,8 @@ modulators -> depth gains -> audio parameters
 master -> master level -> soft clip -> destination and analyser
 ```
 
+Each channel also has a tap of its own output ahead of mute and solo, made the first time the Factory's scope reads it.
+
 Each note is a voice with its own source and amp envelope. The effect chain and the modulators are shared by all voices of a channel; a modulation envelope restarts on every note and follows the most recent one. This keeps the processing cost per channel fixed no matter how many notes overlap.
 
 `engine.setProject(project)` is called on every change of the document. The store is immutable, so the engine compares object identities, applies parameter changes smoothly, and rebuilds only the channels whose structure changed.

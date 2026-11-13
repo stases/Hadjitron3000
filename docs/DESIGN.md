@@ -46,6 +46,8 @@ The area behind the window, which shows when the app runs in a browser, is the d
 
 Anything that shows a signal or a number that matters is an amber display: `--crt` background in a sunken bevel, `--amber` for the trace or the digits, `--amber-mid` for secondary marks, `--amber-dim` for the grid dots and unlit segments. Text on a display gets `text-shadow: var(--amber-glow)`. The scope, the level meter, envelope shapes and sample waveforms are all displays. Meter segments above 0 dB are `--red`.
 
+The Factory's scope is a bench scope: a dotted `--amber-dim` graticule, a sweep that starts on a rising zero crossing so the wave stands still, and a range and timebase that step in 1-2-5 like a real one. When the sound falls quiet its last trace holds in `--amber-mid`, steps down to `--amber-dim` and then clears to a resting line; it never fades smoothly.
+
 ## Controls
 
 Buttons are 23px high with 10px of side padding; small square buttons are 19 to 25px. The menu bar, the title bar and the status bar are 20px high. The cursor is always the plain arrow; buttons do not get a hand.

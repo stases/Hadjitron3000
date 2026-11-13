@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { EFFECTS, MODS, SOURCES } from '../../core/modules';
+import { DIVISIONS, sweep, timebase } from '../../core/scope';
 import type { ModuleDef } from '../../core/modules';
 import { defaultParams } from '../../core/params';
 import type { Params } from '../../core/types';
@@ -508,6 +509,20 @@ function fakeSignal(buf: Float32Array) {
   }
 }
 
+const BENCH_RATE = 48000;
+
+/** A plucked 220 Hz tone every six seconds, so the bench scope shows a running, a held and a resting trace. */
+function fakeNote(buf: Float32Array) {
+  const now = performance.now() / 1000;
+  for (let i = 0; i < buf.length; i++) {
+    const t = (now - (buf.length - 1 - i) / BENCH_RATE) % 6;
+    const ph = 2 * Math.PI * 220 * t;
+    buf[i] = t < 1.5 ? 0.6 * Math.exp(-2 * t) * (Math.sin(ph) + 0.4 * Math.sin(2 * ph) + 0.2 * Math.sin(3 * ph)) : 0;
+  }
+}
+
+const benchSweep = (buf: Float32Array) => sweep(buf, BENCH_RATE * DIVISIONS * timebase(220));
+
 function fakeLevels(): [number, number] {
   const t = performance.now() / 1000;
   const beat = Math.exp(-((t * 2) % 1) * 4);
@@ -544,6 +559,9 @@ function DisplaysSection() {
         <Scope read={fakeSignal} width={150} height={30} />
         <Meter read={fakeLevels} />
         <Display width={170} height={52} draw={drawEnvelope} />
+      </Row>
+      <Row label="Bench scope">
+        <Scope read={fakeNote} sweep={benchSweep} width={361} height={97} samples={8192} />
       </Row>
       <Row label="Lamps">
         {(['red', 'green', 'amber'] as const).map((c) => (

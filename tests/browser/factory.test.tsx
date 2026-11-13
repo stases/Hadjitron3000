@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { userEvent } from 'vitest/browser';
-import { noteOff, noteOn } from '../../src/app/audio';
+import { channelScope, noteOff, noteOn } from '../../src/app/audio';
 import { MODULES, modTargets } from '../../src/core/modules';
 import { encodeWav } from '../../src/core/wav';
 import { preset } from '../../src/presets';
@@ -14,6 +14,9 @@ import {
 } from '../../src/state/store';
 import { FactoryView } from '../../src/ui/factory';
 import { PARAM_HINTS } from '../../src/ui/factory/hints';
+
+// What the mocked channel tap plays: a sine of this many hertz at the given note, or silence.
+const tapped = vi.hoisted(() => ({ freq: 0, note: null as number | null }));
 
 vi.mock('../../src/app/audio', () => {
   const held = new Set<string>();
@@ -31,6 +34,13 @@ vi.mock('../../src/app/audio', () => {
       listeners.add(l);
       return () => listeners.delete(l);
     },
+    channelScope: vi.fn((_: string, out: Float32Array) => {
+      const t = performance.now() / 1000;
+      const w = 2 * Math.PI * tapped.freq;
+      for (let i = 0; i < out.length; i++) out[i] = 0.4 * Math.sin(w * (t + i / 48000));
+    }),
+    soundingNote: () => tapped.note,
+    sampleRate: () => 48000,
   };
 });
 
@@ -51,6 +61,8 @@ afterEach(async () => {
   root.unmount();
   host.remove();
   vi.clearAllMocks();
+  tapped.freq = 0;
+  tapped.note = null;
 });
 
 const state = () => useApp.getState();
@@ -124,7 +136,7 @@ test('the modulator target list matches modTargets', async () => {
 test('the keyboard plays notes, glides across keys and shows held notes', async () => {
   const id = state().channelId!;
   const key = (note: number) => host.querySelector<HTMLElement>(`[data-note="${note}"]`)!;
-  await expect.poll(() => key(60)).toBeTruthy();
+  await expect.poll(() => key(60)?.getBoundingClientRect().width).toBeGreaterThan(0);
   expect(key(60).textContent).toBe('C3A');
 
   const at = (note: number) => {
@@ -181,4 +193,30 @@ test('every parameter in the module table has a hint', () => {
   for (const def of Object.values(MODULES)) {
     for (const p of def.params) expect(PARAM_HINTS[def.type]?.[p.id], `${def.type} ${p.id}`).toBeTruthy();
   }
+});
+
+test('the scope shows the selected sound: a resting line, then a standing wave with its timebase', async () => {
+  show('Warm Pad');
+  const canvas = host.querySelector<HTMLCanvasElement>('.h-factory-scope canvas')!;
+  expect([canvas.width, canvas.height]).toEqual([361, 97]);
+  const g = canvas.getContext('2d')!;
+  /** The rows that hold a pixel of the given colour. */
+  const rows = (rgb: number[]) => {
+    const { data } = g.getImageData(0, 0, canvas.width, canvas.height);
+    const found = new Set<number>();
+    for (let i = 0; i < data.length; i += 4) {
+      if (rgb.every((c, k) => data[i + k] === c)) found.add(Math.floor(i / 4 / canvas.width));
+    }
+    return [...found];
+  };
+  const amber = [255, 180, 58];
+  const amberMid = [194, 127, 34];
+  await expect.poll(() => rows(amberMid)).toContain(48);
+  expect(rows(amber)).toEqual([]);
+  expect(channelScope).toHaveBeenLastCalledWith(channel('Warm Pad').id, expect.any(Float32Array));
+
+  tapped.freq = 440;
+  tapped.note = 69;
+  await expect.poll(() => rows(amber).length).toBeGreaterThan(60);
+  expect(host.querySelector('.h-factory-scope-time')!.textContent).toBe('1 ms/div');
 });

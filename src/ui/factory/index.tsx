@@ -3,8 +3,9 @@ import { CHANNEL_COLORS } from '../../core/defaults';
 import type { Channel } from '../../core/types';
 import { duplicateChannel, removeChannel, renameSound, selectChannel, setChannel, useApp } from '../../state/store';
 import { Button, ListBox, TextField } from '../kit';
-import { Keyboard } from './Keyboard';
+import { OctaveSwitch, Piano } from './Keyboard';
 import { Rack } from './Rack';
+import { SoundScope } from './SoundScope';
 import './factory.css';
 
 function Header({ channel }: { channel: Channel }) {
@@ -80,7 +81,11 @@ export function FactoryView() {
           )}
         </div>
       </div>
-      <Keyboard channelId={channel?.id ?? null} />
+      <OctaveSwitch />
+      <div className="h-factory-bench">
+        <Piano channelId={channel?.id ?? null} />
+        {channel && <SoundScope key={channel.id} channelId={channel.id} sound={channel.sound} />}
+      </div>
     </div>
   );
 }

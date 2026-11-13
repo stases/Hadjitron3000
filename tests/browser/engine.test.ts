@@ -1,7 +1,9 @@
 import { expect, test } from 'vitest';
 import { Engine, renderProject, sampleBuffer } from '../../src/audio';
 import type { Project, Sound } from '../../src/core/types';
-import { adsr, db, effect, maxJump, mod, onset, peak, project, rms, slice, sound, SR, wav } from './helpers';
+import {
+  adsr, amplitudeAt, db, effect, freq, maxJump, mod, onset, peak, project, rms, slice, sound, SR, wav,
+} from './helpers';
 
 const flat = adsr(0.002, 0.1, 1, 0.02);
 const sine = () => sound('osc', { wave: 'sine' }, { amp: flat, out: { level: -6 } });
@@ -207,4 +209,47 @@ test('rendering the same project twice gives identical samples', async () => {
   const hit = (k: number) => slice(a.channels[0], k * 0.25 + 0.002, k * 0.25 + 0.02);
   const diff = rms(hit(0).map((v, i) => v - hit(1)[i]));
   expect(diff).toBeGreaterThan(0.5 * rms(hit(0)));
+});
+
+test('a channel tap carries that channel alone, keeps showing it when muted, and knows the note it plays', async () => {
+  const ctx = new OfflineAudioContext(2, SR, SR);
+  const engine = new Engine(ctx);
+  const p = project([{ id: 'a', sound: sine() }, { id: 'b', sound: sine() }]);
+  engine.setProject(p);
+  const a = new Float32Array(4096);
+  const b = new Float32Array(4096);
+  const master = new Float32Array(1024);
+  const look = () => {
+    engine.channelScope('a', a);
+    engine.channelScope('b', b);
+    engine.scope(master);
+    const notes = [engine.soundingNote('a'), engine.soundingNote('b')];
+    return { a: a.slice(), b: b.slice(), master: master.slice(), notes };
+  };
+  look();
+  engine.play('a', 57, 1, 0, 0.8); // 220 Hz
+  engine.play('b', 76, 1, 0.1, 0.8); // 659 Hz
+  const seen: ReturnType<typeof look>[] = [];
+  for (const [at, mute] of [[0.4, false], [0.5, true], [0.7, false], [0.95, false]] as const) {
+    void ctx.suspend(at).then(() => {
+      if (mute) engine.setProject({ ...p, channels: p.channels.map((c) => ({ ...c, mute: c.id === 'b' })) });
+      else seen.push(look());
+      return ctx.resume();
+    });
+  }
+  await ctx.startRendering();
+  const [both, muted, done] = seen;
+
+  expect(freq(both.a)).toBeCloseTo(220, 0);
+  expect(freq(both.b)).toBeCloseTo(659.3, 0);
+  expect(amplitudeAt(both.a, 659.3)).toBeLessThan(0.01 * amplitudeAt(both.a, 220));
+  expect(amplitudeAt(both.b, 220)).toBeLessThan(0.01 * amplitudeAt(both.b, 659.3));
+  expect(both.notes).toEqual([57, 76]);
+
+  // Muted, the channel is gone from the master but still on its own tap.
+  expect(amplitudeAt(muted.master, 659.3)).toBeLessThan(0.01 * amplitudeAt(muted.master, 220));
+  expect(amplitudeAt(muted.b, 659.3)).toBeCloseTo(amplitudeAt(both.b, 659.3), 2);
+
+  expect(done.notes).toEqual([null, null]);
+  expect(peak(done.a)).toBeLessThan(peak(both.a));
 });

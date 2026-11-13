@@ -166,7 +166,28 @@
   text-align: center;
 }
 
-/* Keyboard */
+/* Keyboard and scope: the keys stretch to the height of the scope. */
+
+.h-factory-bench {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.h-factory-scope {
+  position: relative;
+  flex: none;
+}
+
+.h-factory-scope-time {
+  position: absolute;
+  right: 6px;
+  bottom: 4px;
+  font: var(--font-mono);
+  color: var(--amber-mid);
+  text-shadow: var(--amber-glow);
+  pointer-events: none;
+}
 
 .h-factory-octave {
   display: flex;
@@ -176,6 +197,10 @@
 }
 
 .h-factory-piano {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
   padding: 6px 2px 2px;
   background: var(--ink);
   box-shadow: var(--bevel-sunken);
@@ -183,7 +208,7 @@
 
 .h-factory-keys {
   position: relative;
-  height: 60px;
+  flex: 1;
   overflow: hidden;
 }
 
@@ -198,7 +223,7 @@
 }
 
 .h-factory-key.is-white {
-  height: 60px;
+  bottom: 0;
   padding-bottom: 4px;
   color: var(--lo);
   background: var(--paper);
@@ -212,7 +237,7 @@
 }
 
 .h-factory-key.is-black {
-  height: 36px;
+  height: 56px;
   padding-bottom: 6px;
   color: var(--lo);
   background: var(--ink);

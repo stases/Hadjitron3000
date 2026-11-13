@@ -74,6 +74,17 @@ test('the ring modulator and the EQ offer their frequency as a target, the other
   ]);
 });
 
+test('the crusher rate, the comb frequency and the Space mix are targets; the tape has none', () => {
+  const sound = newSound();
+  const types = ['crusher', 'tape', 'comb', 'space'];
+  sound.chain = types.map((type) => ({ ...newModule(type), id: type }));
+  expect(modTargets(sound).filter((t) => sound.chain.some((m) => m.id === t.module))).toEqual([
+    { module: 'crusher', param: 'rate', label: 'Crusher · Rate' },
+    { module: 'comb', param: 'freq', label: 'Comb · Freq' },
+    { module: 'space', param: 'mix', label: 'Space · Mix' },
+  ]);
+});
+
 test('a modulator works on each note only when it is set to and its target lives in the note', () => {
   const env = newMod('env');
   expect([env.per, newMod('lfo').per]).toEqual(['note', 'sound']);

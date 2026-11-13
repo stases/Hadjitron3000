@@ -203,6 +203,8 @@ export const SOURCES: readonly ModuleDef[] = [
       f('start', 'Start', 0, 1, 0, { unit: '%' }),
       f('end', 'End', 0, 1, 1, { unit: '%' }),
       shaping(b('loop', 'Loop', false)),
+      // Blends the end of a loop into its start, a share of the loop long, so the seam does not click.
+      shaping(f('xfade', 'Crossfade', 0, 0.5, 0, { unit: '%' })),
       shaping(b('reverse', 'Reverse', false)),
       deep(
         c('mode', 'Play', [
@@ -309,11 +311,50 @@ export const EFFECTS: readonly ModuleDef[] = [
     ],
   },
   {
+    // Fewer bits and a lower sample rate; 16 bits at the full rate leave the sound as it is.
+    type: 'crusher',
+    kind: 'effect',
+    label: 'Crusher',
+    level: 2,
+    params: [
+      f('bits', 'Bits', 1, 16, 8, { step: 1 }),
+      f('rate', 'Rate', 500, 48000, 12000, { taper: 'log', unit: 'Hz', mod: octaves }),
+      mix(1),
+    ],
+  },
+  {
+    // Wow and flutter move the pitch, hiss sits under the sound, saturation squashes it gently, age dulls it.
+    type: 'tape',
+    kind: 'effect',
+    label: 'Tape',
+    level: 2,
+    params: [
+      f('wow', 'Wow', 0, 1, 0.2, { unit: '%' }),
+      f('flutter', 'Flutter', 0, 1, 0.15, { unit: '%' }),
+      shaping(f('hiss', 'Hiss', 0, 1, 0.1, { unit: '%' })),
+      shaping(f('sat', 'Saturation', 0, 1, 0.25, { unit: '%' })),
+      f('age', 'Age', 0, 1, 0.25, { unit: '%' }),
+    ],
+  },
+  {
     type: 'ring',
     kind: 'effect',
     label: 'Ring Mod',
     level: 3,
     params: [f('freq', 'Freq', 1, 5000, 300, { taper: 'log', unit: 'Hz', mod: octaves }), mix(1)],
+  },
+  {
+    // A tuned delay that rings at its frequency; negative feedback rings an octave lower and hollow.
+    type: 'comb',
+    kind: 'effect',
+    label: 'Comb',
+    level: 3,
+    params: [
+      f('freq', 'Freq', 30, 5000, 220, { taper: 'log', unit: 'Hz', mod: octaves }),
+      f('feedback', 'Feedback', -0.98, 0.98, 0.85, { unit: '%' }),
+      shaping(f('damp', 'Damp', 0, 1, 0.3, { unit: '%' })),
+      mix(0.5),
+    ],
   },
   {
     type: 'chorus',
@@ -394,6 +435,20 @@ export const EFFECTS: readonly ModuleDef[] = [
       f('size', 'Size', 0.2, 30, 2, { taper: 'log', unit: 's' }),
       shaping(f('tone', 'Tone', 500, 20000, 6000, { taper: 'log', unit: 'Hz' })),
       f('mix', 'Mix', 0, 1, 0.25, { unit: '%', mod: percent }),
+    ],
+  },
+  {
+    // An algorithmic reverb whose tail can be frozen and can shimmer an octave up.
+    type: 'space',
+    kind: 'effect',
+    label: 'Space',
+    level: 2,
+    params: [
+      f('size', 'Size', 0.3, 60, 6, { taper: 'log', unit: 's' }),
+      f('tone', 'Tone', 500, 20000, 5000, { taper: 'log', unit: 'Hz' }),
+      f('mix', 'Mix', 0, 1, 0.3, { unit: '%', mod: percent }),
+      shaping(b('freeze', 'Freeze', false)),
+      shaping(f('shimmer', 'Shimmer', 0, 1, 0, { unit: '%' })),
     ],
   },
 ];

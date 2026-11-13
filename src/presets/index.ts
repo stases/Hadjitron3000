@@ -12,11 +12,14 @@ export const PRESET_GROUPS: readonly { label: string; names: readonly string[] }
   {
     label: 'Keys',
     names: [
-      'Kalimba', 'Bell', 'Ring Bell', 'Soft Keys', 'Pluck', 'Trance Pluck', 'Dub Stab', 'Glass Draw', 'Square Lead',
-      'PWM Lead',
+      'Kalimba', 'Bell', 'Ring Bell', 'Soft Keys', 'Crushed Keys', 'Old Tape Piano', 'Pluck', 'Plucked String',
+      'Trance Pluck', 'Dub Stab', 'Glass Draw', 'Square Lead', 'PWM Lead',
     ],
   },
-  { label: 'Pads', names: ['Warm Pad', 'Glass Pad', 'Wide Strings', 'Phase Pad', 'Slow Tide', 'Deep Drone', 'Dust'] },
+  {
+    label: 'Pads',
+    names: ['Warm Pad', 'Glass Pad', 'Wide Strings', 'Phase Pad', 'Frozen Hall', 'Slow Tide', 'Deep Drone', 'Dust'],
+  },
 ];
 
 /** A fresh copy of a factory sound. */

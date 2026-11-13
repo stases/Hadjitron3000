@@ -1,10 +1,12 @@
-// Channel effects. Each is input -> ... -> output and follows parameter changes smoothly.
+// Channel effects. Each is input -> ... -> output and follows parameter changes smoothly. Most are built from stock
+// Web Audio nodes; the crusher, tape, comb and space are custom processors (see ../worklet.ts).
 
 import { SYNC_BEATS } from '../../core/modules';
 import type { Params } from '../../core/types';
 import { dbToGain, glide } from '../automation';
 import { mix } from '../mix';
 import { rng } from '../random';
+import { processorEffect } from '../worklet';
 import { lfoRate } from './modulators';
 
 export interface Effect {
@@ -546,17 +548,40 @@ const width: EffectBuilder = (ctx, p) => {
   };
 };
 
+// ---- effects made of a processor (src/audio/processors), each driven by its parameters
+
+/** The rate is moved by modulators in cents, through the processor's detune. */
+const crusher = processorEffect(
+  'crusher', (p) => ({ bits: num(p, 'bits'), rate: num(p, 'rate'), detune: 0, mix: num(p, 'mix') }), { rate: 'detune' },
+);
+
+const tape = processorEffect('tape', (p) => ({
+  wow: num(p, 'wow'), flutter: num(p, 'flutter'), hiss: num(p, 'hiss'), saturation: num(p, 'sat'), age: num(p, 'age'),
+}));
+
+const comb = processorEffect('comb', (p) => ({
+  freq: num(p, 'freq'), detune: 0, feedback: num(p, 'feedback'), damp: num(p, 'damp'), mix: num(p, 'mix'),
+}), { freq: 'detune' });
+
+/** In a sound the wet tail is added to the whole dry sound, as the reverb's is; shared, Mix crossfades to it. */
+const space = processorEffect('space', (p, shared) => ({
+  size: num(p, 'size'), tone: num(p, 'tone'), mix: num(p, 'mix'), dry: shared ? 1 - num(p, 'mix') : 1,
+  freeze: p.freeze ? 1 : 0, shimmer: num(p, 'shimmer'),
+}), { mix: 'mix' });
+
 /**
  * How long effects without feedback go on after their input stops, at most: the chorus by its longest delay, the
- * compressor by its look-ahead, and the phaser's all-passes, whose slowest corner is near 100 Hz, until they are
- * 80 dB down. The EQ, ring modulator and width stop at once.
+ * compressor by its look-ahead, the phaser's all-passes, whose slowest corner is near 100 Hz, until they are
+ * 80 dB down, and the tape by its playback delay and the hiss, which fades out over about a second once the sound
+ * has stopped. The EQ, ring modulator, width and crusher stop at once.
  */
 export const SHORT_TAILS: Readonly<Record<string, number>> = {
   chorus: CHORUS_DELAY + CHORUS_SWING,
   compressor: COMPRESSOR_LOOKAHEAD,
   phaser: 0.25,
+  tape: 1.5,
 };
 
 export const EFFECT_BUILDERS: Readonly<Record<string, EffectBuilder>> = {
-  filter, eq, compressor, drive, ring, chorus, phaser, width, delay, reverb,
+  filter, eq, compressor, drive, crusher, tape, ring, comb, chorus, phaser, width, delay, reverb, space,
 };

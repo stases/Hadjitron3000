@@ -29,8 +29,8 @@ test('byLevel splits a module by level and keeps table order', () => {
   const effects = byLevel(EFFECTS);
   expect([effects[1], effects[2], effects[3]].map((defs) => defs.map((d) => d.type))).toEqual([
     ['eq', 'delay', 'reverb'],
-    ['filter', 'compressor', 'drive', 'chorus', 'phaser', 'width'],
-    ['ring'],
+    ['filter', 'compressor', 'drive', 'crusher', 'tape', 'chorus', 'phaser', 'width', 'space'],
+    ['ring', 'comb'],
   ]);
 });
 

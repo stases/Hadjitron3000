@@ -61,6 +61,7 @@ export const PARAM_HINTS: Readonly<Record<string, Readonly<Record<string, string
     start: 'Where in the file playback begins; drag the left marker on the display to set it.',
     end: 'Where in the file playback stops; drag the right marker on the display to set it.',
     loop: 'Plays the part between the markers over and over while the key is held.',
+    xfade: 'Blends the end of the loop into its start, so rain or room tone goes round without a click at the seam.',
     reverse: 'Plays the sample backwards.',
     mode: 'One shot plays the whole sample on every hit; Gate stops it when the key is let go.',
   },
@@ -91,9 +92,27 @@ export const PARAM_HINTS: Readonly<Record<string, Readonly<Record<string, string
     tone: 'How much of the fizzy top end the distortion keeps.',
     mix: 'How much of the distorted sound is blended with the clean one.',
   },
+  crusher: {
+    bits: 'How finely each sample is measured: 16 bits is clean, 8 is gritty, below 4 it falls apart into fizz.',
+    rate: 'How often the sound is sampled: lower rates add the metallic ring of an old sampler, high notes fold down.',
+    mix: 'How much of the crushed sound is blended with the clean one.',
+  },
+  tape: {
+    wow: 'How much the pitch drifts slowly up and down, like a warped cassette.',
+    flutter: 'How much the pitch trembles quickly, like a worn tape transport; a little gives a gentle shimmer.',
+    hiss: 'How much tape hiss sits under the sound while it plays.',
+    sat: 'How hard the sound is pushed into the tape: loud parts get rounder and warmer.',
+    age: 'How dull the tape is: new tape keeps the highs, old tape rolls them off.',
+  },
   ring: {
     freq: 'The pitch the sound is multiplied with: high values give metal and bells, a few hertz a throbbing pulse.',
     mix: 'How much of the ringing sound you hear; halfway at a low frequency is a plain tremolo.',
+  },
+  comb: {
+    freq: 'The pitch the comb rings at; a short burst of noise through it sounds like a plucked string.',
+    feedback: 'How long it rings: near the ends it rings on and on; below zero it rings an octave lower and hollow.',
+    damp: 'How fast the bright part of the ringing dies away: more damping sounds like nylon, less like steel.',
+    mix: 'How much of the ringing is blended with the dry sound.',
   },
   chorus: {
     rate: 'How fast the copies drift in and out of tune.',
@@ -126,6 +145,13 @@ export const PARAM_HINTS: Readonly<Record<string, Readonly<Record<string, string
     size: 'How long the room rings after the sound stops.',
     tone: 'How bright the room sounds: lower values give a darker hall.',
     mix: 'How much room is blended in with the dry sound.',
+  },
+  space: {
+    size: 'How long the space rings after the sound stops, from a small room to a minute-long cloud.',
+    tone: 'How bright the space sounds: lower values let the high ringing die away sooner.',
+    mix: 'How much of the space is blended in with the dry sound.',
+    freeze: 'Holds the ringing as it is, for ever, while new notes play dry on top; an export ends a minute later.',
+    shimmer: 'Feeds the ringing back in an octave higher, so the tail rises and glitters as it fades.',
   },
   env: { ...adsr('this envelope'), vel: modVel },
   lfo: {

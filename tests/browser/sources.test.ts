@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { renderSound } from '../../src/audio';
-import { adsr, amplitudeAt, finite, freq, peak, rms, slice, sound, tone, wav } from './helpers';
+import { adsr, amplitudeAt, finite, freq, maxJump, peak, rms, slice, sound, tone, wav } from './helpers';
 
 const flat = adsr(0.002, 0.1, 1, 0.02);
 
@@ -106,6 +106,29 @@ test('loop repeats the region for the length of the note', async () => {
   expect(d.length / 44100).toBeGreaterThan(1.5);
   expect(Math.abs(freq(slice(d, 1.0, 1.4)) / 220 - 1)).toBeLessThan(0.01);
   expect(rms(slice(d, 1.0, 1.4))).toBeGreaterThan(0.2);
+});
+
+test('a loop crossfade removes the click at the seam, and without one a loop plays exactly as before', async () => {
+  // 223.3 cycles in the second: the loop ends three tenths of a cycle away from where it starts again.
+  const odd = { odd: { name: 'odd.wav', bytes: wav(tone(1, 223.3, 0.5)) } };
+  const looped = (params: Record<string, unknown>) => sampler({ sample: 'odd', loop: true, ...params });
+  const play = async (params: Record<string, unknown>) =>
+    (await renderSound(looped(params), odd, { vel: 1, dur: 2.5 })).channels[0];
+  const steady = maxJump(slice(await play({}), 0.1, 0.9));
+  expect(maxJump(slice(await play({}), 0.1, 2.4))).toBeGreaterThan(10 * steady);
+  for (const xfade of [0.05, 0.2, 0.5]) {
+    const d = await play({ xfade });
+    expect(maxJump(slice(d, 0.1, 2.4)), `${xfade}`).toBeLessThan(1.5 * steady);
+    expect(rms(slice(d, 1.2, 2.2)) / rms(slice(d, 0.1, 0.9)), `${xfade}`).toBeGreaterThan(0.8);
+  }
+  // A sound from before the crossfade has no such parameter.
+  const old = looped({});
+  delete old.source.params.xfade;
+  const before = (await renderSound(old, odd, { vel: 1, dur: 2.5 })).channels[0];
+  expect(await play({ xfade: 0 })).toEqual(before);
+  const plain = await renderSound(sampler({ sample: 'odd', end: 0.6 }), odd, { vel: 1, dur: 1 });
+  expect((await renderSound(sampler({ sample: 'odd', end: 0.6, xfade: 0.3 }), odd, { vel: 1, dur: 1 })).channels[0])
+    .toEqual(plain.channels[0]);
 });
 
 test('one-shot plays the region out; gate stops at the note end', async () => {

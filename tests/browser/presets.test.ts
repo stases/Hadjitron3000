@@ -23,6 +23,7 @@ test('the basses, leads and effect showcases are as loud as their neighbours in 
     ['Acid Bass', 'Round Bass'], ['Reese Bass', 'Round Bass'], ['Sub 808', 'Sub Bass'], ['Trance Pluck', 'Pluck'],
     ['PWM Lead', 'Square Lead'], ['Wobble Bass', 'Round Bass'], ['Glass Draw', 'Kalimba'],
     ['Punch Kick', 'Kick'], ['Dub Stab', 'Pluck'], ['Ring Bell', 'Bell'],
+    ['Crushed Keys', 'Soft Keys'], ['Old Tape Piano', 'Soft Keys'], ['Plucked String', 'Pluck'],
   ];
   for (const [name, peer] of pairs) expect(Math.abs((await level(name)) - (await level(peer))), name).toBeLessThan(2.5);
 });
@@ -35,7 +36,7 @@ test('the slow pads and drones are as loud as the other pads once they have swel
     return db(Math.hypot(rms(slice(l, 13, 16, sr)), rms(slice(r, 13, 16, sr))) / Math.SQRT2);
   };
   const warm = await level('Warm Pad');
-  for (const name of ['Slow Tide', 'Deep Drone', 'Wide Strings', 'Phase Pad']) {
+  for (const name of ['Slow Tide', 'Deep Drone', 'Wide Strings', 'Phase Pad', 'Frozen Hall']) {
     expect(Math.abs((await level(name)) - warm), name).toBeLessThan(3);
   }
 });

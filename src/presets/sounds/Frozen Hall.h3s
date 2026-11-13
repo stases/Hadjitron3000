@@ -1,0 +1,66 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Frozen Hall",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "triangle",
+        "voices": 3,
+        "spread": 12,
+        "width": 0.7,
+        "wave2": "sine",
+        "pitch2": 12,
+        "mix2": 0.3
+      }
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 2200,
+      "reso": 0.1
+    },
+    "amp": {
+      "attack": 1.2,
+      "decay": 1.5,
+      "sustain": 0.8,
+      "release": 3
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "space",
+        "params": {
+          "size": 30,
+          "tone": 4000,
+          "mix": 0.55,
+          "freeze": false,
+          "shimmer": 0.4
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "drift",
+        "params": {
+          "rate": 0.05,
+          "smooth": 1
+        },
+        "per": "sound",
+        "target": {
+          "module": "out",
+          "param": "pan"
+        },
+        "amount": 0.3
+      }
+    ],
+    "out": {
+      "level": -12,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

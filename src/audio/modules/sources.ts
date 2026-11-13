@@ -5,7 +5,7 @@ import { decodeShape, shapeHarmonics } from '../../core/shape';
 import type { Params } from '../../core/types';
 import { mix } from '../mix';
 import { noiseBuffer, type NoiseColor } from '../random';
-import { reversedBuffer, sampleBuffer } from '../samples';
+import { reversedBuffer, sampleBuffer, seamlessLoop } from '../samples';
 
 /**
  * A parameter that moves with the voice's pitch when it glides: by `k` cents per cent (a detune), or, as a period,
@@ -212,7 +212,12 @@ const sample: SourceBuilder = (ctx, p, { note, t0 }) => {
   if (p.reverse) [a, b] = [len - b, len - a];
   const rate = 2 ** ((note - 60) / 12);
   const loop = p.loop as boolean;
-  const src = new AudioBufferSourceNode(ctx, { buffer, playbackRate: rate, detune: cents(p), loop, loopStart: a, loopEnd: b });
+  // A crossfaded loop is a buffer of its own that holds just the loop.
+  const seamless = loop && (p.xfade as number) > 0 ? seamlessLoop(buffer, a, b, p.xfade as number) : null;
+  if (seamless) [a, b] = [0, seamless.duration];
+  const src = new AudioBufferSourceNode(ctx, {
+    buffer: seamless ?? buffer, playbackRate: rate, detune: cents(p), loop, loopStart: a, loopEnd: b,
+  });
   const voice: SourceVoice = {
     output: src, nodes: [src], targets: { pitch: [src.detune] }, followers: [follow(src.detune)],
   };

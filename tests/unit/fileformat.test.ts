@@ -218,7 +218,7 @@ test('coerces supplied parameter values and defaults amp, out and missing params
   };
   const result = parseSound(soundFile(original)).sound;
   expect(result.source.params).toEqual({
-    sample: '', pitch: 24, fine: -4, start: 0, end: 1, loop: false, reverse: true, mode: 'oneshot',
+    sample: '', pitch: 24, fine: -4, start: 0, end: 1, loop: false, xfade: 0, reverse: true, mode: 'oneshot',
   });
   expect(result.amp).toEqual({ attack: 0, decay: 30, sustain: 0.8, release: 0.2 });
   expect(result.out).toEqual({ level: 6, pan: -1 });

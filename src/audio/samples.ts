@@ -3,6 +3,9 @@
 const decoded = new Map<string, AudioBuffer>();
 const pending = new Map<string, Promise<AudioBuffer>>();
 const reversed = new WeakMap<AudioBuffer, AudioBuffer>();
+const looped = new WeakMap<AudioBuffer, Map<string, AudioBuffer>>();
+// The last few seamless loops of each buffer are kept.
+const LOOP_CACHE = 4;
 let decoder: OfflineAudioContext | undefined;
 
 export function decodeSample(id: string, bytes: Uint8Array): Promise<AudioBuffer> {
@@ -40,4 +43,36 @@ export function reversedBuffer(buf: AudioBuffer): AudioBuffer {
     reversed.set(buf, rev);
   }
   return rev;
+}
+
+/**
+ * The loop from `start` to `end` seconds of a buffer, made seamless: its last `share` is blended into its
+ * beginning with an equal-power crossfade and cut off, so the loop, played round, runs from its shortened end
+ * straight into a beginning that starts with the material that followed there. Kept per buffer, region and share.
+ */
+export function seamlessLoop(buf: AudioBuffer, start: number, end: number, share: number): AudioBuffer | null {
+  const a = Math.round(start * buf.sampleRate);
+  const b = Math.round(end * buf.sampleRate);
+  const fade = Math.round(share * (b - a));
+  if (b - a - fade < 1) return null;
+  const key = `${a}:${b}:${fade}`;
+  let cache = looped.get(buf);
+  if (!cache) looped.set(buf, (cache = new Map()));
+  let loop = cache.get(key);
+  if (!loop) {
+    loop = new AudioBuffer({ length: b - a - fade, sampleRate: buf.sampleRate, numberOfChannels: buf.numberOfChannels });
+    for (let c = 0; c < buf.numberOfChannels; c++) {
+      const from = buf.getChannelData(c);
+      const to = loop.getChannelData(c);
+      to.set(from.subarray(a, b - fade));
+      for (let i = 0; i < fade; i++) {
+        const x = (Math.PI / 2) * (i / fade);
+        to[i] = from[a + i] * Math.sin(x) + from[b - fade + i] * Math.cos(x);
+      }
+    }
+    if (cache.size >= LOOP_CACHE) cache.delete(cache.keys().next().value!);
+  }
+  cache.delete(key);
+  cache.set(key, loop);
+  return loop;
 }

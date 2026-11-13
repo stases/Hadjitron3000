@@ -191,6 +191,7 @@ export function SamplerUnit({ channelId, source, play }: { channelId: string; so
         </div>
       ),
     },
+    paramCell(props('xfade')),
     paramCell(props('mode')),
     ...play,
   ];

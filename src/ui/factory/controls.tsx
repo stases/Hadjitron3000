@@ -16,8 +16,12 @@ import { ShapeEditor } from './ShapeEditor';
 /** In the module table both delay controls are called "time"; side by side they read SYNC and TIME. */
 const LABELS: Readonly<Record<string, Readonly<Record<string, string>>>> = { delay: { sync: 'Sync', time: 'Time' } };
 
-/** Controls that only work in some settings: Time and Rate with Sync at Free, Pulse with a square wave. */
+/**
+ * Controls that only work in some settings: Time and Rate with Sync at Free, Pulse with a square wave, the
+ * sampler's Crossfade with Loop on.
+ */
 const IDLE: Readonly<Record<string, Readonly<Record<string, (p: Params) => boolean>>>> = {
+  sample: { xfade: (p) => !p.loop },
   delay: { time: (p) => p.sync !== 'free' },
   lfo: { rate: (p) => p.sync !== 'free' },
   phaser: { rate: (p) => p.sync !== 'free' },

@@ -1,7 +1,7 @@
 // The audio controller: the one place where the store meets the engine.
 // Views call these functions; nothing else in the interface touches Web Audio.
 
-import { Engine, Metronome, Transport, outputDelay, renderProject } from '../audio';
+import { Engine, Metronome, Transport, loadProcessors, outputDelay, renderProject } from '../audio';
 import { newChannel, newLanes } from '../core/defaults';
 import { barOf } from '../core/meter';
 import type { Owner } from '../core/mixer';
@@ -24,6 +24,13 @@ let transport: Transport | null = null;
 let metronome: Metronome | null = null;
 // Play starts after a bar of clicks.
 let countingIn = false;
+// Counts the times Play is pressed, so that only the latest start goes ahead once the processors are in.
+let starts = 0;
+// Resolves once the live context has the custom processors, or knows it cannot have them.
+let processors: Promise<boolean> = Promise.resolve(false);
+// What the status bar says about the audio when there is no hint, such as effects that could not be loaded.
+let notice = '';
+const noticeListeners = new Set<() => void>();
 // A library sound being auditioned. It lives in the engine only, never in the project.
 let preview: { channel: Channel; samples: Record<string, SampleData> } | null = null;
 // A library block being auditioned: rendered offline on its own, then played as one buffer.
@@ -41,6 +48,8 @@ function heard(): Project {
 function boot(): Engine {
   if (!engine) {
     engine = new Engine(new AudioContext({ latencyHint: 'interactive' }));
+    processors = loadProcessors(engine.ctx);
+    void processors.then((ok) => ok || setNotice('Crusher, Tape, Comb and Space could not be loaded, so they are off.'));
     engine.setProject(heard());
     transport = new Transport(engine, () => ({ project: heard(), scope: playScope(useApp.getState()) }));
     metronome = new Metronome(engine.ctx, () => ({
@@ -60,9 +69,17 @@ export function initAudio(): void {
     if (state.playing) {
       boot();
       const { project } = state;
-      transport!.start(countingIn ? tickTime(barOf(project.meter).ticks, project.bpm, project.swing) : 0);
-      metronome!.start();
+      const lead = countingIn ? tickTime(barOf(project.meter).ticks, project.bpm, project.swing) : 0;
+      const start = ++starts;
+      // The first time, the effects made of processors are ready a moment after the context. A Stop pressed in
+      // that moment, or a newer Play, wins.
+      void processors.then(() => {
+        if (start !== starts || !useApp.getState().playing) return;
+        transport!.start(lead);
+        metronome!.start();
+      });
     } else {
+      starts++;
       transport?.stop();
       metronome?.stop();
     }
@@ -116,6 +133,21 @@ const liveListeners = new Set<(e: LiveNote) => void>();
 export function onLiveNote(listener: (e: LiveNote) => void): () => void {
   liveListeners.add(listener);
   return () => liveListeners.delete(listener);
+}
+
+function setNotice(text: string): void {
+  notice = text;
+  noticeListeners.forEach((listener) => listener());
+}
+
+export function audioNotice(): string {
+  return notice;
+}
+
+/** Subscribe to changes of the audio notice (for useSyncExternalStore). Returns the unsubscribe function. */
+export function onAudioNotice(listener: () => void): () => void {
+  noticeListeners.add(listener);
+  return () => noticeListeners.delete(listener);
 }
 
 // Notes held right now, as "channelId:note", so the on-screen keyboard can light its keys.

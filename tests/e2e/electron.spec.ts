@@ -1,13 +1,27 @@
 import { _electron, expect, test } from '@playwright/test';
+import type { ElectronApplication } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
+import { readFileSync, readdirSync } from 'node:fs';
 
-test('the shell serves the app, persists sounds and blocks, and updates the document title', async () => {
+function launch(): Promise<ElectronApplication> {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (value !== undefined && key !== 'ELECTRON_RUN_AS_NODE') env[key] = value;
   }
   const args = process.platform === 'linux' ? ['.', '--no-sandbox'] : ['.'];
-  const app = await _electron.launch({ args, env });
+  return _electron.launch({ args, env });
+}
+
+async function quit(app: ElectronApplication): Promise<void> {
+  await app.evaluate(({ app, BrowserWindow }) => {
+    app.removeAllListeners('window-all-closed');
+    for (const win of BrowserWindow.getAllWindows()) win.destroy();
+  });
+  await app.close();
+}
+
+test('the shell serves the app, persists sounds and blocks, and updates the document title', async () => {
+  const app = await launch();
   const name = `shell-test-${randomUUID()}`;
   try {
     const page = await app.firstWindow();
@@ -54,10 +68,46 @@ test('the shell serves the app, persists sounds and blocks, and updates the docu
     await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle()))
       .toBe('Shell test - Hadjitron 3000');
   } finally {
-    await app.evaluate(({ app, BrowserWindow }) => {
-      app.removeAllListeners('window-all-closed');
-      for (const win of BrowserWindow.getAllWindows()) win.destroy();
-    });
-    await app.close();
+    await quit(app);
+  }
+});
+
+test('the shell serves the audio processors as scripts, and the crusher crushes in the packaged app', async () => {
+  // The built module of the processors, the one asset that registers them.
+  const file = readdirSync('dist/assets').find((f) => f.endsWith('.js') && readFileSync(`dist/assets/${f}`, 'utf8')
+    .includes('registerProcessor'));
+  expect(file).toBeTruthy();
+  const app = await launch();
+  try {
+    const page = await app.firstWindow();
+    await page.waitForLoadState('domcontentloaded');
+    const result = await page.evaluate(async (url) => {
+      const type = (await fetch(url)).headers.get('content-type');
+      // A 440 Hz sine of amplitude 0.6 through the crusher at 2 bits and the full rate: three levels remain.
+      const ctx = new OfflineAudioContext(2, 4410, 44100);
+      await ctx.audioWorklet.addModule(url);
+      const node = new AudioWorkletNode(ctx, 'crusher', { outputChannelCount: [2] });
+      const values: Record<string, number> = { bits: 2, rate: 48000, detune: 0, mix: 1 };
+      for (const [id, value] of Object.entries(values)) node.parameters.get(id)!.value = value;
+      const osc = new OscillatorNode(ctx, { frequency: 440 });
+      osc.connect(new GainNode(ctx, { gain: 0.6 })).connect(node).connect(ctx.destination);
+      osc.start();
+      const out = (await ctx.startRendering()).getChannelData(0);
+      return { type, levels: [...new Set(out)].sort((a, b) => a - b), peak: Math.max(...out.map(Math.abs)) };
+    }, `assets/${file}`);
+    expect(result.type).toMatch(/^text\/javascript/);
+    expect(result.levels).toEqual([-0.5, 0, 0.5]);
+    expect(result.peak).toBe(0.5);
+
+    // The app loads the processors into its own context when it starts playing, and says so if it cannot.
+    const welcome = page.getByRole('button', { name: 'Listen to the Demo' });
+    if (await welcome.isVisible()) await welcome.click();
+    await page.locator('[data-tour="play"]').click();
+    await page.mouse.move(640, 400);
+    await page.waitForTimeout(1500);
+    await expect(page.locator('.h-statusfield').first()).not.toContainText('could not be loaded');
+    await page.keyboard.press('Space');
+  } finally {
+    await quit(app);
   }
 });

@@ -1,0 +1,61 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Plucked String",
+    "source": {
+      "id": "source",
+      "type": "noise",
+      "params": {
+        "color": "white"
+      }
+    },
+    "amp": {
+      "attack": 0.001,
+      "decay": 0.04,
+      "sustain": 0,
+      "release": 0.01
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "comb",
+        "params": {
+          "freq": 196,
+          "feedback": 0.98,
+          "damp": 0.45,
+          "mix": 1
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "eq",
+        "params": {
+          "low": 2,
+          "mid": 0,
+          "freq": 1000,
+          "high": -3,
+          "lowcut": 60
+        }
+      },
+      {
+        "id": "fx3",
+        "type": "compressor",
+        "params": {
+          "threshold": -36,
+          "ratio": 3,
+          "attack": 0.002,
+          "release": 0.3,
+          "makeup": 18,
+          "mix": 1
+        }
+      }
+    ],
+    "mods": [],
+    "out": {
+      "level": 3,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

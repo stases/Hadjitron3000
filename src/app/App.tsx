@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { ComponentType } from 'react';
 import { TICKS_PER_STEP } from '../core/defaults';
 import { barOf, beatOf } from '../core/meter';
@@ -11,7 +11,7 @@ import { Icon, MenuBar, Separator, StatusBar, StatusField, TabPage, Tabs, Window
 import { MixerView } from '../ui/mixer';
 import { SongView } from '../ui/song';
 import { TrackView } from '../ui/track';
-import { heardNow, position, sampleRate } from './audio';
+import { audioNotice, heardNow, onAudioNotice, position, sampleRate } from './audio';
 import { documentName, dropFiles } from './commands';
 import { Dialogs } from './Dialogs';
 import { buildMenus } from './menus';
@@ -85,13 +85,14 @@ function playText(state: AppState): [string, string] {
 
 function Status() {
   const hint = useHintText();
+  const notice = useSyncExternalStore(onAudioNotice, audioNotice);
   const state = useApp();
   const rate = useSampleRate();
   useFrames(state.playing);
   const [what, detail] = playText(state);
   return (
     <StatusBar>
-      <StatusField>{hint || 'Ready.'}</StatusField>
+      <StatusField>{hint || notice || 'Ready.'}</StatusField>
       <StatusField width={190}>
         <span className="h-app-where">
           <span className="h-app-where-what">{what}</span>

@@ -8,6 +8,7 @@ import { EffectRack, SendBusGraph, Strip } from './buses';
 import { CHANNEL_TAP_SIZE, ChannelGraph, structureKey } from './channel';
 import { Bus } from './mix';
 import { decodeSample } from './samples';
+import { processorsLoading } from './worklet';
 
 // The clipper is exactly linear up to KNEE and bends towards 1 above it. Its WaveShaper sees the
 // signal divided by HEADROOM, so inputs up to HEADROOM (+12 dBFS) reach the curved part.
@@ -117,8 +118,10 @@ export class Engine {
     }
   }
 
+  /** Resolves when the samples are decoded and the effects made of processors have them (see worklet.ts). */
   async ready(): Promise<void> {
     await Promise.all(Object.keys(this.project?.samples ?? {}).map((id) => this.decodes.get(id)));
+    await processorsLoading(this.ctx);
   }
 
   /**

@@ -55,20 +55,24 @@ async function render(
   return buf;
 }
 
+/** The passes round a loop with this gain that it takes to fall by 80 dB. */
+const passes = (gain: number) => (gain > 0 ? Math.log(SILENCE) / Math.log(gain) : 1);
+
 /**
- * How long a chain of effects rings after its input stops: a reverb for its size, a delay until its echoes have
- * fallen by 80 dB, and the short tails of the chorus, compressor and phaser.
+ * How long a chain of effects rings after its input stops: a reverb for its size, a delay or a comb until its
+ * repeats have fallen by 80 dB, Space until its tail has (longer with shimmer, and for ever while frozen, which the
+ * longest tail cuts off), and the short tails of the effects without feedback.
  */
 function chainTime(chain: ModuleInst[], bpm: number): number {
   let t = 0;
   for (const m of chain) {
     if (m.on === false) continue;
+    const num = (id: string) => m.params[id] as number;
     t += SHORT_TAILS[m.type] ?? 0;
-    if (m.type === 'reverb') t += m.params.size as number;
-    if (m.type === 'delay') {
-      const feedback = m.params.feedback as number;
-      t += delayTime(m.params, bpm) * (feedback > 0 ? Math.log(SILENCE) / Math.log(feedback) : 1);
-    }
+    if (m.type === 'reverb') t += num('size');
+    if (m.type === 'delay') t += delayTime(m.params, bpm) * passes(num('feedback'));
+    if (m.type === 'comb') t += passes(Math.abs(num('feedback'))) / num('freq');
+    if (m.type === 'space') t += m.params.freeze ? MAX_TAIL : (80 / 60) * num('size') * (1 + num('shimmer'));
   }
   return t;
 }

@@ -206,7 +206,7 @@ test('the sampler folds its controls by the same rules', async () => {
   expect(unit('Source').textContent).toContain('Load...');
   expect(unit('Source').textContent).not.toContain('Loop');
   await userEvent.click(fold('Source', 'Shaping'));
-  expect(knobs('Source')).toEqual(['Pitch', 'Start', 'End', 'Fine', 'Glide']);
+  expect(knobs('Source')).toEqual(['Pitch', 'Start', 'End', 'Fine', 'Crossfade', 'Glide']);
   expect(unit('Source').querySelector('.h-rack-section')!.textContent).toContain('Mode');
   expect(unit('Source').querySelector('.h-rack-section')!.textContent).toContain('Reverse');
   await userEvent.click(fold('Source', 'Deep'));
@@ -316,7 +316,7 @@ test('a modulator works on each note or the whole sound, and on the whole sound 
 test('the add lists and the source list are grouped by level in beginner mode and flat in pro mode', async () => {
   expect(await addList('effect')).toEqual([
     'BASICS', 'EQ', 'Delay', 'Reverb',
-    'SHAPING', 'Filter (whole sound)', 'Compressor', 'Drive', 'Chorus', 'Phaser', 'Width',
+    'SHAPING', 'Filter (whole sound)', 'Compressor', 'Drive', 'Crusher', 'Tape', 'Chorus', 'Phaser', 'Width', 'Space',
     '-', 'Deep >',
   ]);
   expect(await addList('modulator')).toEqual(['BASICS', 'Envelope', 'LFO', 'SHAPING', 'Drift']);
@@ -328,7 +328,8 @@ test('the add lists and the source list are grouped by level in beginner mode an
 
   pro();
   expect(await addList('effect')).toEqual([
-    'Filter (whole sound)', 'EQ', 'Compressor', 'Drive', 'Ring Mod', 'Chorus', 'Phaser', 'Width', 'Delay', 'Reverb',
+    'Filter (whole sound)', 'EQ', 'Compressor', 'Drive', 'Crusher', 'Tape', 'Ring Mod', 'Comb', 'Chorus', 'Phaser',
+    'Width', 'Delay', 'Reverb', 'Space',
   ]);
   expect(await addList('modulator')).toEqual(['Envelope', 'LFO', 'Drift']);
   await userEvent.click(unit('Source').querySelector('[role="combobox"]')!);
@@ -343,15 +344,16 @@ test('Deep modules wait one step away: in a submenu of the add list and behind M
   expect(menu.slice(-2, -1)).toEqual(['separator']);
   const deep = menu.at(-1) as { label: string; items: { label: string; onSelect(): void }[] };
   expect(deep.label).toBe('Deep');
-  expect(deep.items.map((i) => i.label)).toEqual(['Ring Mod', 'Deep One']);
-  deep.items[1].onSelect();
+  expect(deep.items.map((i) => i.label)).toEqual(['Ring Mod', 'Comb', 'Deep One']);
+  deep.items[2].onSelect();
   expect(add).toHaveBeenCalledWith('deepfx');
   expect(addMenu(false, defs, add)).toHaveLength(defs.length);
 
   const sources = sourceItems(true, defs);
   expect(sources.options).not.toContainEqual({ value: 'deepfx', label: 'Deep One' });
   expect(sources.more).toEqual([
-    { heading: 'Deep' }, { value: 'ring', label: 'Ring Mod' }, { value: 'deepfx', label: 'Deep One' },
+    { heading: 'Deep' }, { value: 'ring', label: 'Ring Mod' }, { value: 'comb', label: 'Comb' },
+    { value: 'deepfx', label: 'Deep One' },
   ]);
   expect(sourceItems(false, defs).more).toEqual([]);
 });

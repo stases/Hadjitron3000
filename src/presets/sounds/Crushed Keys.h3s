@@ -1,0 +1,78 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Crushed Keys",
+    "source": {
+      "id": "source",
+      "type": "fm",
+      "params": {
+        "ratio": 1,
+        "amount": 1.1
+      }
+    },
+    "amp": {
+      "attack": 0.003,
+      "decay": 1.1,
+      "sustain": 0.2,
+      "release": 0.3
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "crusher",
+        "params": {
+          "bits": 6,
+          "rate": 9000,
+          "mix": 0.85
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "filter",
+        "params": {
+          "mode": "lowpass",
+          "cutoff": 6000,
+          "reso": 0.05
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.3,
+          "sustain": 0,
+          "release": 0.1
+        },
+        "per": "note",
+        "target": {
+          "module": "source",
+          "param": "amount"
+        },
+        "amount": 0.12
+      },
+      {
+        "id": "mod2",
+        "type": "lfo",
+        "params": {
+          "wave": "triangle",
+          "rate": 0.25
+        },
+        "per": "sound",
+        "target": {
+          "module": "fx1",
+          "param": "rate"
+        },
+        "amount": 0.15
+      }
+    ],
+    "out": {
+      "level": -10,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

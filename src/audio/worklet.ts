@@ -2,7 +2,7 @@
 // the effect builder that wraps one of them.
 
 import type { Params } from '../core/types';
-import { glide } from './automation';
+import { glide, rampWith } from './automation';
 import type { EffectBuilder } from './modules/effects';
 import processorsUrl from './processors/index.ts?worker&url';
 
@@ -76,16 +76,19 @@ export function processorEffect(
       input.disconnect(output);
       input.connect(node).connect(output);
     };
+    // Every value glides, so automation ramps the ConstantSourceNodes that a parameter moves.
+    const update = (p: Params) => {
+      const t = ctx.currentTime;
+      for (const [id, value] of Object.entries(values(p, shared))) glide(param(id), value, t);
+    };
     if (loaded.has(ctx)) attach();
     else void loadProcessors(ctx).then((ok) => ok && attach());
     return {
       input,
       output,
       targets: Object.fromEntries(Object.entries(targets).map(([id, target]) => [id, [param(target)]])),
-      update(p) {
-        const t = ctx.currentTime;
-        for (const [id, value] of Object.entries(values(p, shared))) glide(param(id), value, t);
-      },
+      update,
+      ramp: (p, _bpm, id, time) => rampWith(update, p, id, time),
       dispose() {
         gone = true;
         for (const [, source] of sources) source.stop(ctx.currentTime + STOP_AFTER);

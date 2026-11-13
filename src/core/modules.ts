@@ -4,7 +4,7 @@
 
 import type { Level, Levelled } from './levels';
 import { DEFAULT_SHAPE } from './shape';
-import type { ModInst, ModTarget, Sound } from './types';
+import type { ModInst, ModTarget, Params, Sound } from './types';
 
 export type Taper = 'lin' | 'log' | 'cube';
 export type Unit = 'Hz' | 's' | 'dB' | '%' | 'st' | 'ct' | 'oct' | 'x' | ':1' | 'pan' | '';
@@ -554,6 +554,15 @@ export function moduleDef(sound: Sound, moduleId: string): ModuleDef | undefined
   if (Object.hasOwn(FIXED, moduleId)) return FIXED[moduleId];
   const inst = sound.chain.find((m) => m.id === moduleId) ?? sound.mods.find((m) => m.id === moduleId);
   return inst && MODULES[inst.type];
+}
+
+/** The parameter values behind a module id of a sound, as `moduleDef` finds its definition. */
+export function moduleParams(sound: Sound, moduleId: string): Params | undefined {
+  const fixed: Record<string, Params> = {
+    source: sound.source.params, play: sound.play, filter: sound.filter, amp: sound.amp, out: sound.out,
+  };
+  if (Object.hasOwn(fixed, moduleId)) return fixed[moduleId];
+  return (sound.chain.find((m) => m.id === moduleId) ?? sound.mods.find((m) => m.id === moduleId))?.params;
 }
 
 export function paramSpec(def: ModuleDef, paramId: string): ParamSpec | undefined {

@@ -1,5 +1,7 @@
 // The Hadjitron 3000 document model. Everything is plain JSON except SampleData.bytes.
 
+import type { Owner } from './mixer';
+
 export type ParamValue = number | string | boolean;
 export type Params = Record<string, ParamValue>;
 
@@ -84,6 +86,13 @@ export interface Note {
   ratchet?: number; // 2, 3, 4, 6 or 8: played that many times inside its length; absent plays once
   slide?: boolean; // true: the pitch glides in from the row's previous note
   hold?: boolean; // true: a drone, sounding to the end of its placement (or of the block played on repeat)
+  locks?: Lock[]; // one or two: the note's own values of parameters of its sound
+}
+
+/** A note's own value of a float parameter of its sound, 0..1 over the parameter's range through its taper. */
+export interface Lock {
+  target: ModTarget;
+  value: number;
 }
 
 /** A note before the store gives it an id. */
@@ -122,6 +131,26 @@ export interface Lane {
   mute: boolean;
 }
 
+/**
+ * A float parameter of the project, named as the store's setParam names it. Of a sound: `owner` is its channel id and
+ * `module` is 'source', 'play', 'filter', 'amp', 'out' or the id of an effect of its chain, or 'send' with `param` '0'
+ * or '1' for its sends. Of a bus or the master: `owner` is `{ rack }` and `module` the id of an effect of its rack, or
+ * 'out' with `param` 'level' for its level.
+ */
+export interface ParamRef {
+  owner: Owner;
+  module: string;
+  param: string;
+}
+
+/** A row of automation in the song: a parameter that follows straight lines through its points while the song plays. */
+export interface AutoRow {
+  id: string;
+  target: ParamRef;
+  /** By tick: [tick from the start of the song, value 0..1 over the parameter's range through its taper]. */
+  points: [tick: number, value: number][];
+}
+
 /** A block on its own, outside a project: its notes together with the sounds that play them. */
 export interface Block {
   name: string;
@@ -158,6 +187,7 @@ export interface Project {
   patterns: Pattern[];
   song: Placement[];
   lanes: Lane[]; // SONG_LANES entries
+  automation: AutoRow[];
   samples: Record<string, SampleData>; // keyed by sample id (content hash)
 }
 
@@ -173,6 +203,7 @@ export interface NoteEvent {
   vel: number;
   slide?: boolean; // the pitch glides in from the previous note of the row
   gain?: GainCurve; // the note's own level over time, from the fades of its placement and the level of its lane
+  locks?: Lock[]; // the note's own values of parameters of its sound
 }
 
 /**

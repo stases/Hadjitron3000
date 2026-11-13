@@ -16,6 +16,8 @@ interface SliderProps {
   display?: string;
   hint?: string;
   disabled?: boolean;
+  /** Something else moves the value (automation in the Song): the groove glows amber. */
+  automated?: boolean;
 }
 
 const THUMB_ROWS = [
@@ -58,7 +60,7 @@ const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 /** The Windows 98 trackbar: a groove, a pointed thumb and tick marks. Value 0..1, up and right are more. */
 export function Slider(props: SliderProps) {
-  const { value, onChange, vertical, small, length = 120, label, display, hint, disabled } = props;
+  const { value, onChange, vertical, small, length = 120, label, display, hint, disabled, automated } = props;
   const track = useRef<HTMLDivElement>(null);
   const grab = useRef<number | null>(null);
   const hover = useHint(hint);
@@ -115,7 +117,11 @@ export function Slider(props: SliderProps) {
     ? []
     : Array.from({ length: TICKS }, (_, i) => Math.floor(thumbW / 2) + Math.round((i * travel) / (TICKS - 1)));
   return (
-    <div className={cx('h-slider', vertical && 'is-vertical', small && 'is-small', disabled && 'is-disabled')}>
+    <div
+      className={cx(
+        'h-slider', vertical && 'is-vertical', small && 'is-small', disabled && 'is-disabled', automated && 'is-automated',
+      )}
+    >
       {(label || display) && !vertical && (
         <div className="h-slider-caption">
           <span className={cx('h-slider-label', disabled && 'h-engraved')}>{label}</span>

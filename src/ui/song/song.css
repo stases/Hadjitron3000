@@ -228,6 +228,68 @@
   pointer-events: none;
 }
 
+/* Automation rows: an amber display under the lanes, bar for bar, and the row that adds one. */
+
+.h-song-head.is-auto {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  height: 44px;
+}
+
+.h-song-auto {
+  flex: none;
+  padding: 2px 4px;
+  background: color-mix(in srgb, var(--face-lo) 70%, var(--lo));
+}
+
+.h-song-autobox {
+  position: relative;
+  height: 40px;
+  padding: 2px;
+  background: var(--crt);
+  box-shadow: var(--bevel-sunken);
+}
+
+.h-song-autobox canvas {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  outline: none;
+}
+
+.h-song-autoname {
+  position: sticky;
+  left: 62px;
+  z-index: 1;
+  display: inline-block;
+  padding: 0 3px;
+  font: var(--font-small);
+  color: var(--amber);
+  text-shadow: var(--amber-glow);
+  background: var(--crt);
+  pointer-events: none;
+}
+
+.h-song-autobox .h-song-now {
+  top: 2px;
+  height: 36px;
+  pointer-events: none;
+}
+
+.h-song-autorow.is-add {
+  height: 26px;
+}
+
+.h-song-adds {
+  position: sticky;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 4px;
+}
+
 /* Tiles: a lit key of the Track grid stretched over its bars. */
 
 .h-song-tile {

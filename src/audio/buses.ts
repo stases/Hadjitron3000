@@ -3,7 +3,7 @@
 
 import { BUS_LEVEL } from '../core/mixer';
 import type { Channel, ModuleInst, SendBus } from '../core/types';
-import { dbToGain, glide } from './automation';
+import { Automated, dbToGain, glide, type Placed } from './automation';
 import { Bus, type Slot } from './mix';
 import { EFFECT_BUILDERS, type Effect } from './modules/effects';
 
@@ -59,6 +59,7 @@ interface Built {
  */
 export class EffectRack {
   private built: Built;
+  private readonly auto = new Automated();
 
   constructor(
     private readonly ctx: BaseAudioContext,
@@ -73,17 +74,55 @@ export class EffectRack {
   set(chain: ModuleInst[], bpm: number): void {
     const b = this.built;
     if (chain === b.chain && bpm === b.bpm) return;
+    const now = this.ctx.currentTime;
     if (rackKey(chain) !== b.key) {
       this.retire(b);
       this.built = this.build(chain, bpm, true);
+      for (const [module, param, curve] of this.auto.entries()) {
+        for (const time of [now, ...curve.after(now)]) this.move(module, param, time);
+      }
       return;
     }
     for (const m of chain) {
       const prev = b.chain.find((o) => o.id === m.id);
-      if (prev?.params !== m.params || bpm !== b.bpm) b.effects.get(m.id)?.update(m.params, bpm);
+      if (prev?.params === m.params && bpm === b.bpm) continue;
+      b.effects.get(m.id)?.update(this.auto.overlay(m.id, m.params, now), bpm);
     }
     b.chain = chain;
     b.bpm = bpm;
+  }
+
+  /** Automation moves a parameter of an effect to `value` in a straight line that arrives at `time`. */
+  automate(module: string, param: string, value: number, time: number): void {
+    this.auto.add(module, param, value, time);
+    this.move(module, param, time);
+  }
+
+  /** Step the effects that cannot ramp to their automated values now. */
+  flush(): void {
+    this.auto.flush(this.ctx.currentTime, (module) => this.placed(module), this.built.bpm);
+  }
+
+  /** The song stopped: every automated parameter goes back to its stored value. */
+  endAutomation(): void {
+    this.auto.release(this.ctx.currentTime, (module) => this.placed(module), this.built.bpm);
+  }
+
+  /** Whether automation can move a parameter of an effect in straight lines rather than in steps. */
+  ramps(module: string): boolean {
+    const fx = this.built.effects.get(module);
+    return !fx || !!fx.ramp;
+  }
+
+  private move(module: string, param: string, time: number): void {
+    const placed = this.placed(module);
+    if (placed) this.auto.moveEffect(module, param, placed, this.built.bpm, time);
+  }
+
+  private placed(module: string): Placed | undefined {
+    const fx = this.built.effects.get(module);
+    const params = this.built.chain.find((m) => m.id === module)?.params;
+    return fx && params ? { fx, params } : undefined;
   }
 
   dispose(): void {
@@ -135,6 +174,7 @@ export class SendBusGraph {
   private readonly sum: GainNode;
   private out: { rack: EffectRack; gain: GainNode; tap: StereoTap } | null = null;
   private bus: SendBus | null = null;
+  private readonly auto = new Automated();
 
   constructor(
     private readonly ctx: BaseAudioContext,
@@ -148,13 +188,39 @@ export class SendBusGraph {
     const { ctx } = this;
     if (this.out) {
       this.out.rack.set(bus.chain, bpm);
-      if (busGain(bus) !== busGain(this.bus!)) glide(this.out.gain.gain, busGain(bus), ctx.currentTime);
+      if (busGain(bus) !== busGain(this.bus!) && !this.auto.has('out', 'level')) {
+        glide(this.out.gain.gain, busGain(bus), ctx.currentTime);
+      }
     } else if (used) {
       const gain = new GainNode(ctx, { gain: busGain(bus) });
       gain.connect(this.master.take(ctx.currentTime).input);
       this.out = { rack: new EffectRack(ctx, this.sum, gain, bus.chain, bpm), gain, tap: new StereoTap(gain) };
     }
     this.bus = bus;
+  }
+
+  /** Automation moves the bus's level (module 'out') or a parameter of its rack, before the bus is used nothing. */
+  automate(module: string, param: string, value: number, time: number): void {
+    if (module !== 'out') {
+      this.out?.rack.automate(module, param, value, time);
+      return;
+    }
+    this.auto.add(module, param, value, time);
+    this.out?.gain.gain.linearRampToValueAtTime(busGain({ ...this.bus!, level: value }), time);
+  }
+
+  flush(): void {
+    this.out?.rack.flush();
+  }
+
+  endAutomation(): void {
+    this.out?.rack.endAutomation();
+    this.auto.release(this.ctx.currentTime, () => undefined, 0, (_module, _param, time) =>
+      this.out?.gain.gain.linearRampToValueAtTime(busGain(this.bus!), time));
+  }
+
+  ramps(module: string): boolean {
+    return this.out?.rack.ramps(module) ?? true;
   }
 
   /** The built effect of a module of the bus's rack, absent before the bus is used. */
@@ -191,6 +257,7 @@ export class Strip {
   private readonly sends: GainNode[];
   private readonly slots: Slot[];
   private readonly tap: StereoTap;
+  private readonly auto = new Automated();
   private channel: Channel;
   /** The ducking gain as straight lines between these points, from the last one before now. */
   private points: Point[] = [];
@@ -223,9 +290,22 @@ export class Strip {
   update(channel: Channel): void {
     const t = this.ctx.currentTime;
     this.sends.forEach((send, i) => {
-      if (channel.sends[i] !== this.channel.sends[i]) glide(send.gain, channel.sends[i], t);
+      if (channel.sends[i] !== this.channel.sends[i] && !this.auto.has('send', String(i))) {
+        glide(send.gain, channel.sends[i], t);
+      }
     });
     this.channel = channel;
+  }
+
+  /** Automation moves send `index` to `value` in a straight line that arrives at `time`. */
+  automateSend(index: number, value: number, time: number): void {
+    this.auto.add('send', String(index), value, time);
+    this.sends[index].gain.linearRampToValueAtTime(value, time);
+  }
+
+  endAutomation(): void {
+    this.auto.release(this.ctx.currentTime, () => undefined, 0, (_module, param, time) =>
+      this.sends[Number(param)].gain.linearRampToValueAtTime(this.channel.sends[Number(param)], time));
   }
 
   /** A note of the ducking source starts at `t`: the level dips by the amount and recovers over the release. */

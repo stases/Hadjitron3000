@@ -264,6 +264,15 @@
   white-space: nowrap;
 }
 
+/* An automated control reads out its value on a small amber display. */
+.h-knob.is-automated .h-knob-value,
+.h-slider.is-automated .h-slider-value {
+  padding: 0 2px;
+  color: var(--amber);
+  text-shadow: var(--amber-glow);
+  background: var(--crt);
+}
+
 /* Slider */
 
 .h-slider {
@@ -317,6 +326,10 @@
   right: 0;
   height: 4px;
   box-shadow: var(--bevel-sunken);
+}
+
+.h-slider.is-automated .h-slider-groove {
+  background: var(--amber-mid);
 }
 
 .h-slider.is-vertical .h-slider-groove {

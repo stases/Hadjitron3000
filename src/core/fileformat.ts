@@ -1,17 +1,19 @@
 import { MAX_LEVEL, MIN_LEVEL, fitFades } from './arrangement';
+import { cleanPoints, refKey, refSpec, validLocks } from './automation';
 import {
   CHANNEL_COLORS, MAX_BARS, MAX_SONG_BARS, SONG_LANES, TICKS_PER_STEP, defaultMixer, newDuck, newLanes, newPattern,
   uid,
 } from './defaults';
 import { MAX_TICKS, readMeter } from './meter';
 import { BUS_LEVEL, DUCK_AMOUNT, DUCK_RELEASE, MAX_BUS_NAME } from './mixer';
+import type { Owner } from './mixer';
 import { AMP, FILTER, MODULES, OUT, PLAY, paramSpec } from './modules';
 import type { ModuleDef, ModuleKind } from './modules';
 import { MAX_NOTE, MIN_NOTE, cleanNotes, noteExtras } from './notes';
 import { coerce } from './params';
 import { readScale } from './scale';
 import type {
-  Block, Channel, Duck, Lane, Mixer, ModInst, ModuleInst, Note, Params, Pattern, Placement, Project, SampleData,
+  AutoRow, Block, Channel, Duck, Lane, Mixer, ModInst, ModuleInst, Note, Params, Pattern, Placement, Project, SampleData,
   SendBus, Sound,
 } from './types';
 
@@ -58,11 +60,13 @@ export function serializeSound(sound: Sound, samples: Record<string, SampleData>
 }
 
 export function serializeProject(project: Project): string {
-  const { name, bpm, swing, meter, scale, master, mixer, channels, patterns, song, lanes } = project;
+  const { name, bpm, swing, meter, scale, master, mixer, channels, patterns, song, lanes, automation } = project;
   return JSON.stringify({
     format: 'hadjitron3000/project',
     version: FORMAT_VERSION,
-    project: { name, bpm, swing, meter, ...(scale && { scale }), master, mixer, channels, patterns, song, lanes },
+    project: {
+      name, bpm, swing, meter, ...(scale && { scale }), master, mixer, channels, patterns, song, lanes, automation,
+    },
     samples: encodeSamples(channels.flatMap((c) => soundSampleIds(c.sound)), project.samples),
   }, null, 2);
 }
@@ -211,6 +215,14 @@ function uniqueId(value: unknown, ids: Set<string>, label: string): string {
   return value;
 }
 
+/** A note with only the locks its sound can play. */
+function keepLocks(note: Note, sound: Sound): Note {
+  if (!note.locks) return note;
+  const { locks, ...rest } = note;
+  const kept = validLocks(sound, locks);
+  return kept.length > 0 ? { ...rest, locks: kept } : rest;
+}
+
 /** A row's notes. Version 3 keeps a list of notes in ticks, with their extras where they are set. */
 function readNotes(value: unknown, label: string): Note[] {
   return cleanNotes(array(value, label).map((entry) => {
@@ -247,7 +259,7 @@ function readLoop(value: unknown): number | undefined {
     ? Math.round(Math.min(MAX_TICKS / TICKS_PER_STEP, Math.max(1, value))) : undefined;
 }
 
-function readPattern(value: unknown, ids: Set<string>, channels: Set<string>): Pattern {
+function readPattern(value: unknown, ids: Set<string>, sounds: Map<string, Sound>): Pattern {
   const raw = object(value, 'pattern');
   const old = raw.notes === undefined && raw.cells !== undefined;
   const rows = object(old ? raw.cells : raw.notes === undefined ? {} : raw.notes, 'pattern notes');
@@ -256,14 +268,15 @@ function readPattern(value: unknown, ids: Set<string>, channels: Set<string>): P
     name: typeof raw.name === 'string' ? raw.name : '',
     color: Math.round(number(raw.color, 0, 0, CHANNEL_COLORS - 1)),
     bars: Math.round(number(raw.bars, 1, 1, MAX_BARS)),
-    notes: Object.fromEntries(Object.entries(rows).filter(([id]) => channels.has(id))
-      .map(([id, value]): [string, Note[]] => [id, (old ? readSteps : readNotes)(value, `notes for channel ${id}`)])
+    notes: Object.fromEntries(Object.entries(rows).filter(([id]) => sounds.has(id))
+      .map(([id, value]): [string, Note[]] => [id, (old ? readSteps : readNotes)(value, `notes for channel ${id}`)
+        .map((note) => keepLocks(note, sounds.get(id)!))])
       .filter(([, notes]) => notes.length > 0)),
   };
   const loops = Object.entries(object(raw.loops === undefined ? {} : raw.loops, 'pattern loops'))
     .flatMap(([id, value]): [string, number][] => {
       const steps = readLoop(value);
-      return channels.has(id) && steps !== undefined ? [[id, steps]] : [];
+      return sounds.has(id) && steps !== undefined ? [[id, steps]] : [];
     });
   if (loops.length > 0) pattern.loops = Object.fromEntries(loops);
   return pattern;
@@ -371,6 +384,41 @@ function readMixer(value: unknown): Mixer {
   return mixer;
 }
 
+/** The owner of an automated parameter: a channel of the project, a bus by its index, or the master. */
+function readOwner(value: unknown, channels: Channel[]): Owner | null {
+  if (typeof value === 'string') return channels.some((c) => c.id === value) ? value : null;
+  const rack = isObject(value) ? value.rack : undefined;
+  return rack === 0 || rack === 1 || rack === 'master' ? { rack } : null;
+}
+
+/**
+ * Automation rows; a file from before them has none. A row whose parameter the project does not have, or that
+ * repeats the parameter of an earlier row, is dropped; points are kept in the song's range, in order.
+ */
+function readAutomation(value: unknown, project: Project): AutoRow[] {
+  const rows: AutoRow[] = [];
+  const ids = new Set<string>();
+  for (const entry of array(value === undefined ? [] : value, 'automation')) {
+    const raw = object(entry, 'automation row');
+    const target = isObject(raw.target) ? raw.target : {};
+    const owner = readOwner(target.owner, project.channels);
+    const { module, param } = target;
+    if (owner === null || typeof module !== 'string' || typeof param !== 'string') continue;
+    const ref = { owner, module, param };
+    if (!refSpec(project, ref) || rows.some((r) => refKey(r.target) === refKey(ref))) continue;
+    let id = typeof raw.id === 'string' ? raw.id : '';
+    if (id === '' || ids.has(id)) {
+      do { id = uid('a'); } while (ids.has(id));
+    }
+    ids.add(id);
+    const points = array(raw.points === undefined ? [] : raw.points, 'automation points')
+      .flatMap((p): [number, number][] =>
+        Array.isArray(p) && typeof p[0] === 'number' && typeof p[1] === 'number' ? [[p[0], p[1]]] : []);
+    rows.push({ id, target: ref, points: cleanPoints(points) });
+  }
+  return rows;
+}
+
 /** Ducking; a source that is not another channel of the project is dropped. */
 function readDuck(value: unknown, id: string, ids: Set<string>): Duck {
   if (!isObject(value)) return newDuck();
@@ -404,14 +452,15 @@ export function readProject(value: unknown, samples: Record<string, SampleData>)
   });
   const scale = readScale(raw.scale);
   const patternIds = new Set<string>();
+  const sounds = new Map(channels.map((c) => [c.id, c.sound]));
   const patterns = array(raw.patterns === undefined ? [] : raw.patterns, 'patterns')
-    .map((p) => readPattern(p, patternIds, channelIds));
+    .map((p) => readPattern(p, patternIds, sounds));
   if (patterns.length === 0) {
     const pattern = newPattern('A');
     patterns.push(pattern);
     patternIds.add(pattern.id);
   }
-  return {
+  const project: Project = {
     name: typeof raw.name === 'string' ? raw.name : 'Untitled',
     bpm: number(raw.bpm, 120, 40, 240),
     swing: number(raw.swing, 0, 0, 1),
@@ -423,6 +472,9 @@ export function readProject(value: unknown, samples: Record<string, SampleData>)
     patterns,
     song: readSong(raw.song, patterns, [...channelIds]),
     lanes: readLanes(raw.lanes),
+    automation: [],
     samples,
   };
+  project.automation = readAutomation(raw.automation, project);
+  return project;
 }

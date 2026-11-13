@@ -7,12 +7,15 @@ import { barOf } from '../../core/meter';
 import { MAX_NOTE, MIN_NOTE, RATCHETS, ROOT_NOTE, noteName } from '../../core/notes';
 import type { NoteExtras } from '../../core/notes';
 import { patternSteps } from '../../core/sequencer';
-import type { Note } from '../../core/types';
+import { soundSpec, soundTargets } from '../../core/automation';
+import { moduleParams } from '../../core/modules';
+import { formatValue, fromNorm, toNorm } from '../../core/params';
+import type { Lock, ModTarget, Note, Sound } from '../../core/types';
 import {
-  beginGesture, commitGesture, moveNotes, setNotesExtras, setNotesVelocity, updateNotes, useApp,
+  beginGesture, commitGesture, moveNotes, setNotesExtras, setNotesLock, setNotesVelocity, updateNotes, useApp,
 } from '../../state/store';
 import { toggleFold, useShown } from '../factory/levels';
-import { Checkbox, FoldToggles, Select, Separator, Slider, Stepper } from '../kit';
+import { Checkbox, FoldToggles, Knob, Select, Separator, Slider, Stepper } from '../kit';
 import { parsePosition, parseSteps, positionText, stepsText } from './roll';
 import { nudgeSelection, useRoll } from './rollState';
 import { maxLength, rememberNote, resizeCell, rowCells } from './steps';
@@ -24,7 +27,7 @@ export function Inspector({ roll }: { roll: boolean }) {
 
 const FOLD_HINTS = {
   2: 'Shows Chance, Slide and Hold for the selected notes; the lamp lights when one of them has any of these.',
-  3: 'Shows Ratchet, which plays the selected notes as quick repeats; the lamp lights when one of them has one.',
+  3: 'Shows Ratchet and the locks of the selected notes; the lamp lights when one of them has a ratchet or a lock.',
 } as const;
 
 const RATCHET_OPTIONS = [
@@ -32,15 +35,65 @@ const RATCHET_OPTIONS = [
   ...RATCHETS.map((r) => ({ value: String(r), label: `${r}x` })),
 ];
 
+const targetKey = (t: ModTarget) => `${t.module}/${t.param}`;
+
+/** The value a control of the sound has, 0..1 through its taper: where a new lock of it starts. */
+const ownValue = (sound: Sound, target: ModTarget) =>
+  toNorm(soundSpec(sound, target)!, moduleParams(sound, target.module)![target.param] as number);
+
+/**
+ * One of a note's two locks: which control of its sound it holds, and at what value, shown in that control's units.
+ * A new lock starts at the control's own value. The second waits until the first is set.
+ */
+function LockField({ slot, sound, notes, setLock }: {
+  slot: number;
+  sound: Sound | undefined;
+  notes: readonly Note[];
+  setLock: (slot: number, lock: Lock | null) => void;
+}) {
+  const targets = sound ? soundTargets(sound) : [];
+  const lock = notes[0]?.locks?.[slot];
+  const spec = sound && lock && soundSpec(sound, lock.target);
+  const off = notes.length === 0 || (slot > 0 && !notes[0]?.locks?.length);
+  return (
+    <>
+      <span className="h-track-label">{`Lock ${slot + 1}`}</span>
+      <Select
+        value={lock ? targetKey(lock.target) : ''}
+        options={[{ value: '', label: 'None' }, ...targets.map((t) => ({ value: targetKey(t.target), label: t.label }))]}
+        onChange={(v) => {
+          const target = targets.find((t) => targetKey(t.target) === v)?.target;
+          setLock(slot, target ? { target, value: ownValue(sound!, target) } : null);
+        }}
+        width={132}
+        disabled={off}
+        hint="Lock: the selected notes get their own value of one control of their sound while they play."
+      />
+      <Knob
+        small
+        side
+        value={lock?.value ?? 0}
+        onChange={(value) => setLock(slot, { target: lock!.target, value })}
+        label={spec ? spec.label : 'Value'}
+        display={spec ? formatValue(spec, fromNorm(spec, lock!.value)) : '-'}
+        disabled={off || !spec}
+        hint="The value the selected notes lock, in the control's own units."
+      />
+    </>
+  );
+}
+
 /**
  * The inspector's row: what is selected and its Basics, then the extras of its notes by level, and a line of help
  * while nothing is selected. Each level is a group that wraps onto a second line when the row is too narrow. In
  * beginner mode Shaping and Deep wait behind toggles at the right end, as in the Factory's rack units.
  */
-function InspectorRow({ which, notes, setExtras, help, children }: {
+function InspectorRow({ which, notes, sound, setExtras, setLock, help, children }: {
   which: string;
   notes: readonly Note[];
+  sound: Sound | undefined;
   setExtras: (extras: NoteExtras) => void;
+  setLock: (slot: number, lock: Lock | null) => void;
   help: string;
   children: ReactNode;
 }) {
@@ -83,7 +136,7 @@ function InspectorRow({ which, notes, setExtras, help, children }: {
     },
     {
       level: 3 as const,
-      lit: notes.some((n) => n.ratchet !== undefined),
+      lit: notes.some((n) => n.ratchet !== undefined || !!n.locks),
       fields: (
         <>
           <span className="h-track-label">Ratchet</span>
@@ -95,6 +148,8 @@ function InspectorRow({ which, notes, setExtras, help, children }: {
             disabled={off}
             hint="Ratchet: play the selected notes this many times, evenly inside their length, for rolls and stutters."
           />
+          <LockField slot={0} sound={sound} notes={notes} setLock={setLock} />
+          <LockField slot={1} sound={sound} notes={notes} setLock={setLock} />
         </>
       ),
     },
@@ -146,7 +201,9 @@ function StepInspector() {
     <InspectorRow
       which={cell ? `Step ${cell.index + 1} of ${channel!.sound.name}${chord}` : 'No step selected'}
       notes={cell?.notes ?? []}
+      sound={channel?.sound}
       setExtras={(extras) => setNotesExtras(pattern.id, ref!.channelId, ids, extras)}
+      setLock={(slot, lock) => setNotesLock(pattern.id, ref!.channelId, ids, slot, lock)}
       help="Click: add or remove · Drag: note · Drag the edge: length · Right-click: pick"
     >
       <span className="h-track-label">Note</span>
@@ -211,7 +268,9 @@ function NoteInspector() {
       which={off ? 'No note selected'
         : `${notes.length === 1 ? noteName(lead.note) : `${notes.length} notes`} of ${channel.sound.name}`}
       notes={notes}
+      sound={channel.sound}
       setExtras={(extras) => setNotesExtras(pattern.id, channel.id, all, extras)}
+      setLock={(slot, lock) => setNotesLock(pattern.id, channel.id, all, slot, lock)}
       help={`Click: add a note · Drag: move · Edges: length · Shift-drag: select · ${modKey('C')} ${modKey('V')}: `
         + 'copy, paste'}
     >

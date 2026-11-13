@@ -6,17 +6,18 @@ import {
   emptyProject, newBusModule, newChannel, newMod, newModule, newPattern, newSound, uid,
 } from '../core/defaults';
 import { MAX_LEVEL, MIN_LEVEL, fitFades } from '../core/arrangement';
+import { cleanPoints, refKey, refSpec, validLocks } from '../core/automation';
 import { MAX_TICKS, barOf, barsToHold, meterText, readMeter } from '../core/meter';
 import { BUS_LEVEL, DUCK_AMOUNT, DUCK_RELEASE, MAX_BUS_NAME, rackChain } from '../core/mixer';
-import type { Owner } from '../core/mixer';
-import { MODULES, moduleDef, paramSpec } from '../core/modules';
+import type { MixerRack, Owner } from '../core/mixer';
+import { MODULES, moduleDef, moduleParams, paramSpec } from '../core/modules';
 import { MAX_NOTE, MIN_NOTE, cleanNotes, compareNotes, noteExtras } from '../core/notes';
 import { inScale, nearestInScale, readScale } from '../core/scale';
 import type { NoteExtras } from '../core/notes';
 import { coerce, defaultParams } from '../core/params';
 import type {
-  Block, Channel, Duck, Lane, Meter, ModInst, ModTarget, ModuleInst, Note, NoteInit, ParamValue, Params, Pattern,
-  Placement, PlayScope, Project, SampleData, Scale, SendBus, Sound,
+  AutoRow, Block, Channel, Duck, Lane, Lock, Meter, ModInst, ModTarget, ModuleInst, Note, NoteInit, ParamRef,
+  ParamValue, Pattern, Placement, PlayScope, Project, SampleData, Scale, SendBus, Sound,
 } from '../core/types';
 
 export type View = 'factory' | 'track' | 'song' | 'mixer';
@@ -152,6 +153,11 @@ function hasOwner(owner: Owner): boolean {
   return typeof owner !== 'string' || useApp.getState().project.channels.some((c) => c.id === owner);
 }
 
+/** Rows of automation whose parameter is gone (its sound, its effect, its source's parameter) go with it. */
+function dropStaleAutomation(project: Project): void {
+  project.automation = project.automation.filter((row) => refSpec(project, row.target));
+}
+
 function nextColor(items: { color: number }[]): number {
   const counts = Array<number>(CHANNEL_COLORS).fill(0);
   for (const item of items) counts[item.color]++;
@@ -243,6 +249,7 @@ export function removeChannel(channelId: string): void {
     }
     for (const placement of p.song) setMutes(placement, (placement.mutes ?? []).filter((id) => id !== channelId));
     for (const c of p.channels) if (c.duck.source === channelId) c.duck.source = null;
+    dropStaleAutomation(p);
   }, undefined, state.channelId === channelId ? { channelId: channel?.id ?? null } : {});
 }
 
@@ -319,6 +326,7 @@ export function replaceSound(channelId: string, sound: Sound, samples?: Record<s
     if (!channel) return;
     if (!equal(channel.sound, sound)) channel.sound = sound;
     mergeSamples(p.samples, samples);
+    dropStaleAutomation(p);
   });
 }
 
@@ -336,8 +344,9 @@ function validTarget(sound: Sound, target: ModTarget): boolean {
 export function setSourceType(channelId: string, type: string): void {
   const def = MODULES[type];
   if (def?.kind !== 'source') return;
-  editSound(channelId, (sound) => {
-    if (sound.source.type === type) return;
+  edit((p) => {
+    const sound = p.channels.find((c) => c.id === channelId)?.sound;
+    if (!sound || sound.source.type === type) return;
     const oldDef = moduleDef(sound, 'source');
     const params = defaultParams(def);
     for (const spec of def.params) {
@@ -347,6 +356,7 @@ export function setSourceType(channelId: string, type: string): void {
     for (const mod of sound.mods) {
       if (mod.target?.module === 'source' && !validTarget(sound, mod.target)) mod.target = null;
     }
+    dropStaleAutomation(p);
   });
 }
 
@@ -363,13 +373,8 @@ export function setParam(owner: Owner, moduleId: string, paramId: string, value:
   editSound(owner, (sound) => {
     const def = moduleDef(sound, moduleId);
     const spec = def && paramSpec(def, paramId);
-    if (!spec) return;
-    const fixed: Record<string, Params> = {
-      source: sound.source.params, play: sound.play, filter: sound.filter, amp: sound.amp, out: sound.out,
-    };
-    const params = Object.hasOwn(fixed, moduleId) ? fixed[moduleId]
-      : (sound.chain.find((m) => m.id === moduleId) ?? sound.mods.find((m) => m.id === moduleId))?.params;
-    if (params) params[paramId] = coerce(spec, value);
+    const params = moduleParams(sound, moduleId);
+    if (spec && params) params[paramId] = coerce(spec, value);
   }, key);
 }
 
@@ -406,13 +411,20 @@ export function addMod(channelId: string, type: string): string | null {
   return mod.id;
 }
 
-/** Remove an effect, or a modulator of a sound. Modulators that moved the effect are left without a target. */
+/**
+ * Remove an effect, or a modulator of a sound. Modulators that moved the effect are left without a target, and rows
+ * of automation that moved it go.
+ */
 export function removeModule(owner: Owner, moduleId: string): void {
-  editChain(owner, (chain, sound) => {
+  edit((p) => {
+    const sound = typeof owner === 'string' ? p.channels.find((c) => c.id === owner)?.sound : undefined;
+    if (typeof owner === 'string' && !sound) return;
+    const chain = sound ? sound.chain : rackChain(p.mixer, (owner as { rack: MixerRack }).rack);
     const index = chain.findIndex((m) => m.id === moduleId);
     if (index >= 0) {
       chain.splice(index, 1);
       for (const mod of sound?.mods ?? []) if (mod.target?.module === moduleId) mod.target = null;
+      dropStaleAutomation(p);
     } else if (sound) {
       const modIndex = sound.mods.findIndex((m) => m.id === moduleId);
       if (modIndex >= 0) sound.mods.splice(modIndex, 1);
@@ -470,13 +482,17 @@ function editNotes(
   edit((p) => {
     const pattern = p.patterns.find((pattern) => pattern.id === patternId);
     const notes = pattern?.notes[channelId];
-    if (!pattern || !notes) return;
+    const sound = p.channels.find((c) => c.id === channelId)?.sound;
+    if (!pattern || !notes || !sound) return;
     const next = notes.map((n): Note => {
       if (!ids.includes(n.id)) return n;
       const v = change(n);
+      const { locks, ...extras } = noteExtras({ ...v });
+      const kept = validLocks(sound, locks ?? []);
       return {
         id: n.id, start: clamp(Math.round(v.start), 0, MAX_TICKS - 1), len: clamp(Math.round(v.len), 1, MAX_TICKS),
-        note: clamp(Math.round(v.note), MIN_NOTE, MAX_NOTE), vel: clamp(v.vel, 0, 1), ...noteExtras({ ...v }),
+        note: clamp(Math.round(v.note), MIN_NOTE, MAX_NOTE), vel: clamp(v.vel, 0, 1), ...extras,
+        ...(kept.length > 0 && { locks: kept }),
       };
     });
     if (new Set(next.map((n) => `${n.start}:${n.note}`)).size === next.length) {
@@ -632,6 +648,22 @@ export function setNotesExtras(
   patternId: string, channelId: string, ids: readonly string[], extras: NoteExtras,
 ): void {
   editNotes(patternId, channelId, ids, (n) => ({ ...n, ...extras }), JSON.stringify(Object.keys(extras).sort()));
+}
+
+/**
+ * Give notes a lock in slot 0 or 1, or take it away with null: their own value of a parameter of their sound while
+ * they play. A lock of the same parameter in the other slot gives way to it. Locks of parameters the sound no longer
+ * has are dropped with any edit of the note.
+ */
+export function setNotesLock(
+  patternId: string, channelId: string, ids: readonly string[], slot: number, lock: Lock | null,
+): void {
+  const same = (l: Lock) => !!lock && l.target.module === lock.target.module && l.target.param === lock.target.param;
+  editNotes(patternId, channelId, ids, (n) => {
+    const locks = (n.locks ?? []).filter((l, i) => i !== slot && !same(l));
+    if (lock) locks.splice(Math.min(slot, locks.length), 0, lock);
+    return { ...n, locks };
+  }, JSON.stringify(['lock', slot, lock?.target ?? null]));
 }
 
 export function setPatternBars(patternId: string, bars: number): void {
@@ -883,6 +915,32 @@ export function removePlacement(placementId: string): void {
     const index = p.song.findIndex((s) => s.id === placementId);
     if (index >= 0) p.song.splice(index, 1);
   });
+}
+
+/**
+ * Add a row of automation for a parameter of the project. Returns the id of the new row, or of the row the parameter
+ * already has, or null when the project has no such parameter.
+ */
+export function addAutomation(target: ParamRef): string | null {
+  const { project } = useApp.getState();
+  if (!refSpec(project, target)) return null;
+  const found = project.automation.find((row) => refKey(row.target) === refKey(target));
+  if (found) return found.id;
+  const row: AutoRow = { id: uid('a'), target: structuredClone(target), points: [] };
+  edit((p) => { p.automation.push(row); });
+  return row.id;
+}
+
+export function removeAutomation(id: string): void {
+  edit((p) => { p.automation = p.automation.filter((row) => row.id !== id); });
+}
+
+/** Give a row of automation new points, made valid. A drag that calls it in a gesture is one undo step. */
+export function setAutomationPoints(id: string, points: readonly (readonly [number, number])[]): void {
+  edit((p) => {
+    const row = p.automation.find((r) => r.id === id);
+    if (row) row.points = cleanPoints(points);
+  }, JSON.stringify(['points', id]));
 }
 
 export function undo(): void {

@@ -236,7 +236,8 @@ function blockProject(block: Block): Project {
   const notes = Object.fromEntries(block.tracks.map((track, i) => [`b${i}`, track.notes]));
   const loops = Object.fromEntries(block.tracks.flatMap((track, i) => (track.loop ? [[`b${i}`, track.loop]] : [])));
   return {
-    name: block.name, bpm, swing, meter, master, mixer, channels, song: [], lanes: newLanes(), samples: block.samples,
+    name: block.name, bpm, swing, meter, master, mixer, channels, song: [], lanes: newLanes(), automation: [],
+    samples: block.samples,
     patterns: [{ id: 'block', name: block.name, color: block.color, bars: block.bars, notes, loops }],
   };
 }

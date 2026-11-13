@@ -17,6 +17,7 @@ import {
 import { useShown } from '../factory/levels';
 import { Button, Slider, Well, openMenu, setHint, useHint } from '../kit';
 import { SpriteImage } from '../kit/Icon';
+import { AutomationRows } from './Automation';
 import { barWidth, openInTrack, placementText, room } from './song';
 import { Tile } from './Tile';
 
@@ -217,7 +218,7 @@ export function Timeline() {
     } else if (target.closest('.h-song-lane')) {
       const name = patternName(useApp.getState().patternId);
       setHint(`Click to place ${name} here; keep the button down to drag it into place.`);
-    } else if (!target.closest('.h-song-ruler, .h-song-head')) {
+    } else if (!target.closest('.h-song-ruler, .h-song-head, .h-song-autorow')) {
       setHint(null);
     }
   };
@@ -315,6 +316,7 @@ export function Timeline() {
             </div>
           </div>
         ))}
+        <AutomationRows count={count} width={w} />
       </div>
     </Well>
   );

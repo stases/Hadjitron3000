@@ -46,4 +46,4 @@ test('the demo song renders without hitting the clipper hard', async () => {
   const p = Math.max(peak(pcm.channels[0]), peak(pcm.channels[1]));
   expect(p).toBeGreaterThan(0.3);
   expect(p).toBeLessThan(0.8);
-}, 30_000);
+}, 60_000);

@@ -13,6 +13,8 @@ interface ParamControlProps {
   onChange: (value: ParamValue) => void;
   hint?: string;
   disabled?: boolean;
+  /** A float that automation moves: its knob glows. */
+  automated?: boolean;
 }
 
 /** A float with at most this many positions gets a knob that clicks into each one. */
@@ -23,7 +25,7 @@ const WAVES = ['sine', 'triangle', 'sawtooth', 'square', 'draw'] as const;
 const isWaveChoice = (spec: ChoiceSpec) =>
   spec.options.every(([v]) => (WAVES as readonly string[]).includes(v));
 
-export function ParamControl({ spec, value, onChange, hint, disabled }: ParamControlProps) {
+export function ParamControl({ spec, value, onChange, hint, disabled, automated }: ParamControlProps) {
   switch (spec.kind) {
     case 'float': {
       const count = spec.step && (spec.taper ?? 'lin') === 'lin' ? Math.round((spec.max - spec.min) / spec.step) + 1 : 0;
@@ -38,6 +40,7 @@ export function ParamControl({ spec, value, onChange, hint, disabled }: ParamCon
           steps={count > 1 && count <= MAX_KNOB_STEPS ? count : undefined}
           bipolar={spec.min === -spec.max}
           disabled={disabled}
+          automated={automated}
         />
       );
     }

@@ -1,9 +1,10 @@
 // The engine: one graph and one strip per channel, two send buses, a master rack and level with a soft clipper, and
 // taps for meters and scopes.
 
+import { SEND_MODULE, busUsed } from '../core/automation';
 import type { Owner } from '../core/mixer';
-import type { GainCurve, Project } from '../core/types';
-import { dbToGain, glide } from './automation';
+import type { GainCurve, Lock, ParamRef, Project } from '../core/types';
+import { Automated, dbToGain, glide } from './automation';
 import { EffectRack, SendBusGraph, Strip } from './buses';
 import { CHANNEL_TAP_SIZE, ChannelGraph, structureKey } from './channel';
 import { Bus } from './mix';
@@ -51,6 +52,8 @@ export class Engine {
   private ducked = new Map<string, Strip[]>();
   private readonly decodes = new Map<string, Promise<unknown>>();
   private project: Project | undefined;
+  /** The master level's automation. */
+  private readonly masterAuto = new Automated();
   private voiceCount = 0;
   private readonly serial = () => this.voiceCount++;
 
@@ -78,7 +81,9 @@ export class Engine {
     this.project = project;
     const t = this.ctx.currentTime;
     if (!old) this.master.gain.value = dbToGain(project.master);
-    else if (project.master !== old.master) glide(this.master.gain, dbToGain(project.master), t);
+    else if (project.master !== old.master && !this.masterAuto.has('out', 'level')) {
+      glide(this.master.gain, dbToGain(project.master), t);
+    }
     const { mixer } = project;
     if (this.rack) this.rack.set(mixer.master.chain, project.bpm);
     else this.rack = new EffectRack(this.ctx, this.sum, this.master, mixer.master.chain, project.bpm);
@@ -109,9 +114,11 @@ export class Engine {
       }
       graph?.dispose();
       const slot = strip.inputs.take(t);
-      this.channels.set(ch.id, new ChannelGraph(this.ctx, ch.sound, project.bpm, audible, !!graph, slot, this.serial));
+      this.channels.set(
+        ch.id, new ChannelGraph(this.ctx, ch.sound, project.bpm, audible, !!graph, slot, this.serial, graph?.auto),
+      );
     }
-    mixer.buses.forEach((bus, i) => this.sends[i].set(bus, project.bpm, project.channels.some((c) => c.sends[i] > 0)));
+    mixer.buses.forEach((bus, i) => this.sends[i].set(bus, project.bpm, busUsed(project, i)));
 
     for (const [id, sample] of Object.entries(project.samples)) {
       if (!this.decodes.has(id)) this.decodes.set(id, decodeSample(id, sample.bytes).catch(() => undefined));
@@ -126,14 +133,59 @@ export class Engine {
 
   /**
    * Play a note; with `slide` it glides out of the note sounding before it instead of starting again. A `gain`
-   * curve gives the note a level of its own over time, from the note's start.
+   * curve gives the note a level of its own over time, from the note's start. Its `locks` of parameters inside the
+   * voice give that voice values of its own; locks of shared parameters are the automator's.
    */
   play(
     channelId: string, note: number, vel: number, time: number, dur: number, slide = false, gain?: GainCurve,
+    locks?: readonly Lock[],
   ): void {
     const t = Math.max(time, this.ctx.currentTime);
-    this.channels.get(channelId)?.start(note, vel, t, dur, slide, gain);
+    this.channels.get(channelId)?.start(note, vel, t, dur, slide, gain, locks);
     this.duck(channelId, t);
+  }
+
+  /**
+   * Automation moves a parameter to `value`, in its own units, in a straight line that arrives at `time`; the
+   * transport and the renderer call it through an Automator.
+   */
+  automate(ref: ParamRef, value: number, time: number): void {
+    const { owner, module, param } = ref;
+    if (typeof owner === 'string') {
+      if (module === SEND_MODULE) this.strips.get(owner)?.automateSend(Number(param), value, time);
+      else this.channels.get(owner)?.automate(module, param, value, time);
+    } else if (owner.rack !== 'master') {
+      this.sends[owner.rack].automate(module, param, value, time);
+    } else if (module !== 'out') {
+      this.rack?.automate(module, param, value, time);
+    } else {
+      this.masterAuto.add(module, param, value, time);
+      this.master.gain.linearRampToValueAtTime(dbToGain(value), time);
+    }
+  }
+
+  /** Step the automated parameters of effects that cannot ramp to their values now. */
+  flushAutomation(): void {
+    for (const graph of this.channels.values()) graph.flush();
+    for (const bus of this.sends) bus.flush();
+    this.rack?.flush();
+  }
+
+  /** The song stopped: every automated parameter goes back to its stored value. */
+  endAutomation(): void {
+    for (const graph of this.channels.values()) graph.endAutomation();
+    for (const strip of this.strips.values()) strip.endAutomation();
+    for (const bus of this.sends) bus.endAutomation();
+    this.rack?.endAutomation();
+    this.masterAuto.release(this.ctx.currentTime, () => undefined, 0, (_module, _param, time) =>
+      this.master.gain.linearRampToValueAtTime(dbToGain(this.project!.master), time));
+  }
+
+  /** Whether automation moves a parameter in straight lines; an effect without `ramp` is stepped instead. */
+  ramps(ref: ParamRef): boolean {
+    const { owner, module } = ref;
+    if (typeof owner === 'string') return this.channels.get(owner)?.ramps(module) ?? true;
+    return owner.rack === 'master' ? this.rack?.ramps(module) ?? true : this.sends[owner.rack].ramps(module);
   }
 
   noteOn(channelId: string, note: number, vel: number): void {

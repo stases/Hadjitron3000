@@ -8,12 +8,13 @@ import type { MixerRack } from '../../core/mixer';
 import { OUT, paramSpec } from '../../core/modules';
 import type { FloatSpec } from '../../core/modules';
 import { formatValue, fromNorm, toNorm } from '../../core/params';
-import type { Channel } from '../../core/types';
+import type { Channel, ParamRef } from '../../core/types';
 import { selectChannel, setBus, setChannel, setDuck, setMaster, setParam, setView, useApp } from '../../state/store';
 import { Button, ColorChip, FoldToggles, Knob, Meter, Select, Slider, TextField, useHint } from '../kit';
 import { cx } from '../kit/cx';
 import { SendKnob } from '../factory/controls';
 import { MIXER_HINTS, PARAM_HINTS } from '../factory/hints';
+import { automatedHint, useAutomation, withAutomation } from '../factory/automated';
 import { toggleFold, useShown } from '../factory/levels';
 import { EffectChain } from '../factory/Rack';
 import '../factory/factory.css';
@@ -22,6 +23,7 @@ import './mixer.css';
 const LEVEL = paramSpec(OUT, 'level') as FloatSpec;
 const PAN = paramSpec(OUT, 'pan') as FloatSpec;
 const FADER = 100;
+const NO_TARGET: ParamRef = { owner: '', module: '', param: '' };
 const { mute: MUTE, solo: SOLO, master: MASTER } = MIXER_HINTS;
 
 /** The rack shown under the strips; kept while the app runs. */
@@ -37,15 +39,19 @@ function useShownRack(): MixerRack {
   return chosen === 'master' && !shaping ? 0 : chosen;
 }
 
-function Fader({ spec, value, onChange, read, label, hint }: {
+/** A strip's fader beside its meter; automation can move the parameter it names. */
+function Fader({ spec, value, onChange, read, label, hint, target }: {
   spec: FloatSpec;
   value: number;
   onChange: (value: number) => void;
   read: () => [number, number];
   label: string;
   hint: string;
+  target: ParamRef;
 }) {
   const meter = useHint(MIXER_HINTS.meter);
+  const { automated, live } = useAutomation(target);
+  const shown = live ?? value;
   return (
     <div className="h-mixer-fader">
       <div className="h-mixer-meter" {...meter.props}>
@@ -54,32 +60,38 @@ function Fader({ spec, value, onChange, read, label, hint }: {
       <Slider
         vertical
         length={FADER}
-        value={toNorm(spec, value)}
-        onChange={(t) => onChange(fromNorm(spec, t))}
+        value={toNorm(spec, shown)}
+        onChange={(t) => (live === null ? onChange(fromNorm(spec, t)) : automatedHint(label))}
         label={label}
-        display={formatValue(spec, value)}
-        hint={hint}
+        display={formatValue(spec, shown)}
+        hint={withAutomation(automated, hint)}
+        automated={automated}
       />
     </div>
   );
 }
 
-function FloatKnob({ spec, value, onChange, hint }: {
+/** A small knob; with a `target`, one that automation can move. */
+function FloatKnob({ spec, value, onChange, hint, target = NO_TARGET }: {
   spec: FloatSpec;
   value: number;
   onChange: (value: number) => void;
   hint: string;
+  target?: ParamRef;
 }) {
+  const { automated, live } = useAutomation(target);
+  const shown = live ?? value;
   return (
     <Knob
       small
-      value={toNorm(spec, value)}
-      onChange={(t) => onChange(fromNorm(spec, t))}
+      value={toNorm(spec, shown)}
+      onChange={(t) => (live === null ? onChange(fromNorm(spec, t)) : automatedHint(spec.label))}
       defaultValue={toNorm(spec, spec.def)}
       label={spec.label}
-      display={formatValue(spec, value)}
-      hint={hint}
+      display={formatValue(spec, shown)}
+      hint={withAutomation(automated, hint)}
       bipolar={spec.min === -spec.max}
+      automated={automated}
     />
   );
 }
@@ -137,6 +149,7 @@ function ChannelStrip({ channel, others, active }: { channel: Channel; others: C
           value={sound.out.pan as number}
           onChange={(pan) => setParam(id, 'out', 'pan', pan)}
           hint={PARAM_HINTS.out.pan}
+          target={{ owner: id, module: 'out', param: 'pan' }}
         />
       </div>
       <Fader
@@ -146,6 +159,7 @@ function ChannelStrip({ channel, others, active }: { channel: Channel; others: C
         read={() => channelLevels(id)}
         label="Level"
         hint={MIXER_HINTS.level(sound.name)}
+        target={{ owner: id, module: 'out', param: 'level' }}
       />
       <div className="h-mixer-buttons">
         <Button small pressed={channel.mute} onClick={() => setChannel(id, { mute: !channel.mute })} hint={MUTE}>
@@ -183,6 +197,7 @@ function BusStrip({ index }: { index: 0 | 1 }) {
         read={() => busLevels(index)}
         label="Level"
         hint={MIXER_HINTS.busLevel(bus.name)}
+        target={{ owner: { rack: index }, module: 'out', param: 'level' }}
       />
       <div className="h-mixer-buttons">
         <Button
@@ -217,7 +232,15 @@ function MasterStrip() {
         )}
       </div>
       <div className="h-mixer-cell" />
-      <Fader spec={BUS_LEVEL} value={master} onChange={setMaster} read={levels} label="Master" hint={MASTER} />
+      <Fader
+        spec={BUS_LEVEL}
+        value={master}
+        onChange={setMaster}
+        read={levels}
+        label="Master"
+        hint={MASTER}
+        target={{ owner: { rack: 'master' }, module: 'out', param: 'level' }}
+      />
       <div className="h-mixer-buttons" />
     </div>
   );

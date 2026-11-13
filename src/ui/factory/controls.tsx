@@ -1,4 +1,5 @@
 import { usePrefs } from '../../app/prefs';
+import { SEND_MODULE } from '../../core/automation';
 import { levelOf } from '../../core/levels';
 import { SEND } from '../../core/mixer';
 import { MODULES, SOURCES, paramSpec } from '../../core/modules';
@@ -8,6 +9,7 @@ import type { Params } from '../../core/types';
 import { setParam, setSend, setSourceType, useApp } from '../../state/store';
 import type { Owner } from '../../state/store';
 import { Knob, ParamControl, Select } from '../kit';
+import { automatedHint, useAutomation, withAutomation } from './automated';
 import { MIXER_HINTS, PARAM_HINTS } from './hints';
 import { sourceItems, useShown } from './levels';
 import type { Cell } from './levels';
@@ -53,6 +55,7 @@ interface ControlProps {
  */
 export function Control({ owner, moduleId, type, spec, params, disabled }: ControlProps) {
   const shown = useShown();
+  const { automated, live } = useAutomation({ owner, module: moduleId, param: spec.id });
   const label = LABELS[type]?.[spec.id];
   const offered: ParamSpec =
     spec.kind === 'choice'
@@ -61,10 +64,11 @@ export function Control({ owner, moduleId, type, spec, params, disabled }: Contr
   return (
     <ParamControl
       spec={label ? { ...offered, label } : offered}
-      value={params[spec.id]}
-      onChange={(v) => setParam(owner, moduleId, spec.id, v)}
-      hint={PARAM_HINTS[type][spec.id]}
+      value={live ?? params[spec.id]}
+      onChange={(v) => (live === null ? setParam(owner, moduleId, spec.id, v) : automatedHint(spec.label))}
+      hint={withAutomation(automated, PARAM_HINTS[type][spec.id])}
       disabled={disabled || !!IDLE[type]?.[spec.id]?.(params)}
+      automated={automated}
     />
   );
 }
@@ -142,15 +146,18 @@ export function SendKnob({ channelId, index, value, small }: {
   small?: boolean;
 }) {
   const name = useApp((s) => s.project.mixer.buses[index].name);
+  const { automated, live } = useAutomation({ owner: channelId, module: SEND_MODULE, param: String(index) });
+  const shown = live ?? value;
   return (
     <Knob
       small={small}
-      value={toNorm(SEND, value)}
-      onChange={(t) => setSend(channelId, index, fromNorm(SEND, t))}
+      value={toNorm(SEND, shown)}
+      onChange={(t) => (live === null ? setSend(channelId, index, fromNorm(SEND, t)) : automatedHint(name))}
       defaultValue={toNorm(SEND, SEND.def)}
       label={name}
-      display={formatValue(SEND, value)}
-      hint={MIXER_HINTS.send(name)}
+      display={formatValue(SEND, shown)}
+      hint={withAutomation(automated, MIXER_HINTS.send(name))}
+      automated={automated}
     />
   );
 }

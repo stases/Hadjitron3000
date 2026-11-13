@@ -83,19 +83,19 @@ test('in beginner mode the extras wait behind Shaping and Deep toggles whose lam
   expect(labels()).toEqual(['Note', 'Velocity', 'Length', 'Chance']);
   expect($$('.h-checkbox', inspector()).map((c) => c.textContent)).toEqual(['Slide', 'Hold']);
   await userEvent.click(toggles()[1]);
-  expect(labels()).toEqual(['Note', 'Velocity', 'Length', 'Chance', 'Ratchet']);
+  expect(labels()).toEqual(['Note', 'Velocity', 'Length', 'Chance', 'Ratchet', 'Lock 1', 'Lock 2']);
   expect(inspector().querySelector('[aria-label="Deep"] .h-select-text')!.textContent).toBe('3x');
   await userEvent.click(toggles()[0]);
-  expect(labels()).toEqual(['Note', 'Velocity', 'Length', 'Ratchet']);
+  expect(labels()).toEqual(['Note', 'Velocity', 'Length', 'Ratchet', 'Lock 1', 'Lock 2']);
 
   // The roll's inspector folds the same way and adds Start to the Basics.
   flushSync(() => openRoll(kick, [first.id]));
-  expect(labels()).toEqual(['Note', 'Velocity', 'Length', 'Start', 'Ratchet']);
+  expect(labels()).toEqual(['Note', 'Velocity', 'Length', 'Start', 'Ratchet', 'Lock 1', 'Lock 2']);
   expect(lamps()).toEqual([false, true]);
 
   flushSync(() => setPrefs({ beginner: false }));
   expect(toggles()).toEqual([]);
-  expect(labels()).toEqual(['Note', 'Velocity', 'Length', 'Start', 'Chance', 'Ratchet']);
+  expect(labels()).toEqual(['Note', 'Velocity', 'Length', 'Start', 'Chance', 'Ratchet', 'Lock 1', 'Lock 2']);
 });
 
 test('the grid sets extras on all the notes of the selected step, one undo step each, and marks them', async () => {

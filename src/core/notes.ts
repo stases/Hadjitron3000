@@ -2,7 +2,7 @@
 
 import { uid } from './defaults';
 import { MAX_TICKS } from './meter';
-import type { Note, NoteInit } from './types';
+import type { Lock, Note, NoteInit } from './types';
 
 /** The names of the twelve pitch classes, from C. */
 export const PITCH_NAMES: readonly string[] = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -50,10 +50,30 @@ export function compareNotes(a: NoteInit, b: NoteInit): number {
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
+/** The most locks a note can carry. */
+export const MAX_LOCKS = 2;
+
 /** The ratchet choices besides playing once. */
 export const RATCHETS: readonly number[] = [2, 3, 4, 6, 8];
 
-export type NoteExtras = Pick<Note, 'chance' | 'ratchet' | 'slide' | 'hold'>;
+export type NoteExtras = Pick<Note, 'chance' | 'ratchet' | 'slide' | 'hold' | 'locks'>;
+
+/**
+ * Locks as a note keeps them: at most two, each naming a module and a parameter with a value in 0..1, one per target.
+ * Whether its sound has that parameter is checked where the sound is known.
+ */
+function readLocks(value: unknown): Lock[] {
+  const locks: Lock[] = [];
+  for (const entry of Array.isArray(value) ? value : []) {
+    const target = (entry as Record<string, unknown> | null)?.target as Record<string, unknown> | undefined;
+    const { value: v } = entry as Record<string, unknown>;
+    const { module, param } = target ?? {};
+    if (typeof module !== 'string' || typeof param !== 'string' || typeof v !== 'number' || !Number.isFinite(v)) continue;
+    if (locks.some((l) => l.target.module === module && l.target.param === param)) continue;
+    if (locks.push({ target: { module, param }, value: clamp(v, 0, 1) }) === MAX_LOCKS) break;
+  }
+  return locks;
+}
 
 /** The extras of a note that differ from their defaults, made valid; a chance of 100 or more is no chance at all. */
 export function noteExtras(raw: Record<string, unknown>): NoteExtras {
@@ -63,6 +83,8 @@ export function noteExtras(raw: Record<string, unknown>): NoteExtras {
   if (typeof raw.ratchet === 'number' && RATCHETS.includes(raw.ratchet)) extras.ratchet = raw.ratchet;
   if (raw.slide === true) extras.slide = true;
   if (raw.hold === true) extras.hold = true;
+  const locks = readLocks(raw.locks);
+  if (locks.length > 0) extras.locks = locks;
   return extras;
 }
 

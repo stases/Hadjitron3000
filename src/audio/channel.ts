@@ -1,9 +1,11 @@
 // The audio graph of one channel: voices, the shared effect chain, the modulators and the output.
 
+import { inNote, soundSpec } from '../core/automation';
 import { adsrOf, envelopeSegments, releaseSegments, type Adsr } from '../core/envelope';
 import { inVoice, moduleDef, paramSpec, perNote } from '../core/modules';
-import type { GainCurve, ModInst, ModuleInst, Sound } from '../core/types';
-import { cut, dbToGain, follow, glide, schedule, type Plan } from './automation';
+import { fromNorm } from '../core/params';
+import type { GainCurve, Lock, ModInst, ModuleInst, Params, Sound } from '../core/types';
+import { Automated, cut, dbToGain, follow, glide, schedule, type Placed, type Plan } from './automation';
 import { Bus, mix, type Slot } from './mix';
 import { EFFECT_BUILDERS, type Effect } from './modules/effects';
 import { modSource, type ModSource } from './modules/modulators';
@@ -19,6 +21,11 @@ const SLIDE = 0.06;
 // A note is still held at the start of the next one when its key goes up more than this later.
 const OVERLAP = 1e-6;
 export const CHANNEL_TAP_SIZE = 32768;
+/** Parameters inside the voice that automation moves in notes already sounding; the others reach new notes only. */
+const SOUNDING: Readonly<Record<string, readonly string[]>> = {
+  source: ['amount', 'pw'],
+  filter: ['cutoff', 'reso', 'drive'],
+};
 
 /** A glide of a voice's pitch in cents from the note it was built for: c0 at t0, straight on to c1 at t1. */
 interface Bend {
@@ -55,6 +62,8 @@ interface Voice {
   mods: NoteMod[];
   bend: Bend | null;
   done: boolean;
+  /** Values its note locks, by module, in their parameters' units. */
+  locks: Record<string, Params>;
 }
 
 interface Mod {
@@ -133,6 +142,8 @@ export class ChannelGraph {
     fadeIn: boolean,
     private readonly slot: Slot,
     private readonly serial: () => number,
+    /** What automation moves; a rebuilt channel takes over the old one's. */
+    readonly auto = new Automated(),
   ) {
     this.key = structureKey(sound);
     this.sound = sound;
@@ -181,6 +192,10 @@ export class ChannelGraph {
       if (inVoice(module)) this.voiceMods.set(key, sum);
       else for (const target of this.moduleTargets(module)![param]) sum.connect(target);
     }
+    const now = ctx.currentTime;
+    for (const [module, param, curve] of this.auto.entries()) {
+      if (!inNote(module)) for (const time of [now, ...curve.after(now)]) this.move(module, param, time);
+    }
   }
 
   private moduleTargets(module: string): Record<string, AudioParam[]> | undefined {
@@ -201,7 +216,8 @@ export class ChannelGraph {
     this.sound = sound;
     for (const m of sound.chain) {
       const prev = old.chain.find((o) => o.id === m.id);
-      if (prev?.params !== m.params || tempo) this.effects.get(m.id)?.update(m.params, bpm);
+      if (prev?.params === m.params && !tempo) continue;
+      this.effects.get(m.id)?.update(this.auto.overlay(m.id, m.params, t), bpm);
     }
     this.bpm = bpm;
     const inst = (id: string) => sound.mods.find((m) => m.id === id)!;
@@ -213,7 +229,7 @@ export class ChannelGraph {
     }
     this.noteMods = this.noteMods.map((m) => ({ ...m, inst: inst(m.inst.id) }));
     for (const v of this.voices) {
-      if (sound.filter !== old.filter) v.filter?.update(sound.filter);
+      if (sound.filter !== old.filter) v.filter?.update(this.voiceParams(v, 'filter', sound.filter, t));
       if (sound.source.params !== old.source.params) v.src.redraw?.(sound.source.params, t);
       for (const m of v.mods) {
         if (inst(m.inst.id) === m.inst && !tempo) continue;
@@ -223,9 +239,83 @@ export class ChannelGraph {
       }
     }
     if (sound.out !== old.out) {
-      glide(this.level.gain, levelGain(sound.out.level as number), t);
-      glide(this.panner.pan, sound.out.pan as number, t);
+      if (!this.auto.has('out', 'level')) glide(this.level.gain, levelGain(sound.out.level as number), t);
+      if (!this.auto.has('out', 'pan')) glide(this.panner.pan, sound.out.pan as number, t);
     }
+  }
+
+  /**
+   * Automation moves a parameter of the sound to `value`, in its own units, in a straight line that arrives at `time`.
+   * A parameter inside the voice moves in the notes sounding then where it can, and new notes start from its curve.
+   */
+  automate(module: string, param: string, value: number, time: number): void {
+    this.auto.add(module, param, value, time);
+    if (!inNote(module)) this.move(module, param, time);
+    else for (const v of this.voices) if (!v.done && v.stopAt > time) this.moveVoice(v, module, param, time);
+  }
+
+  /** Step the effects that cannot ramp to their automated values now. */
+  flush(): void {
+    this.auto.flush(this.ctx.currentTime, (module) => this.placed(module), this.bpm);
+  }
+
+  /** The song stopped: every automated parameter goes back to its stored value after its last point. */
+  endAutomation(): void {
+    this.auto.release(this.ctx.currentTime, (module) => this.placed(module), this.bpm, (module, param, time) => {
+      if (module === 'out') this.moveOut(param, this.sound.out[param] as number, time);
+    });
+  }
+
+  /** Whether automation can move a parameter of an effect in straight lines rather than in steps. */
+  ramps(module: string): boolean {
+    const fx = this.effects.get(module);
+    return !fx || !!fx.ramp;
+  }
+
+  /** A parameter shared by the notes follows its curve up to `time`. */
+  private move(module: string, param: string, time: number): void {
+    if (module === 'out') this.moveOut(param, this.auto.at(module, param, time)!, time);
+    const placed = this.placed(module);
+    if (placed) this.auto.moveEffect(module, param, placed, this.bpm, time);
+  }
+
+  private moveOut(param: string, value: number, time: number): void {
+    if (param === 'level') this.level.gain.linearRampToValueAtTime(levelGain(value), time);
+    else this.panner.pan.linearRampToValueAtTime(value, time);
+  }
+
+  private placed(module: string): Placed | undefined {
+    const fx = this.effects.get(module);
+    const params = this.sound.chain.find((m) => m.id === module)?.params;
+    return fx && params ? { fx, params } : undefined;
+  }
+
+  /** A parameter of a sounding voice follows its curve up to `time`, unless its note locks it or it cannot move. */
+  private moveVoice(v: Voice, module: string, param: string, time: number): void {
+    if (v.locks[module]?.[param] !== undefined || !SOUNDING[module]?.includes(param)) return;
+    if (module === 'filter') {
+      v.filter?.ramp(this.voiceParams(v, module, this.sound.filter, time), param, time);
+      return;
+    }
+    const value = this.auto.at(module, param, time)!;
+    for (const target of v.src.targets[param] ?? []) target.linearRampToValueAtTime(value, time);
+  }
+
+  /** A module's parameters as a voice has them at `t`: stored, then automated, then locked by its note. */
+  private voiceParams(v: Pick<Voice, 'locks'>, module: string, params: Params, t: number): Params {
+    const own = v.locks[module];
+    const moved = this.auto.overlay(module, params, t);
+    return own ? { ...moved, ...own } : moved;
+  }
+
+  /** The locks of a note that go to its own voice, by module, in their parameters' units. */
+  private ownLocks(locks: readonly Lock[] = []): Record<string, Params> {
+    const own: Record<string, Params> = {};
+    for (const { target, value } of locks) {
+      const spec = inNote(target.module) ? soundSpec(this.sound, target) : undefined;
+      if (spec) (own[target.module] ??= {})[target.param] = fromNorm(spec, value);
+    }
+    return own;
   }
 
   setAudible(audible: boolean): void {
@@ -256,11 +346,17 @@ export class ChannelGraph {
    * Start a note at `t`, held for `gate` seconds (Infinity for a live note). In Mono and Legato a new note takes
    * over from the one before; Legato ties it to a note still held instead of starting again. `slide` ties it to
    * the latest note still sounding whatever the mode, gliding into it. A `curve` sets the note's own gain over
-   * time; a voice it ties into follows it from then on, or goes back to full gain without one.
+   * time; a voice it ties into follows it from then on, or goes back to full gain without one. `locks` give the new
+   * voice values of its own; a note tied into a sounding voice keeps that voice's.
    */
-  start(note: number, vel: number, t: number, gate: number, slide = false, curve?: GainCurve): void {
-    const mode = this.sound.play.mode as string;
-    const glideTime = this.sound.play.glide as number;
+  start(
+    note: number, vel: number, t: number, gate: number, slide = false, curve?: GainCurve, locks?: readonly Lock[],
+  ): void {
+    const own = this.ownLocks(locks);
+    const at = (module: string, params: Params) => this.voiceParams({ locks: own }, module, params, t);
+    const play = at('play', this.sound.play);
+    const mode = play.mode as string;
+    const glideTime = play.glide as number;
     if (gate === Infinity) this.keys = [...this.keys.filter((k) => k.note !== note), { note, vel }];
     const last = this.voices.findLast((v) => !v.done && v.stopAt > t);
     if (last && (slide || (mode === 'legato' && last.gateEnd > t + OVERLAP))) {
@@ -272,7 +368,7 @@ export class ChannelGraph {
     this.lastNote = note;
     this.restartMods(note, t, gate);
     const { type, params } = this.sound.source;
-    const src = SOURCE_BUILDERS[type]?.(this.ctx, params, {
+    const src = SOURCE_BUILDERS[type]?.(this.ctx, at('source', params), {
       note, t0: t, serial: this.serial(), modulated: this.modulated,
     });
     if (!src) return;
@@ -280,8 +376,8 @@ export class ChannelGraph {
     if (mode !== 'poly') for (const v of this.voices) this.release(v, t, QUICK_RELEASE);
     while (this.voices.length >= MAX_VOICES) this.release(this.voices.shift()!, t, QUICK_RELEASE);
 
-    const filter = this.sound.filter.on ? voiceFilter(this.ctx, this.sound.filter, note, vel) : null;
-    const adsr = adsrOf(this.sound.amp);
+    const filter = this.sound.filter.on ? voiceFilter(this.ctx, at('filter', this.sound.filter), note, vel) : null;
+    const adsr = adsrOf(at('amp', this.sound.amp));
     const length = src.length ?? gate;
     const env: Plan = { t0: t + (filter?.lag ?? 0), scale: vel * vel, segs: envelopeSegments(adsr, length) };
     const gain = new GainNode(this.ctx, { gain: 0 });
@@ -322,12 +418,15 @@ export class ChannelGraph {
     const held = length === Infinity;
     const voice: Voice = {
       note, root: note, src, filter, gain, env, fader, adsr, held, gateEnd: t + length, stopAt: Infinity, slot,
-      links, mods, bend: null, done: false,
+      links, mods, bend: null, done: false, locks: own,
     };
     if (glideTime > 0 && from !== null && from !== note) this.bend(voice, t, from, note, glideTime);
     if (!voice.held) this.scheduleStop(voice);
     src.nodes[0].onended = () => this.end(voice);
     this.voices.push(voice);
+    for (const [module, param, c] of this.auto.entries()) {
+      if (inNote(module)) for (const time of [t, ...c.after(t)]) this.moveVoice(voice, module, param, time);
+    }
   }
 
   /** Release the held voices of a live note. A one-note sound goes back to the latest key still down. */

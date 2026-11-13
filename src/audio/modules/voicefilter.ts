@@ -1,7 +1,7 @@
 // The filter inside every note: one or two resonant stages, with an optional drive between them.
 
 import type { Params } from '../../core/types';
-import { glide } from '../automation';
+import { glide, rampWith } from '../automation';
 import { DRIVE_RANGE, driveCurve, filterQ, makeup, preGain } from './effects';
 import type { Follower } from './sources';
 
@@ -15,6 +15,8 @@ export interface VoiceFilter {
   /** Seconds the drive delays the sound; the amp envelope waits as long. */
   lag: number;
   update(p: Params): void;
+  /** Automation: move parameter `id` to its value in `p` in a straight line that arrives at `time`. */
+  ramp(p: Params, id: string, time: number): void;
 }
 
 // The drive's shaper runs at twice the rate; Chromium's 2x oversampling delays it by 128 samples.
@@ -46,22 +48,24 @@ export function voiceFilter(ctx: BaseAudioContext, p: Params, note: number, vel:
     output = output.connect(drive.pre).connect(shaper).connect(drive.post);
   }
   if (stages[1]) output = output.connect(stages[1]);
+  const update = (p: Params) => {
+    const t = ctx.currentTime;
+    stages.forEach((s, i) => {
+      s.type = p.mode as BiquadFilterType;
+      glide(s.frequency, num(p, 'cutoff'), t);
+      glide(s.Q, i ? secondQ(p) : filterQ(p), t);
+    });
+    if (!drive) return;
+    glide(drive.pre.gain, preGain(num(p, 'drive')) / DRIVE_RANGE / VOICE_LEVEL, t);
+    glide(drive.post.gain, makeup('soft', num(p, 'drive')) * VOICE_LEVEL, t);
+  };
   return {
     input: stages[0],
     output,
     targets: { cutoff: stages.map((s) => s.detune) },
     followers: stages.map((s) => ({ param: s.detune, base: detune, k: num(p, 'key') })),
     lag: drive ? DRIVE_LATENCY / ctx.sampleRate : 0,
-    update(p) {
-      const t = ctx.currentTime;
-      stages.forEach((s, i) => {
-        s.type = p.mode as BiquadFilterType;
-        glide(s.frequency, num(p, 'cutoff'), t);
-        glide(s.Q, i ? secondQ(p) : filterQ(p), t);
-      });
-      if (!drive) return;
-      glide(drive.pre.gain, preGain(num(p, 'drive')) / DRIVE_RANGE / VOICE_LEVEL, t);
-      glide(drive.post.gain, makeup('soft', num(p, 'drive')) * VOICE_LEVEL, t);
-    },
+    update,
+    ramp: (p, id, time) => rampWith(update, p, id, time),
   };
 }

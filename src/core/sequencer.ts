@@ -165,6 +165,8 @@ function copies(
  *
  * In the song a muted lane plays nothing, and neither do the sounds a placement mutes. A placement with a fade, or
  * in a lane that is not at 0 dB, gives each of its notes a gain curve (`noteCurve`); other notes carry none.
+ * A note's locks go with each event it makes: its ratchet repeats, the copies of its row's loop and the notes the
+ * arpeggiator makes from it.
  */
 export function eventsBetween(project: Project, scope: PlayScope, from: number, to: number): NoteEvent[] {
   const total = loopSteps(project, scope) * TICKS_PER_STEP;
@@ -189,6 +191,7 @@ export function eventsBetween(project: Project, scope: PlayScope, from: number, 
         const at = time(tick);
         const event: NoteEvent = { channelId, time: at, dur: time(until) - at, note: n.note, vel: n.vel };
         if (slide) event.slide = true;
+        if (n.locks) event.locks = n.locks;
         if (shape) event.gain = noteCurve(shape, tick - origin, until - origin, (t) => time(origin + t));
         found.push({ tick, event });
       };

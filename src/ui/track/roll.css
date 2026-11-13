@@ -320,6 +320,15 @@
   right: 3px;
 }
 
+.h-roll-note .h-mark-lock {
+  top: 2px;
+  right: 3px;
+}
+
+.h-roll-note.has-hold .h-mark-lock {
+  right: 8px;
+}
+
 .h-roll-note .h-mark-ratchet {
   height: 3px;
 }

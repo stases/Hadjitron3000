@@ -3,7 +3,7 @@
 
 import { SYNC_BEATS } from '../../core/modules';
 import type { Params } from '../../core/types';
-import { dbToGain, glide } from '../automation';
+import { dbToGain, glide, rampWith } from '../automation';
 import { mix } from '../mix';
 import { rng } from '../random';
 import { processorEffect } from '../worklet';
@@ -18,6 +18,11 @@ export interface Effect {
   dispose(): void;
   /** How far a compressor turns the sound down right now, in dB (0 or below); absent for other effects. */
   reduction?(): number;
+  /**
+   * Automation: move parameter `id` to its value in `p` in a straight line that arrives at `time`. An effect without
+   * it is stepped through `update` at a fine, fixed rate instead.
+   */
+  ramp?(p: Params, bpm: number, id: string, time: number): void;
 }
 
 /**
@@ -582,6 +587,26 @@ export const SHORT_TAILS: Readonly<Record<string, number>> = {
   tape: 1.5,
 };
 
+/** An effect whose update moves its AudioParams only through `glide`, so automation can ramp them (`rampWith`). */
+const ramped = (build: EffectBuilder): EffectBuilder => (ctx, p, bpm, shared) => {
+  const fx = build(ctx, p, bpm, shared);
+  return { ...fx, ramp: (p, bpm, id, time) => rampWith((q) => fx.update(q, bpm), p, id, time) };
+};
+
+/** The effects made of a processor ramp on their own (`processorEffect`). */
 export const EFFECT_BUILDERS: Readonly<Record<string, EffectBuilder>> = {
-  filter, eq, compressor, drive, crusher, tape, ring, comb, chorus, phaser, width, delay, reverb, space,
+  filter: ramped(filter),
+  eq: ramped(eq),
+  compressor: ramped(compressor),
+  drive: ramped(drive),
+  crusher,
+  tape,
+  ring: ramped(ring),
+  comb,
+  chorus: ramped(chorus),
+  phaser: ramped(phaser),
+  width: ramped(width),
+  delay: ramped(delay),
+  reverb: ramped(reverb),
+  space,
 };

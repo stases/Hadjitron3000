@@ -103,6 +103,7 @@ export function emptyProject(): Project {
     patterns: [pattern],
     song: [],
     lanes: newLanes(),
+    automation: [],
     samples: {},
   };
 }

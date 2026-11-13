@@ -237,6 +237,11 @@
   left: 3px;
 }
 
+.h-track-step .h-mark-lock {
+  top: 2px;
+  right: 3px;
+}
+
 .h-track-step .h-mark-hold {
   top: 9px;
   right: 3px;
@@ -433,7 +438,8 @@
 }
 
 .h-mark-slide,
-.h-mark-hold {
+.h-mark-hold,
+.h-mark-lock {
   position: absolute;
   display: flex;
 }

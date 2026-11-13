@@ -19,6 +19,8 @@ interface KnobProps {
   disabled?: boolean;
   /** The ring lights from the centre outwards, for values whose middle is zero. */
   bipolar?: boolean;
+  /** Something else moves the value (automation in the Song): the ring glows like a display. */
+  automated?: boolean;
 }
 
 const DRAG_RANGE = 150;
@@ -30,7 +32,7 @@ const WHEEL_END_MS = 300;
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 export function Knob(props: KnobProps) {
-  const { value, label, display, hint, small, side, steps, disabled, bipolar } = props;
+  const { value, label, display, hint, small, side, steps, disabled, bipolar, automated } = props;
   const canvas = useRef<HTMLCanvasElement>(null);
   const root = useRef<HTMLDivElement>(null);
   const latest = useRef(props);
@@ -42,8 +44,8 @@ export function Knob(props: KnobProps) {
 
   useLayoutEffect(() => {
     const g = canvas.current?.getContext('2d');
-    if (g) drawKnob(g, size, value, !!disabled, !!bipolar);
-  }, [size, value, disabled, bipolar]);
+    if (g) drawKnob(g, size, value, !!disabled, !!bipolar, !!automated);
+  }, [size, value, disabled, bipolar, automated]);
 
   useEffect(() => {
     if (dragging) setHint(`${label}: ${display}`);
@@ -130,7 +132,9 @@ export function Knob(props: KnobProps) {
   return (
     <div
       ref={root}
-      className={cx('h-knob', small && 'is-small', side && 'is-side', disabled && 'is-disabled')}
+      className={cx(
+        'h-knob', small && 'is-small', side && 'is-side', disabled && 'is-disabled', automated && 'is-automated',
+      )}
       role="slider"
       aria-label={label}
       aria-valuemin={0}
@@ -157,8 +161,13 @@ export function Knob(props: KnobProps) {
   );
 }
 
-/** The knob at CSS-pixel resolution: dot ring, putty cap with light upper-left edge, ink pointer. */
-function drawKnob(g: CanvasRenderingContext2D, size: number, value: number, disabled: boolean, bipolar: boolean) {
+/**
+ * The knob at CSS-pixel resolution: dot ring, putty cap with light upper-left edge, ink pointer. An automated knob's
+ * ring is lit in full amber over dim amber dots.
+ */
+function drawKnob(
+  g: CanvasRenderingContext2D, size: number, value: number, disabled: boolean, bipolar: boolean, automated: boolean,
+) {
   const ink = tokenColor('--ink');
   const hi = tokenColor('--hi');
   const lo = tokenColor('--lo');
@@ -187,12 +196,13 @@ function drawKnob(g: CanvasRenderingContext2D, size: number, value: number, disa
     }
   }
 
-  const lit = disabled ? lo : tokenColor('--amber-mid');
+  const lit = disabled ? lo : tokenColor(automated ? '--amber' : '--amber-mid');
+  const unlit = automated && !disabled ? tokenColor('--amber-dim') : lo;
   const from = bipolar ? Math.min(value, 0.5) : 0;
   const to = bipolar ? Math.max(value, 0.5) : value;
   for (let i = 0; i <= 10; i++) {
     const a = (0.75 + (1.5 * i) / 10) * Math.PI;
-    g.fillStyle = !disabled && i / 10 >= from - 1e-6 && i / 10 <= to + 1e-6 ? lit : lo;
+    g.fillStyle = !disabled && i / 10 >= from - 1e-6 && i / 10 <= to + 1e-6 ? lit : unlit;
     g.fillRect(Math.floor(c + Math.cos(a) * ring), Math.floor(c + Math.sin(a) * ring), 1, 1);
     if (i % 5 === 0) g.fillRect(Math.floor(c + Math.cos(a) * (ring + 1)), Math.floor(c + Math.sin(a) * (ring + 1)), 1, 1);
   }

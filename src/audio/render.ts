@@ -2,16 +2,18 @@
 
 import { createMp3Encoder } from 'wasm-media-encoders';
 import { TICKS_PER_STEP, defaultMixer, newChannel, newLanes } from '../core/defaults';
-import { eventsBetween, loopSteps, stepSeconds } from '../core/sequencer';
-import type {
-  Channel, ModuleInst, NoteEvent, Pcm, PlayScope, Project, SampleData, Sound,
-} from '../core/types';
+import { automatedRefs, busUsed } from '../core/automation';
+import { eventsBetween, loopSteps, stepSeconds, tickTime } from '../core/sequencer';
+import type { Channel, ModuleInst, ParamRef, Pcm, PlayScope, Project, SampleData, Sound } from '../core/types';
+import { Automator } from './automator';
 import { Engine } from './engine';
-import { playEvent } from './transport';
+import { playEvent, playStep } from './transport';
 import { SHORT_TAILS, delayTime } from './modules/effects';
 
 // Rendering pauses this often (in audio seconds) to schedule the next notes and report progress.
 const CHUNK = 0.5;
+// While an effect without `ramp` is automated it also pauses this often to step it, as the live transport's timer does.
+const STEPS_PER_CHUNK = 20;
 const SILENCE = 1e-4; // -80 dB
 const TRIM_PAD = 0.05;
 // The tail after the last note is long enough for every sound to ring out, within these bounds; the silence at its
@@ -21,32 +23,42 @@ const MAX_TAIL = 60;
 
 const yieldToPage = () => new Promise((r) => setTimeout(r, 0));
 
-/** Render `seconds` of the project, handing each event to the engine shortly before it plays. */
+/** Hands the engine everything that starts before a time; made for each render once its engine exists. */
+type Schedule = (engine: Engine) => (until: number) => void;
+
+/**
+ * Render `seconds` of the project, scheduling what plays shortly before it plays. Of the `automated` parameters,
+ * those of effects that cannot ramp are stepped at a fine, fixed rate.
+ */
 async function render(
   project: Project,
-  events: NoteEvent[],
+  schedule: Schedule,
   seconds: number,
   sampleRate: number,
   onProgress?: (fraction: number) => void,
+  automated: ParamRef[] = [],
 ): Promise<AudioBuffer> {
   const length = Math.max(1, Math.round(seconds * sampleRate));
   const ctx = new OfflineAudioContext(2, length, sampleRate);
   const engine = new Engine(ctx);
   engine.setProject(project);
   await engine.ready();
-  let i = 0;
-  const scheduleUntil = (t: number) => {
-    for (; i < events.length && events[i].time < t; i++) {
-      playEvent(engine, events[i], events[i].time);
-    }
-  };
+  const stepped = automated.some((ref) => !engine.ramps(ref));
+  const scheduleUntil = schedule(engine);
   // Suspensions land on render-quantum boundaries, possibly a little after `t`, so notes are
   // scheduled a whole chunk ahead of the one about to play.
   scheduleUntil(2 * CHUNK);
-  for (let t = CHUNK; t < length / sampleRate; t += CHUNK) {
+  const end = length / sampleRate;
+  for (let k = 1; k * (CHUNK / STEPS_PER_CHUNK) < end; k++) {
+    const t = k * (CHUNK / STEPS_PER_CHUNK);
+    const chunk = k % STEPS_PER_CHUNK === 0;
+    if (!chunk && !stepped) continue;
     void ctx.suspend(t).then(() => {
-      scheduleUntil(t + 2 * CHUNK);
-      onProgress?.(t / (length / sampleRate));
+      if (chunk) {
+        scheduleUntil(t + 2 * CHUNK);
+        onProgress?.(t / end);
+      }
+      engine.flushAutomation();
       void ctx.resume();
     });
   }
@@ -82,7 +94,7 @@ const ringTime = (sound: Sound, bpm: number) => 1.25 * (sound.amp.release as num
 
 /** How long the shared effects add to that: the longest of the buses that are sent to, then the master rack. */
 function mixerTime(project: Project): number {
-  const buses = project.mixer.buses.filter((bus, i) => !bus.mute && project.channels.some((c) => c.sends[i] > 0));
+  const buses = project.mixer.buses.filter((bus, i) => !bus.mute && busUsed(project, i));
   const longest = Math.max(0, ...buses.map((bus) => chainTime(bus.chain, project.bpm)));
   return longest + chainTime(project.mixer.master.chain, project.bpm);
 }
@@ -111,8 +123,19 @@ export async function renderProject(
   const tail = opts.tail ?? ringOut(project.channels.map((c) => c.sound), project.bpm, mixerTime(project));
   const steps = loopSteps(project, scope) * loops;
   const loopSeconds = steps * stepSeconds(project.bpm);
-  const events = eventsBetween(project, scope, 0, steps * TICKS_PER_STEP);
-  const buf = await render(project, events, loopSeconds + tail, sampleRate, onProgress);
+  const song = scope.kind === 'song';
+  const schedule: Schedule = (engine) => {
+    const automator = song ? new Automator(engine) : null;
+    automator?.start(project, 0, 0);
+    let step = 0;
+    return (until) => {
+      for (; step < steps && tickTime(step * TICKS_PER_STEP, project.bpm, project.swing) < until; step++) {
+        playStep(engine, automator, project, scope, step, 0);
+      }
+    };
+  };
+  const automated = song ? automatedRefs(project) : [];
+  const buf = await render(project, schedule, loopSeconds + tail, sampleRate, onProgress, automated);
   return trimmed(buf, Math.round(loopSeconds * sampleRate));
 }
 
@@ -170,9 +193,14 @@ export async function renderSound(
     patterns: [],
     song: [],
     lanes: newLanes(),
+    automation: [],
     samples,
   };
-  const buf = await render(project, [{ channelId: 'sound', time: 0, dur, note, vel }], dur + tail, sampleRate);
+  const schedule: Schedule = (engine) => {
+    playEvent(engine, { channelId: 'sound', time: 0, dur, note, vel }, 0);
+    return () => {};
+  };
+  const buf = await render(project, schedule, dur + tail, sampleRate);
   return trimmed(buf, 0);
 }
 

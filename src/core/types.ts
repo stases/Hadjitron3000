@@ -18,14 +18,21 @@ export interface ModTarget {
 }
 
 export interface ModInst extends ModuleInst {
+  /** 'note' builds the modulator in every note, which only works on a target inside the note (see perNote). */
+  per: 'note' | 'sound';
   target: ModTarget | null;
   amount: number; // -1..1, scaled by the target parameter's ModSpec
 }
 
-/** A sound: source -> amp envelope -> effect chain -> output, with modulators on the side. */
+/**
+ * A sound: source -> filter -> amp envelope -> effect chain -> output, with modulators on the side. Source, filter
+ * and amp are built for every note.
+ */
 export interface Sound {
   name: string;
   source: ModuleInst;
+  play: Params; // parameters of the PLAY module definition: poly, mono or legato, and glide
+  filter: Params; // parameters of the FILTER module definition, its lamp included
   amp: Params; // parameters of the AMP module definition
   chain: ModuleInst[];
   mods: ModInst[];

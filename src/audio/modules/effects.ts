@@ -21,7 +21,7 @@ const num = (p: Params, id: string) => p[id] as number;
 
 // ---- filter
 
-const filterQ = (p: Params) => (p.mode === 'bandpass' ? 0.5 * 40 ** num(p, 'reso') : num(p, 'reso') * 24);
+export const filterQ = (p: Params) => (p.mode === 'bandpass' ? 0.5 * 40 ** num(p, 'reso') : num(p, 'reso') * 24);
 
 const filter: EffectBuilder = (ctx, p) => {
   const bq = new BiquadFilterNode(ctx, { type: p.mode as BiquadFilterType, frequency: num(p, 'cutoff'), Q: filterQ(p) });
@@ -43,7 +43,7 @@ const filter: EffectBuilder = (ctx, p) => {
 
 // The shaper sees the driven signal divided by DRIVE_RANGE (a WaveShaper only reads inputs in -1..1),
 // and its curve undoes that scaling, so the gain before it can change smoothly.
-const DRIVE_RANGE = 16;
+export const DRIVE_RANGE = 16;
 const DRIVE_MAX_DB = 36;
 const SHAPES: Record<string, (x: number) => number> = {
   soft: Math.tanh,
@@ -52,7 +52,7 @@ const SHAPES: Record<string, (x: number) => number> = {
 };
 const curves = new Map<string, Float32Array<ArrayBuffer>>();
 
-function driveCurve(shape: string): Float32Array<ArrayBuffer> {
+export function driveCurve(shape: string): Float32Array<ArrayBuffer> {
   let curve = curves.get(shape);
   if (!curve) {
     const n = 16385;
@@ -67,10 +67,10 @@ function driveCurve(shape: string): Float32Array<ArrayBuffer> {
 // The dry path is delayed to match, or mixing the two would comb-filter.
 const SHAPER_LATENCY = 192;
 
-const preGain = (amount: number) => 10 ** ((amount * DRIVE_MAX_DB) / 20);
+export const preGain = (amount: number) => 10 ** ((amount * DRIVE_MAX_DB) / 20);
 
 /** Gain after the shaper that keeps a -12 dBFS sine at its input level. */
-function makeup(shape: string, amount: number): number {
+export function makeup(shape: string, amount: number): number {
   const a = 0.25;
   const g = preGain(amount);
   const n = 256;

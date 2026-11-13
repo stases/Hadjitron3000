@@ -9,7 +9,7 @@ import { MODULES, moduleDef, paramSpec } from '../core/modules';
 import { MAX_NOTE, MIN_NOTE, cleanNotes, compareNotes } from '../core/notes';
 import { coerce, defaultParams } from '../core/params';
 import type {
-  Block, Channel, ModTarget, Note, NoteInit, ParamValue, PlayScope, Project, SampleData, Sound,
+  Block, Channel, ModInst, ModTarget, Note, NoteInit, ParamValue, Params, PlayScope, Project, SampleData, Sound,
 } from '../core/types';
 
 export type View = 'factory' | 'track' | 'song';
@@ -225,7 +225,7 @@ export function renameSound(channelId: string, name: string): void {
 }
 
 function validTarget(sound: Sound, target: ModTarget): boolean {
-  if (!['source', 'out', ...sound.chain.map((m) => m.id)].includes(target.module)) return false;
+  if (!['source', 'filter', 'out', ...sound.chain.map((m) => m.id)].includes(target.module)) return false;
   const def = moduleDef(sound, target.module);
   const spec = def && paramSpec(def, target.param);
   return spec?.kind === 'float' && !!spec.mod;
@@ -253,9 +253,11 @@ export function setParam(channelId: string, moduleId: string, paramId: string, v
     const def = moduleDef(sound, moduleId);
     const spec = def && paramSpec(def, paramId);
     if (!spec) return;
-    const params = moduleId === 'source' ? sound.source.params
-      : moduleId === 'amp' ? sound.amp : moduleId === 'out' ? sound.out
-        : (sound.chain.find((m) => m.id === moduleId) ?? sound.mods.find((m) => m.id === moduleId))?.params;
+    const fixed: Record<string, Params> = {
+      source: sound.source.params, play: sound.play, filter: sound.filter, amp: sound.amp, out: sound.out,
+    };
+    const params = Object.hasOwn(fixed, moduleId) ? fixed[moduleId]
+      : (sound.chain.find((m) => m.id === moduleId) ?? sound.mods.find((m) => m.id === moduleId))?.params;
     if (params) params[paramId] = coerce(spec, value);
   }, JSON.stringify(['param', channelId, moduleId, paramId]));
 }
@@ -318,6 +320,13 @@ export function setModTarget(channelId: string, modId: string, target: ModTarget
   editSound(channelId, (sound) => {
     const mod = sound.mods.find((m) => m.id === modId);
     if (mod) mod.target = target && validTarget(sound, target) ? target : null;
+  });
+}
+
+export function setModPer(channelId: string, modId: string, per: ModInst['per']): void {
+  editSound(channelId, (sound) => {
+    const mod = sound.mods.find((m) => m.id === modId);
+    if (mod) mod.per = per;
   });
 }
 

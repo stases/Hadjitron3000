@@ -7,7 +7,7 @@ import { formatValue } from '../../core/params';
 import type { ModuleInst } from '../../core/types';
 import { setParam, useApp } from '../../state/store';
 import { Button, Display, RackUnit, setHint, tokenColor, useHint } from '../kit';
-import { Control, Param, SourceSelect } from './controls';
+import { Control, SourceSelect, paramCell } from './controls';
 import { PARAM_HINTS } from './hints';
 import { useLevels } from './levels';
 import type { Cell } from './levels';
@@ -156,7 +156,8 @@ function Waveform({ channelId, source }: { channelId: string; source: ModuleInst
   );
 }
 
-export function SamplerUnit({ channelId, source }: { channelId: string; source: ModuleInst }) {
+/** The sampler's Source unit; `play` are the cells of the play controls, which follow its own. */
+export function SamplerUnit({ channelId, source, play }: { channelId: string; source: ModuleInst; play: Cell[] }) {
   const props = (pid: string) => ({
     channelId,
     moduleId: 'source',
@@ -166,7 +167,8 @@ export function SamplerUnit({ channelId, source }: { channelId: string; source: 
   });
   const cells: Cell[] = [
     {
-      ids: ['sample'],
+      level: 1,
+      changed: false,
       node: (
         <div key="sample" className="h-factory-cell is-wide">
           <div className="h-param">
@@ -178,9 +180,10 @@ export function SamplerUnit({ channelId, source }: { channelId: string; source: 
         </div>
       ),
     },
-    ...['pitch', 'fine', 'start', 'end'].map((pid) => ({ ids: [pid], node: <Param key={pid} {...props(pid)} /> })),
+    ...['pitch', 'fine', 'start', 'end'].map((pid) => paramCell(props(pid))),
     {
-      ids: ['loop', 'reverse'],
+      level: 2,
+      changed: !!source.params.loop || !!source.params.reverse,
       node: (
         <div key="loop" className="h-factory-cell is-wide is-stack">
           <Control {...props('loop')} />
@@ -188,9 +191,10 @@ export function SamplerUnit({ channelId, source }: { channelId: string; source: 
         </div>
       ),
     },
-    { ids: ['mode'], node: <Param key="mode" {...props('mode')} /> },
+    paramCell(props('mode')),
+    ...play,
   ];
-  const { row, folds } = useLevels('sample', source.params, cells);
+  const { row, folds } = useLevels('sample', cells);
   return (
     <RackUnit name="Source" folds={folds}>
       <div className="h-factory-sampler">

@@ -1,0 +1,56 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Sub 808",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sine",
+        "pitch": -24
+      }
+    },
+    "play": {
+      "mode": "mono",
+      "glide": 0.12
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 3000,
+      "reso": 0,
+      "drive": 0.3
+    },
+    "amp": {
+      "attack": 0.001,
+      "decay": 1.6,
+      "sustain": 0,
+      "release": 0.25
+    },
+    "chain": [],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.045,
+          "sustain": 0,
+          "release": 0.05
+        },
+        "per": "note",
+        "target": {
+          "module": "source",
+          "param": "pitch"
+        },
+        "amount": 0.2
+      }
+    ],
+    "out": {
+      "level": -5,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

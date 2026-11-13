@@ -1,0 +1,60 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Acid Bass",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sawtooth",
+        "pitch": -12
+      }
+    },
+    "play": {
+      "mode": "legato",
+      "glide": 0.07
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 260,
+      "reso": 0.72,
+      "slope": "24",
+      "drive": 0.35,
+      "key": 0.3,
+      "vel": 0.3
+    },
+    "amp": {
+      "attack": 0.002,
+      "decay": 0.4,
+      "sustain": 0.55,
+      "release": 0.06
+    },
+    "chain": [],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.22,
+          "sustain": 0,
+          "release": 0.08,
+          "vel": 0.5
+        },
+        "per": "note",
+        "target": {
+          "module": "filter",
+          "param": "cutoff"
+        },
+        "amount": 0.55
+      }
+    ],
+    "out": {
+      "level": -7,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

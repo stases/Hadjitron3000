@@ -92,6 +92,48 @@
   min-width: 0;
 }
 
+/* A row that holds a group lines its cells up at the bottom, so the group's caption stands above its controls. */
+.h-factory-row:has(> .h-factory-group) {
+  align-items: flex-end;
+}
+
+/* Neighbouring controls that belong together: a groove down the left edge and a caption at the top. */
+.h-factory-group {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 8px;
+  box-shadow: inset 1px 0 var(--lo), inset 2px 0 var(--hi);
+}
+
+.h-factory-group-label {
+  font: var(--font-small);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* Two small buttons on top of each other, one of them pressed; they end where the values under the knobs end. */
+.h-factory-cell.is-switch {
+  padding-bottom: 0;
+}
+
+.h-factory-cell.is-switch .h-param {
+  height: auto;
+}
+
+.h-factory-switch {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.h-factory-switch .h-button {
+  justify-content: flex-start;
+  width: 96px;
+}
+
 .h-factory-sampler {
   display: flex;
   flex-direction: column;

@@ -1,29 +1,57 @@
 // The audio graph of one channel: voices, the shared effect chain, the modulators and the output.
 
 import { adsrOf, envelopeSegments, releaseSegments, type Adsr } from '../core/envelope';
-import { moduleDef, paramSpec } from '../core/modules';
+import { inVoice, moduleDef, paramSpec, perNote } from '../core/modules';
 import type { ModInst, ModuleInst, Sound } from '../core/types';
 import { cut, dbToGain, glide, schedule, type Plan } from './automation';
 import { Bus, mix, type Slot } from './mix';
 import { EFFECT_BUILDERS, type Effect } from './modules/effects';
-import { SOURCE_BUILDERS, type SourceVoice } from './modules/sources';
+import { SOURCE_BUILDERS, type Follower, type SourceVoice } from './modules/sources';
+import { voiceFilter, type VoiceFilter } from './modules/voicefilter';
 
 const MAX_VOICES = 24;
 // A stolen or stopped voice fades out over 1.25 times this (5 ms).
 const QUICK_RELEASE = 0.004;
 const MUTE_TAU = 0.003;
+// A forced slide takes this long when the sound's glide is 0.
+const SLIDE = 0.06;
+// A note is still held at the start of the next one when its key goes up more than this later.
+const OVERLAP = 1e-6;
 export const CHANNEL_TAP_SIZE = 32768;
 
+/** A glide of a voice's pitch in cents from the note it was built for: c0 at t0, straight on to c1 at t1. */
+interface Bend {
+  t0: number;
+  t1: number;
+  c0: number;
+  c1: number;
+}
+
+/** A modulator built inside one voice; `scale` is what the note's velocity makes of its amount. */
+interface NoteMod {
+  inst: ModInst;
+  node: ConstantSourceNode | OscillatorNode;
+  depth: GainNode;
+  depthPerAmount: number;
+  scale: number;
+  env?: Plan & { param: AudioParam };
+}
+
 interface Voice {
-  note: number;
+  note: number; // the note it plays now; a legato note moves it
+  root: number; // the note it was built for
   src: SourceVoice;
+  filter: VoiceFilter | null;
   gain: GainNode;
-  env: Plan;
+  env: Plan; // starts filter.lag after the note
   adsr: Adsr;
   held: boolean; // a live note waiting for its note-off
+  gateEnd: number; // when the key goes up, Infinity while held
   stopAt: number;
   slot: Slot;
   links: [AudioNode, AudioParam][];
+  mods: NoteMod[];
+  bend: Bend | null;
   done: boolean;
 }
 
@@ -35,13 +63,36 @@ interface Mod {
   env?: Plan & { note: number; held: boolean };
 }
 
+const centsAt = (b: Bend | null, t: number) =>
+  !b ? 0 : t >= b.t1 ? b.c1 : t <= b.t0 ? b.c0 : b.c0 + ((b.c1 - b.c0) * (t - b.t0)) / (b.t1 - b.t0);
+
+/** The pitch a voice sounds at `t`, as a fractional note. */
+const pitchAt = (v: Voice, t: number) => v.root + centsAt(v.bend, t) / 100;
+
+const followerValue = (f: Follower, cents: number) =>
+  'period' in f ? f.base * 2 ** (-cents / 1200) : f.base + f.k * cents;
+
+/** Cut an envelope at `t` and fall from there over `release` seconds. */
+function releaseEnv(param: AudioParam, plan: Plan, t: number, release: number): void {
+  const level = cut(param, plan, t);
+  plan.segs = releaseSegments(level, t - plan.t0, release);
+  schedule(param, plan);
+}
+
+/** Go on from `t` as if the key were held until `end`, without starting the envelope again. */
+function holdEnv(param: AudioParam, plan: Plan, t: number, adsr: Adsr, end: number): void {
+  const level = cut(param, plan, t);
+  plan.segs = envelopeSegments(adsr, end - plan.t0, level, t - plan.t0);
+  schedule(param, plan);
+}
+
 /** Everything that makes a channel's graph: when it changes the channel is rebuilt. */
 export function structureKey(sound: Sound): string {
   const on = (m: ModuleInst) => m.on !== false;
   return JSON.stringify([
     sound.source.type,
     sound.chain.map((m) => [m.id, m.type, on(m)]),
-    sound.mods.map((m) => [m.id, m.type, on(m), m.target]),
+    sound.mods.map((m) => [m.id, m.type, on(m), m.target, perNote(m)]),
   ]);
 }
 
@@ -54,9 +105,17 @@ export class ChannelGraph {
   private readonly voiceBus: Bus;
   private readonly effects = new Map<string, Effect>();
   private readonly mods: Mod[] = [];
-  /** The summed modulation of each source parameter, connected to every voice. */
-  private readonly sourceMods = new Map<string, AudioNode>();
+  /** The summed modulation of each parameter inside the voice ("source.pitch"), connected to every voice. */
+  private readonly voiceMods = new Map<string, AudioNode>();
+  /** Modulators built inside every voice. */
+  private noteMods: { inst: ModInst; depthPerAmount: number }[] = [];
+  /** Source parameters that a modulator moves. */
+  private readonly modulated = new Set<string>();
   private voices: Voice[] = [];
+  /** Live keys held down, the latest last: a one-note sound falls back to the one below when a key goes up. */
+  private keys: { note: number; vel: number }[] = [];
+  /** The note started last, where the next one glides from when nothing sounds any more. */
+  private lastNote: number | null = null;
   private readonly tremolo: GainNode;
   private readonly level: GainNode;
   private readonly panner: StereoPannerNode;
@@ -101,7 +160,12 @@ export class ChannelGraph {
       const spec = def && paramSpec(def, inst.target.param);
       const depthPerAmount = spec?.kind === 'float' && spec.mod ? spec.mod.depth : 0;
       const targets = this.moduleTargets(inst.target.module)?.[inst.target.param];
-      if (!depthPerAmount || (inst.target.module !== 'source' && !targets)) continue;
+      if (!depthPerAmount || (!inVoice(inst.target.module) && !targets)) continue;
+      if (inst.target.module === 'source') this.modulated.add(inst.target.param);
+      if (perNote(inst)) {
+        this.noteMods.push({ inst, depthPerAmount });
+        continue;
+      }
       const node =
         inst.type === 'lfo'
           ? new OscillatorNode(ctx, { type: inst.params.wave as OscillatorType, frequency: inst.params.rate as number })
@@ -114,9 +178,9 @@ export class ChannelGraph {
       if (!byTarget.has(key)) byTarget.set(key, { ...inst.target, depths: [] });
       byTarget.get(key)!.depths.push(depth);
     }
-    for (const { module, param, depths } of byTarget.values()) {
+    for (const [key, { module, param, depths }] of byTarget) {
       const sum = mix(ctx, depths);
-      if (module === 'source') this.sourceMods.set(param, sum);
+      if (inVoice(module)) this.voiceMods.set(key, sum);
       else for (const target of this.moduleTargets(module)![param]) sum.connect(target);
     }
   }
@@ -136,14 +200,27 @@ export class ChannelGraph {
       if (prev?.params !== m.params || bpm !== this.bpm) this.effects.get(m.id)?.update(m.params, bpm);
     }
     this.bpm = bpm;
+    const inst = (id: string) => sound.mods.find((m) => m.id === id)!;
     for (const mod of this.mods) {
-      const inst = sound.mods.find((m) => m.id === mod.inst.id)!;
-      if (inst === mod.inst) continue;
-      mod.inst = inst;
-      glide(mod.depth.gain, inst.amount * mod.depthPerAmount, t);
+      if (inst(mod.inst.id) === mod.inst) continue;
+      mod.inst = inst(mod.inst.id);
+      glide(mod.depth.gain, mod.inst.amount * mod.depthPerAmount, t);
       if (mod.node instanceof OscillatorNode) {
-        mod.node.type = inst.params.wave as OscillatorType;
-        glide(mod.node.frequency, inst.params.rate as number, t);
+        mod.node.type = mod.inst.params.wave as OscillatorType;
+        glide(mod.node.frequency, mod.inst.params.rate as number, t);
+      }
+    }
+    this.noteMods = this.noteMods.map((m) => ({ ...m, inst: inst(m.inst.id) }));
+    for (const v of this.voices) {
+      if (sound.filter !== old.filter) v.filter?.update(sound.filter);
+      for (const m of v.mods) {
+        if (inst(m.inst.id) === m.inst) continue;
+        m.inst = inst(m.inst.id);
+        glide(m.depth.gain, m.inst.amount * m.depthPerAmount * m.scale, t);
+        if (m.node instanceof OscillatorNode) {
+          m.node.type = m.inst.params.wave as OscillatorType;
+          glide(m.node.frequency, m.inst.params.rate as number, t);
+        }
       }
     }
     if (sound.out !== old.out) {
@@ -176,49 +253,108 @@ export class ChannelGraph {
     return low;
   }
 
-  /** Start a note at `t`, held for `gate` seconds (Infinity for a live note). */
-  start(note: number, vel: number, t: number, gate: number): void {
+  /**
+   * Start a note at `t`, held for `gate` seconds (Infinity for a live note). In Mono and Legato a new note takes
+   * over from the one before; Legato ties it to a note still held instead of starting again. `slide` ties it to
+   * the latest note still sounding whatever the mode, gliding into it.
+   */
+  start(note: number, vel: number, t: number, gate: number, slide = false): void {
+    const mode = this.sound.play.mode as string;
+    const glideTime = this.sound.play.glide as number;
+    if (gate === Infinity) this.keys = [...this.keys.filter((k) => k.note !== note), { note, vel }];
+    const last = this.voices.findLast((v) => !v.done && v.stopAt > t);
+    if (last && (slide || (mode === 'legato' && last.gateEnd > t + OVERLAP))) {
+      this.tie(last, note, t, gate, slide && glideTime === 0 ? SLIDE : glideTime);
+      return;
+    }
+    const from = last ? pitchAt(last, t) : this.lastNote;
+    this.lastNote = note;
     this.retriggerEnvelopes(note, t, gate);
-    const src = SOURCE_BUILDERS[this.sound.source.type]?.(this.ctx, this.sound.source.params, note, t, this.serial());
+    const { type, params } = this.sound.source;
+    const src = SOURCE_BUILDERS[type]?.(this.ctx, params, {
+      note, t0: t, serial: this.serial(), modulated: this.modulated,
+    });
     if (!src) return;
     this.voices = this.voices.filter((v) => v.stopAt > t && !v.done);
+    if (mode !== 'poly') for (const v of this.voices) this.release(v, t, QUICK_RELEASE);
     while (this.voices.length >= MAX_VOICES) this.release(this.voices.shift()!, t, QUICK_RELEASE);
 
+    const filter = this.sound.filter.on ? voiceFilter(this.ctx, this.sound.filter, note, vel) : null;
     const adsr = adsrOf(this.sound.amp);
     const length = src.length ?? gate;
-    const env: Plan = { t0: t, scale: vel * vel, segs: envelopeSegments(adsr, length) };
+    const env: Plan = { t0: t + (filter?.lag ?? 0), scale: vel * vel, segs: envelopeSegments(adsr, length) };
     const gain = new GainNode(this.ctx, { gain: 0 });
     schedule(gain.gain, env);
     const slot = this.voiceBus.take(t);
-    src.output.connect(gain).connect(slot.input);
+    let out = src.output;
+    if (filter) {
+      src.output.connect(filter.input);
+      out = filter.output;
+    }
+    out.connect(gain).connect(slot.input);
+    const targets = (module: string, param: string) =>
+      (module === 'source' ? src.targets : filter?.targets)?.[param] ?? [];
     const links: [AudioNode, AudioParam][] = [];
-    for (const [param, sum] of this.sourceMods) {
-      for (const target of src.targets[param] ?? []) {
+    for (const [key, sum] of this.voiceMods) {
+      const [module, param] = key.split('.');
+      for (const target of targets(module, param)) {
         sum.connect(target);
         links.push([sum, target]);
       }
     }
+    const mods = this.noteMods.map(({ inst, depthPerAmount }): NoteMod => {
+      const share = inst.params.vel as number;
+      const scale = 1 - share + share * vel;
+      const { wave, rate } = inst.params;
+      const node =
+        inst.type === 'lfo'
+          ? new OscillatorNode(this.ctx, { type: wave as OscillatorType, frequency: rate as number })
+          : new ConstantSourceNode(this.ctx, { offset: 0 });
+      const depth = new GainNode(this.ctx, { gain: inst.amount * depthPerAmount * scale });
+      node.connect(depth);
+      node.start(t);
+      for (const target of targets(inst.target!.module, inst.target!.param)) depth.connect(target);
+      const mod: NoteMod = { inst, node, depth, depthPerAmount, scale };
+      if (node instanceof ConstantSourceNode) {
+        mod.env = { t0: t, scale: 1, segs: envelopeSegments(adsrOf(inst.params), length), param: node.offset };
+        schedule(node.offset, mod.env);
+      }
+      return mod;
+    });
     const held = length === Infinity;
-    const voice: Voice = { note, src, gain, env, adsr, held, stopAt: Infinity, slot, links, done: false };
+    const voice: Voice = {
+      note, root: note, src, filter, gain, env, adsr, held, gateEnd: t + length, stopAt: Infinity, slot, links, mods,
+      bend: null, done: false,
+    };
+    if (glideTime > 0 && from !== null && from !== note) this.bend(voice, t, from, note, glideTime);
     if (!voice.held) this.scheduleStop(voice);
     src.nodes[0].onended = () => this.end(voice);
     this.voices.push(voice);
   }
 
-  /** Release the held voices of a live note. */
+  /** Release the held voices of a live note. A one-note sound goes back to the latest key still down. */
   stop(note: number, t: number): void {
-    for (const v of this.voices) if (v.held && v.note === note) this.release(v, t, v.adsr.release);
+    this.keys = this.keys.filter((k) => k.note !== note);
+    const back = this.keys.at(-1);
+    if (back && this.sound.play.mode !== 'poly' && this.voices.some((v) => v.held && v.note === note)) {
+      this.start(back.note, back.vel, t, Infinity);
+      return;
+    }
+    for (const v of this.voices) {
+      if (!v.held || v.note !== note) continue;
+      this.release(v, t, v.adsr.release);
+      for (const m of v.mods) if (m.env) releaseEnv(m.env.param, m.env, t, adsrOf(m.inst.params).release);
+    }
     for (const { node, env, inst } of this.mods) {
       if (!(node instanceof ConstantSourceNode) || !env?.held || env.note !== note) continue;
       env.held = false;
-      const level = cut(node.offset, env, t);
-      env.segs = releaseSegments(level, t - env.t0, adsrOf(inst.params).release);
-      schedule(node.offset, env);
+      releaseEnv(node.offset, env, t, adsrOf(inst.params).release);
     }
   }
 
   /** Release every voice quickly (transport stop). */
   stopAll(t: number): void {
+    this.keys = [];
     for (const v of this.voices) if (v.stopAt > t) this.release(v, t, QUICK_RELEASE);
   }
 
@@ -226,7 +362,7 @@ export class ChannelGraph {
     const t = this.ctx.currentTime;
     glide(this.gain.gain, 0, t, MUTE_TAU);
     for (const v of this.voices) v.done = true;
-    for (const v of this.voices) for (const n of v.src.nodes) n.stop(t + 0.03);
+    for (const v of this.voices) for (const n of [...v.src.nodes, ...v.mods.map((m) => m.node)]) n.stop(t + 0.03);
     for (const mod of this.mods) mod.node.stop(t + 0.03);
     for (const fx of this.effects.values()) fx.dispose();
     this.slot.until = t + 0.2;
@@ -236,17 +372,54 @@ export class ChannelGraph {
     }, 100);
   }
 
+  /** Move a sounding voice to a new note: its pitch glides there and its envelopes go on as if held. */
+  private tie(v: Voice, note: number, t: number, gate: number, time: number): void {
+    this.bend(v, t, pitchAt(v, t), note, time);
+    v.note = note;
+    this.lastNote = note;
+    if (v.src.length !== undefined) return;
+    v.held = gate === Infinity;
+    v.gateEnd = t + gate;
+    const lag = v.filter?.lag ?? 0;
+    holdEnv(v.gain.gain, v.env, t + lag, v.adsr, v.gateEnd + lag);
+    for (const m of v.mods) if (m.env) holdEnv(m.env.param, m.env, t, adsrOf(m.inst.params), v.gateEnd);
+    for (const mod of this.mods) {
+      if (!(mod.node instanceof ConstantSourceNode) || !mod.env) continue;
+      holdEnv(mod.node.offset, mod.env, t, adsrOf(mod.inst.params), v.gateEnd);
+      mod.env.note = note;
+      mod.env.held = v.held;
+    }
+    if (!v.held) this.scheduleStop(v);
+  }
+
+  /** Glide the pitch of a voice from note `from` to note `to`, straight in cents, over `time` seconds from `t`. */
+  private bend(v: Voice, t: number, from: number, to: number, time: number): void {
+    const c0 = (from - v.root) * 100;
+    const c1 = (to - v.root) * 100;
+    const ramping = !!v.bend && t > v.bend.t0 && t < v.bend.t1;
+    for (const f of [...v.src.followers, ...(v.filter?.followers ?? [])]) {
+      const ramp = (value: number, at: number) =>
+        'period' in f ? f.param.exponentialRampToValueAtTime(value, at) : f.param.linearRampToValueAtTime(value, at);
+      f.param.cancelScheduledValues(t);
+      // Inside a ramp the rest of it was just cancelled; a ramp to the value it has now keeps the curve whole.
+      if (ramping) ramp(followerValue(f, c0), t);
+      else f.param.setValueAtTime(followerValue(f, c0), t);
+      if (time > 0) ramp(followerValue(f, c1), t + time);
+      else f.param.setValueAtTime(followerValue(f, c1), t);
+    }
+    v.bend = { t0: t, t1: t + time, c0, c1 };
+  }
+
   private release(v: Voice, t: number, release: number): void {
     v.held = false;
-    const level = cut(v.gain.gain, v.env, t);
-    v.env.segs = releaseSegments(level, t - v.env.t0, release);
-    schedule(v.gain.gain, v.env);
+    v.gateEnd = Math.min(v.gateEnd, t);
+    releaseEnv(v.gain.gain, v.env, t + (v.filter?.lag ?? 0), release);
     this.scheduleStop(v);
   }
 
   private scheduleStop(v: Voice): void {
     v.stopAt = v.slot.until = v.env.t0 + v.env.segs[v.env.segs.length - 1].end;
-    for (const n of v.src.nodes) n.stop(v.stopAt);
+    for (const n of [...v.src.nodes, ...v.mods.map((m) => m.node)]) n.stop(v.stopAt);
   }
 
   private end(v: Voice): void {

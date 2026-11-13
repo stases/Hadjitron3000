@@ -2,23 +2,25 @@ import { useRef } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { usePrefs } from '../../app/prefs';
 import { levelOf } from '../../core/levels';
-import { AMP, EFFECTS, MODS, MODULES, OUT, modTargets, moduleDef, paramSpec } from '../../core/modules';
+import {
+  AMP, EFFECTS, FILTER, MODS, MODULES, OUT, PLAY, inVoice, modTargets, moduleDef, paramSpec,
+} from '../../core/modules';
 import type { ChoiceSpec, FloatSpec } from '../../core/modules';
 import { formatAmount } from '../../core/params';
-import type { ModInst, ModuleInst, Params, Sound } from '../../core/types';
+import type { ModInst, ModuleInst, Sound } from '../../core/types';
 import {
-  addEffect, addMod, moveEffect, removeModule, setModAmount, setModTarget, setModuleOn,
+  addEffect, addMod, moveEffect, removeModule, setModAmount, setModPer, setModTarget, setModuleOn, setParam,
 } from '../../state/store';
 import { Button, Icon, Knob, ParamControl, RackUnit, openMenu } from '../kit';
 import type { MenuItem } from '../kit';
 import { SourceSelect, paramCells } from './controls';
 import { EnvelopeDisplay } from './EnvelopeDisplay';
+import { MOD_HINTS } from './hints';
 import { addMenu, useLevels, useShown } from './levels';
 import type { Cell } from './levels';
 import { SamplerUnit } from './SamplerUnit';
 
 const signed = (v: number) => (v > 0 ? `+${v}` : `${v}`);
-const AMOUNT_HINT = 'How far the modulator moves its target, up or down; in the middle it does nothing.';
 
 /** Plate names in signal order, numbered when a module type occurs more than once, like the target list. */
 function plateNames(modules: ModuleInst[]): string[] {
@@ -50,15 +52,14 @@ function AddButton({ label, hint, items }: { label: string; hint: string; items:
 
 interface LevelUnitProps extends Omit<ComponentProps<typeof RackUnit>, 'folds' | 'children'> {
   type: string;
-  params: Params;
   cells: Cell[];
   lead?: ReactNode;
   tail?: ReactNode;
 }
 
 /** A unit with its cells laid out by level; `lead` and `tail` stand before and after the cells in the first row. */
-function LevelUnit({ type, params, cells, lead, tail, ...unit }: LevelUnitProps) {
-  const { row, folds } = useLevels(type, params, cells);
+function LevelUnit({ type, cells, lead, tail, ...unit }: LevelUnitProps) {
+  const { row, folds } = useLevels(type, cells);
   return (
     <RackUnit {...unit} folds={folds}>
       <div className="h-factory-row">
@@ -88,6 +89,36 @@ function ModUnit({ channelId, sound, mod, name }: { channelId: string; sound: So
   };
   const def = target && moduleDef(sound, target.module);
   const spec = def && (paramSpec(def, target.param) as FloatSpec);
+  // A modulator can only work on each note when its target lives in the note.
+  const fixed = !!mod.target && !inVoice(mod.target.module);
+  const per = fixed ? 'sound' : mod.per;
+  // Velocity scales a per-note modulator only.
+  const cells = paramCells(channelId, mod.id, mod.type, mod.params, (id) => id === 'vel' && per === 'sound');
+  const perCell: Cell = {
+    node: (
+      <div key="per" className="h-factory-cell is-wide is-switch">
+        <div className="h-param">
+          <span className="h-param-label">Works on</span>
+          <div className="h-factory-switch" role="radiogroup" aria-label="Works on">
+            {(['note', 'sound'] as const).map((value) => (
+              <Button
+                key={value}
+                small
+                pressed={per === value}
+                disabled={fixed}
+                onClick={() => setModPer(channelId, mod.id, value)}
+                hint={fixed ? MOD_HINTS.fixed : MOD_HINTS[value]}
+              >
+                {value === 'note' ? 'Each note' : 'Whole sound'}
+              </Button>
+            ))}
+          </div>
+        </div>
+      </div>
+    ),
+    level: 2,
+    changed: per !== (mod.type === 'env' ? 'note' : 'sound'),
+  };
   return (
     <LevelUnit
       name={name}
@@ -95,8 +126,7 @@ function ModUnit({ channelId, sound, mod, name }: { channelId: string; sound: So
       led={{ on: mod.on !== false, onToggle: () => setModuleOn(channelId, mod.id, mod.on === false) }}
       onRemove={() => removeModule(channelId, mod.id)}
       type={mod.type}
-      params={mod.params}
-      cells={paramCells(channelId, mod.id, mod.type, mod.params)}
+      cells={[perCell, ...cells]}
       lead={
         <>
           <div className="h-factory-cell is-wide">
@@ -107,7 +137,7 @@ function ModUnit({ channelId, sound, mod, name }: { channelId: string; sound: So
               const chosen = targets.find((t) => key(t) === v);
               setModTarget(channelId, mod.id, chosen ? { module: chosen.module, param: chosen.param } : null);
             }}
-            hint="Which control this modulator moves."
+            hint={MOD_HINTS.target}
           />
         </div>
           <div className="h-factory-cell">
@@ -117,7 +147,7 @@ function ModUnit({ channelId, sound, mod, name }: { channelId: string; sound: So
               defaultValue={0.5}
               label="Amount"
               display={spec ? formatAmount(spec, mod.amount) : `${signed(Math.round(mod.amount * 100))} %`}
-              hint={AMOUNT_HINT}
+              hint={MOD_HINTS.amount}
               bipolar
             />
           </div>
@@ -139,25 +169,31 @@ export function Rack({ channelId, sound }: { channelId: string; sound: Sound }) 
   const effectNames = plateNames(sound.chain);
   const modNames = plateNames(sound.mods);
   const last = sound.chain.length - 1;
+  const play = paramCells(channelId, 'play', PLAY.type, sound.play);
   return (
     <div className="h-factory-rack">
       {sound.source.type === 'sample' ? (
-        <SamplerUnit channelId={channelId} source={sound.source} />
+        <SamplerUnit channelId={channelId} source={sound.source} play={play} />
       ) : (
         <LevelUnit
           name="Source"
           data-tour="unit-source"
           type={sound.source.type}
-          params={sound.source.params}
-          cells={paramCells(channelId, 'source', sound.source.type, sound.source.params)}
+          cells={[...paramCells(channelId, 'source', sound.source.type, sound.source.params), ...play]}
           lead={<SourceSelect channelId={channelId} type={sound.source.type} />}
         />
       )}
       <LevelUnit
+        name="Filter"
+        data-tour="unit-filter"
+        led={{ on: sound.filter.on as boolean, onToggle: () => setParam(channelId, 'filter', 'on', !sound.filter.on) }}
+        type={FILTER.type}
+        cells={paramCells(channelId, 'filter', FILTER.type, sound.filter)}
+      />
+      <LevelUnit
         name="Amp"
         data-tour="unit-amp"
         type={AMP.type}
-        params={sound.amp}
         cells={paramCells(channelId, 'amp', AMP.type, sound.amp)}
         lead={
           <div className="h-factory-cell is-display">
@@ -169,13 +205,12 @@ export function Rack({ channelId, sound }: { channelId: string; sound: Sound }) 
         <LevelUnit
           key={m.id}
           name={effectNames[i]}
-          data-tour={`unit-${m.type}`}
+          data-tour={`effect-${m.type}`}
           led={{ on: m.on !== false, onToggle: () => setModuleOn(channelId, m.id, m.on === false) }}
           onMoveUp={i > 0 ? () => moveEffect(channelId, m.id, i - 1) : null}
           onMoveDown={i < last ? () => moveEffect(channelId, m.id, i + 1) : null}
           onRemove={() => removeModule(channelId, m.id)}
           type={m.type}
-          params={m.params}
           cells={paramCells(channelId, m.id, m.type, m.params)}
         />
       ))}
@@ -195,7 +230,6 @@ export function Rack({ channelId, sound }: { channelId: string; sound: Sound }) 
       <LevelUnit
         name="Output"
         type={OUT.type}
-        params={sound.out}
         cells={paramCells(channelId, 'out', OUT.type, sound.out)}
       />
     </div>

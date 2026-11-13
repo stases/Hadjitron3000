@@ -97,8 +97,9 @@ export class Engine {
     await Promise.all(Object.keys(this.project?.samples ?? {}).map((id) => this.decodes.get(id)));
   }
 
-  play(channelId: string, note: number, vel: number, time: number, dur: number): void {
-    this.channels.get(channelId)?.start(note, vel, Math.max(time, this.ctx.currentTime), dur);
+  /** Play a note; with `slide` it glides out of the note sounding before it instead of starting again. */
+  play(channelId: string, note: number, vel: number, time: number, dur: number, slide = false): void {
+    this.channels.get(channelId)?.start(note, vel, Math.max(time, this.ctx.currentTime), dur, slide);
   }
 
   noteOn(channelId: string, note: number, vel: number): void {

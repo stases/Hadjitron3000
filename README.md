@@ -84,7 +84,11 @@ A project holds up to twenty-six blocks. A block can also travel to other projec
 +--------------------------------------------------------------------------+
 ```
 
-A sound is a rack of units, read from top to bottom. The source makes the tone: an oscillator, an FM pair, noise, or a sampler that plays an audio file. The amp envelope shapes its loudness over time. After that come as many effects as you like, in any order: filter, drive, delay and reverb. Modulators (envelopes and LFOs) move a knob of your choice for you, for example the filter cutoff or the pitch. The output unit sets level and pan.
+A sound is a rack of units, read from top to bottom. The source makes the tone: an oscillator, an FM pair, noise, or a sampler that plays an audio file. The oscillator can also mix in a second oscillator, tuned against the first, and a sine one or two octaves below the note; when either of them is set to the square wave, Pulse makes the square narrower or wider. Under the source sits the filter, which every sound has and which is off until you click its lamp. It works on each note by itself, so overlapping notes each keep their own brightness. It cuts at 12 or 24 dB per octave, can be driven into a growl, can follow the note up the keyboard, and can close for softer notes. The amp envelope shapes the loudness of each note over time. After that come as many effects as you like, in any order, working on all the notes together: a second filter for the whole sound, drive, delay and reverb. The output unit sets level and pan.
+
+Modulators (envelopes and LFOs) move a knob of your choice for you, for example the filter cutoff or the pitch. A modulator works either on each note or on the whole sound. Working on each note, every note gets its own copy, which starts with the note, so a filter envelope opens every note of a chord on its own; Velocity then lets harder notes get more of it. Working on the whole sound, there is one modulator for all the notes: an envelope starts again with every new note, which suits a bass line, and an LFO keeps running. A new envelope works on each note and a new LFO on the whole sound. Only the source and the filter live inside a note, so a modulator pointed at an effect or the output always works on the whole sound.
+
+How the notes of a sound follow each other is set under Play in the source. Poly plays as many notes at once as you like. Mono plays one at a time: a new note cuts the one before, and when you let go of a key the note you still hold comes back. Legato is Mono, except that a note played while the one before is still held does not start again; only its pitch moves. Glide makes every new note slide from the pitch of the note before it, for basses and leads that bend from one note to the next.
 
 Every control and every unit has a level: Basics, Shaping or Deep. Basics is what you need for a sound that works, Shaping changes its character, and Deep is for the controls that take some explaining. The program starts in beginner mode, where each unit shows its Basics and keeps the rest behind small Shaping and Deep buttons at its right edge; press one to open that section beside the others. A lamp on the button lights when a control inside is no longer at its default, so nothing you hear is hidden. The Effect and Modulator lists and the source type are grouped by level too. Beginner Mode in the View menu turns all of this off and shows every control at once, and the program remembers your choice.
 
@@ -94,7 +98,7 @@ Play the sound on the piano at the bottom with the mouse, or on the computer key
 
 The scope beside the piano shows the wave of the selected sound as you play it, standing still like on an old oscilloscope, so you can watch the shape change while you turn a knob. The number in its corner is the time per division; it follows the note you play, so a few cycles always fit.
 
-Save to Library keeps a sound for other projects. The library is the folder `Documents/Hadjitron 3000/Sounds`, and the Sound Library window lists it together with the seventeen factory sounds.
+Save to Library keeps a sound for other projects. The library is the folder `Documents/Hadjitron 3000/Sounds`, and the Sound Library window lists it together with the twenty-two factory sounds.
 
 ```
 +--------------------------------------------------------------------------+

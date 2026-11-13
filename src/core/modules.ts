@@ -3,10 +3,10 @@
 // so a new module starts here (and gets its audio in src/audio/modules).
 
 import type { Levelled } from './levels';
-import type { ModTarget, Sound } from './types';
+import type { ModInst, ModTarget, Sound } from './types';
 
 export type Taper = 'lin' | 'log' | 'cube';
-export type Unit = 'Hz' | 's' | 'dB' | '%' | 'st' | 'ct' | 'x' | 'pan' | '';
+export type Unit = 'Hz' | 's' | 'dB' | '%' | 'st' | 'ct' | 'oct' | 'x' | 'pan' | '';
 
 /** How a float parameter responds to a modulator. */
 export interface ModSpec {
@@ -51,7 +51,7 @@ export interface SampleSpec extends Levelled {
 }
 
 export type ParamSpec = FloatSpec | ChoiceSpec | BoolSpec | SampleSpec;
-export type ModuleKind = 'source' | 'amp' | 'effect' | 'mod' | 'out';
+export type ModuleKind = 'source' | 'play' | 'filter' | 'amp' | 'effect' | 'mod' | 'out';
 
 /** A module and each of its parameters have a level (src/core/levels.ts), Basics when not given. */
 export interface ModuleDef extends Levelled {
@@ -83,6 +83,14 @@ const deep = <T extends ParamSpec>(spec: T): T => ({ ...spec, level: 3 });
 
 const percent: ModSpec = { depth: 1, span: 100, unit: '%' };
 const pitch = f('pitch', 'Pitch', -24, 24, 0, { unit: 'st', step: 1, mod: { depth: 4800, span: 48, unit: 'st' } });
+const cutoff = f('cutoff', 'Cutoff', 20, 20000, 2000, {
+  taper: 'log', unit: 'Hz', mod: { depth: 6000, span: 5, unit: 'oct' },
+});
+const filterModes = c('mode', 'Mode', [
+  ['lowpass', 'Low pass'],
+  ['highpass', 'High pass'],
+  ['bandpass', 'Band pass'],
+]);
 const fine = shaping(f('fine', 'Fine', -100, 100, 0, { unit: 'ct', step: 1 }));
 const adsr = (attack: number, decay: number, sustain: number, release: number): FloatSpec[] => [
   f('attack', 'Attack', 0, 5, attack, { unit: 's', taper: 'cube' }),
@@ -111,6 +119,14 @@ export const SOURCES: readonly ModuleDef[] = [
       shaping(f('spread', 'Spread', 0, 100, 15, { unit: 'ct' })),
       deep(f('width', 'Width', 0, 1, 0.5, { unit: '%' })),
       shaping(f('noise', 'Noise', 0, 1, 0, { unit: '%' })),
+      // The pulse width of every square oscillator of the voice; the duty cycle moves by up to 50 % at amount 1.
+      shaping(f('pw', 'Pulse', 0.05, 0.95, 0.5, { unit: '%', mod: { depth: 0.5, span: 50, unit: '%' } })),
+      shaping(c('wave2', 'Wave 2', WAVES, 'sawtooth')),
+      shaping(f('pitch2', 'Pitch 2', -24, 24, 0, { unit: 'st', step: 1 })),
+      shaping(f('fine2', 'Fine 2', -100, 100, 0, { unit: 'ct', step: 1 })),
+      shaping(f('mix2', 'Mix 2', 0, 1, 0, { unit: '%' })),
+      shaping(f('sub', 'Sub', 0, 1, 0, { unit: '%' })),
+      shaping(f('subOct', 'Sub Oct', -2, -1, -1, { unit: 'oct', step: 1 })),
     ],
   },
   {
@@ -159,22 +175,54 @@ export const SOURCES: readonly ModuleDef[] = [
   },
 ];
 
+/** How the notes of a sound follow each other; shown in the Source unit. */
+export const PLAY: ModuleDef = {
+  type: 'play',
+  kind: 'play',
+  label: 'Play',
+  params: [
+    shaping(
+      c('mode', 'Mode', [
+        ['poly', 'Poly'],
+        ['mono', 'Mono'],
+        ['legato', 'Legato'],
+      ]),
+    ),
+    shaping(f('glide', 'Glide', 0, 2, 0, { unit: 's', taper: 'cube' })),
+  ],
+};
+
+/** The filter inside every note, between the source and the amp. `on` is its lamp, not a control. */
+export const FILTER: ModuleDef = {
+  type: 'voicefilter',
+  kind: 'filter',
+  label: 'Filter',
+  params: [
+    b('on', 'On', false),
+    filterModes,
+    cutoff,
+    f('reso', 'Reso', 0, 1, 0.15, { unit: '%' }),
+    shaping(
+      c('slope', 'Slope', [
+        ['12', '12 dB'],
+        ['24', '24 dB'],
+      ]),
+    ),
+    shaping(f('drive', 'Drive', 0, 1, 0, { unit: '%' })),
+    deep(f('key', 'Key', 0, 1, 0, { unit: '%' })),
+    deep(f('vel', 'Velocity', -1, 1, 0, { unit: '%' })),
+  ],
+};
+
 export const AMP: ModuleDef = { type: 'amp', kind: 'amp', label: 'Amp Envelope', params: adsr(0.002, 0.3, 0.8, 0.2) };
 
 export const EFFECTS: readonly ModuleDef[] = [
   {
     type: 'filter',
     kind: 'effect',
-    label: 'Filter',
-    params: [
-      c('mode', 'Mode', [
-        ['lowpass', 'Low pass'],
-        ['highpass', 'High pass'],
-        ['bandpass', 'Band pass'],
-      ]),
-      f('cutoff', 'Cutoff', 20, 20000, 2000, { taper: 'log', unit: 'Hz', mod: { depth: 6000, span: 5, unit: 'oct' } }),
-      shaping(f('reso', 'Reso', 0, 1, 0.15, { unit: '%' })),
-    ],
+    label: 'Filter (whole sound)',
+    level: 2,
+    params: [filterModes, cutoff, shaping(f('reso', 'Reso', 0, 1, 0.15, { unit: '%' }))],
   },
   {
     type: 'drive',
@@ -234,13 +282,16 @@ export const EFFECTS: readonly ModuleDef[] = [
   },
 ];
 
+// How much a per-note modulator's amount follows the note's velocity.
+const modVel = deep(f('vel', 'Velocity', 0, 1, 0, { unit: '%' }));
+
 export const MODS: readonly ModuleDef[] = [
-  { type: 'env', kind: 'mod', label: 'Envelope', params: adsr(0, 0.2, 0, 0.2) },
+  { type: 'env', kind: 'mod', label: 'Envelope', params: [...adsr(0, 0.2, 0, 0.2), modVel] },
   {
     type: 'lfo',
     kind: 'mod',
     label: 'LFO',
-    params: [c('wave', 'Wave', WAVES, 'sine'), f('rate', 'Rate', 0.02, 40, 2, { taper: 'log', unit: 'Hz' })],
+    params: [c('wave', 'Wave', WAVES, 'sine'), f('rate', 'Rate', 0.02, 40, 2, { taper: 'log', unit: 'Hz' }), modVel],
   },
 ];
 
@@ -256,7 +307,7 @@ export const OUT: ModuleDef = {
 };
 
 export const MODULES: Readonly<Record<string, ModuleDef>> = Object.fromEntries(
-  [...SOURCES, AMP, ...EFFECTS, ...MODS, OUT].map((d) => [d.type, d]),
+  [...SOURCES, PLAY, FILTER, AMP, ...EFFECTS, ...MODS, OUT].map((d) => [d.type, d]),
 );
 
 /** Length of a tempo-synced delay time in beats (quarter notes). */
@@ -271,11 +322,13 @@ export const SYNC_BEATS: Readonly<Record<string, number>> = {
   '1/32': 0.125,
 };
 
-/** The definition behind a module id of a sound ("source", "amp", "out", or a chain or modulator id). */
+/** The fixed units by their module id in a sound. */
+const FIXED: Readonly<Record<string, ModuleDef>> = { play: PLAY, filter: FILTER, amp: AMP, out: OUT };
+
+/** The definition behind a module id of a sound: "source", a fixed unit, or a chain or modulator id. */
 export function moduleDef(sound: Sound, moduleId: string): ModuleDef | undefined {
   if (moduleId === 'source') return MODULES[sound.source.type];
-  if (moduleId === 'amp') return AMP;
-  if (moduleId === 'out') return OUT;
+  if (Object.hasOwn(FIXED, moduleId)) return FIXED[moduleId];
   const inst = sound.chain.find((m) => m.id === moduleId) ?? sound.mods.find((m) => m.id === moduleId);
   return inst && MODULES[inst.type];
 }
@@ -284,9 +337,15 @@ export function paramSpec(def: ModuleDef, paramId: string): ParamSpec | undefine
   return def.params.find((p) => p.id === paramId);
 }
 
+/** The modules built inside every note; only their parameters can be moved by a per-note modulator. */
+export const inVoice = (moduleId: string) => moduleId === 'source' || moduleId === 'filter';
+
+/** Whether a modulator is built for each note: it is set to and its target lives in the voice. */
+export const perNote = (mod: ModInst) => mod.per === 'note' && !!mod.target && inVoice(mod.target.module);
+
 /** Every parameter of a sound that a modulator can be pointed at, in signal order. */
 export function modTargets(sound: Sound): (ModTarget & { label: string })[] {
-  const ids = ['source', ...sound.chain.map((m) => m.id), 'out'];
+  const ids = ['source', 'filter', ...sound.chain.map((m) => m.id), 'out'];
   const seen: Record<string, number> = {};
   return ids.flatMap((module) => {
     const def = moduleDef(sound, module);

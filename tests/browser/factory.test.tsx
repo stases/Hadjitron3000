@@ -12,8 +12,8 @@ import { encodeWav } from '../../src/core/wav';
 import { preset } from '../../src/presets';
 import { demoProject } from '../../src/presets/projects';
 import {
-  addEffect, moveEffect, openProject, removeModule, replaceSound, selectChannel, setModTarget, setModuleOn, setParam,
-  setSample, setSourceType, useApp,
+  addEffect, addMod, moveEffect, openProject, removeModule, replaceSound, selectChannel, setModTarget, setModuleOn,
+  setParam, setSample, setSourceType, useApp,
 } from '../../src/state/store';
 import { FactoryView } from '../../src/ui/factory';
 import { PARAM_HINTS } from '../../src/ui/factory/hints';
@@ -111,15 +111,16 @@ test('the list selects channels and the header follows', async () => {
 
 test('the rack has one unit per module and follows the store', async () => {
   show('Warm Pad');
-  expect(units()).toEqual(['Source', 'Amp', 'Filter', 'Reverb', 'LFO', 'Output']);
+  const fixed = ['Source', 'Filter', 'Amp'];
+  expect(units()).toEqual([...fixed, 'Filter (whole sound)', 'Reverb', 'LFO', 'Output']);
 
   const id = channel('Warm Pad').id;
   const delay = addEffect(id, 'delay')!;
-  await expect.poll(units).toEqual(['Source', 'Amp', 'Filter', 'Reverb', 'Delay', 'LFO', 'Output']);
+  await expect.poll(units).toEqual([...fixed, 'Filter (whole sound)', 'Reverb', 'Delay', 'LFO', 'Output']);
   moveEffect(id, delay, 0);
-  await expect.poll(units).toEqual(['Source', 'Amp', 'Delay', 'Filter', 'Reverb', 'LFO', 'Output']);
+  await expect.poll(units).toEqual([...fixed, 'Delay', 'Filter (whole sound)', 'Reverb', 'LFO', 'Output']);
   removeModule(id, delay);
-  await expect.poll(units).toEqual(['Source', 'Amp', 'Filter', 'Reverb', 'LFO', 'Output']);
+  await expect.poll(units).toEqual([...fixed, 'Filter (whole sound)', 'Reverb', 'LFO', 'Output']);
 
   const lamp = () => unit('Reverb').querySelector('.h-led')!;
   expect(lamp().getAttribute('aria-pressed')).toBe('true');
@@ -130,13 +131,13 @@ test('the rack has one unit per module and follows the store', async () => {
 
   await userEvent.click(unit('Reverb').querySelector('.h-rack-buttons button')!);
   expect(sound().chain.map((m) => m.type)).toEqual(['reverb', 'filter']);
-  await expect.poll(units).toEqual(['Source', 'Amp', 'Reverb', 'Filter', 'LFO', 'Output']);
+  await expect.poll(units).toEqual([...fixed, 'Reverb', 'Filter (whole sound)', 'LFO', 'Output']);
 });
 
 test('dragging a knob sets its parameter and the type select changes the source', async () => {
   show('Warm Pad');
   const before = sound().chain[0].params.cutoff as number;
-  const knob = unit('Filter').querySelector('[role="slider"][aria-label="Cutoff"]')!;
+  const knob = unit('Filter (whole sound)').querySelector('[role="slider"][aria-label="Cutoff"]')!;
   const r = knob.getBoundingClientRect();
   const x = Math.round(r.left + r.width / 2);
   const y = Math.round(r.top + 18);
@@ -165,10 +166,13 @@ test('beginner mode shows Basics and folds the rest into labelled sections that 
   await userEvent.click(fold('Source', 'Shaping'));
   expect(fold('Source', 'Shaping').getAttribute('aria-pressed')).toBe('true');
   expect(sections('Source')).toEqual(['Shaping']);
-  expect(knobs('Source')).toEqual(['Pitch', 'Fine', 'Voices', 'Spread', 'Noise']);
+  const shaping = [
+    'Fine', 'Voices', 'Spread', 'Noise', 'Pulse', 'Pitch 2', 'Fine 2', 'Mix 2', 'Sub', 'Sub Oct', 'Glide',
+  ];
+  expect(knobs('Source')).toEqual(['Pitch', ...shaping]);
   await userEvent.click(fold('Source', 'Deep'));
   expect(sections('Source')).toEqual(['Shaping', 'Deep']);
-  expect(knobs('Source')).toEqual(['Pitch', 'Fine', 'Voices', 'Spread', 'Noise', 'Width']);
+  expect(knobs('Source')).toEqual(['Pitch', ...shaping, 'Width']);
 
   show('Warm Pad');
   expect(sections('Source')).toEqual(['Shaping', 'Deep']);
@@ -199,7 +203,8 @@ test('the sampler folds its controls by the same rules', async () => {
   expect(unit('Source').textContent).toContain('Load...');
   expect(unit('Source').textContent).not.toContain('Loop');
   await userEvent.click(fold('Source', 'Shaping'));
-  expect(knobs('Source')).toEqual(['Pitch', 'Start', 'End', 'Fine']);
+  expect(knobs('Source')).toEqual(['Pitch', 'Start', 'End', 'Fine', 'Glide']);
+  expect(unit('Source').querySelector('.h-rack-section')!.textContent).toContain('Mode');
   expect(unit('Source').querySelector('.h-rack-section')!.textContent).toContain('Reverse');
   await userEvent.click(fold('Source', 'Deep'));
   expect(unit('Source').querySelectorAll('.h-rack-section')[1].textContent).toContain('Play');
@@ -208,13 +213,105 @@ test('the sampler folds its controls by the same rules', async () => {
 test('pro mode shows every control in table order with no sections', () => {
   pro();
   show('Warm Pad');
-  expect(knobs('Source')).toEqual(['Pitch', 'Fine', 'Voices', 'Spread', 'Width', 'Noise']);
+  expect(knobs('Source')).toEqual([
+    'Pitch', 'Fine', 'Voices', 'Spread', 'Width', 'Noise', 'Pulse', 'Pitch 2', 'Fine 2', 'Mix 2', 'Sub', 'Sub Oct',
+    'Glide',
+  ]);
+  expect(knobs('Filter')).toEqual(['Cutoff', 'Reso', 'Drive', 'Key', 'Velocity']);
   expect(knobs('Reverb')).toEqual(['Size', 'Tone', 'Mix']);
   expect(host.querySelectorAll('.h-rack-folds, .h-rack-section')).toHaveLength(0);
 });
 
+test('the Filter unit sits between Source and Amp, off until its lamp is pressed, controls by level', async () => {
+  flushSync(() => replaceSound(state().channelId!, newSound('osc', 'Test')));
+  expect(units()).toEqual(['Source', 'Filter', 'Amp', 'Output']);
+  expect(knobs('Filter')).toEqual(['Cutoff', 'Reso']);
+  expect(unit('Filter').textContent).toContain('Low pass');
+  expect(folds('Filter').map((b) => b.textContent)).toEqual(['Shaping', 'Deep']);
+  const lamp = () => unit('Filter').querySelector('.h-led')!;
+  expect(lamp().getAttribute('aria-pressed')).toBe('false');
+  await userEvent.click(lamp());
+  expect(sound().filter.on).toBe(true);
+  await expect.poll(() => lamp().getAttribute('aria-pressed')).toBe('true');
+  // The lamp is not a control of a section, so it lights none.
+  expect(lit('Filter', 'Shaping')).toBe(false);
+  await userEvent.click(fold('Filter', 'Shaping'));
+  expect(knobs('Filter')).toEqual(['Cutoff', 'Reso', 'Drive']);
+  expect(unit('Filter').querySelector('.h-rack-section')!.textContent).toContain('12 dB');
+  await userEvent.click(fold('Filter', 'Deep'));
+  expect(knobs('Filter')).toEqual(['Cutoff', 'Reso', 'Drive', 'Key', 'Velocity']);
+});
+
+test('the Source gathers Osc 2, Sub and Play under captions, and Pulse works only with a square', async () => {
+  const id = state().channelId!;
+  flushSync(() => replaceSound(id, newSound('osc', 'Test')));
+  const groups = () => [...unit('Source').querySelectorAll('.h-factory-group')].map((g) => g.getAttribute('aria-label'));
+  const group = (name: string) => unit('Source').querySelector<HTMLElement>(`.h-factory-group[aria-label="${name}"]`)!;
+  const slider = (label: string) => unit('Source').querySelector(`[role="slider"][aria-label="${label}"]`)!;
+  expect(groups()).toEqual([]);
+  await userEvent.click(fold('Source', 'Shaping'));
+  expect(groups()).toEqual(['Osc 2', 'Sub', 'Play']);
+  expect([...group('Osc 2').querySelectorAll('[role="slider"]')].map((k) => k.getAttribute('aria-label')))
+    .toEqual(['Pitch 2', 'Fine 2', 'Mix 2']);
+  expect(group('Osc 2').querySelector('[role="radiogroup"]')!.getAttribute('aria-label')).toBe('Wave 2');
+  expect(group('Play').textContent).toContain('Poly');
+
+  expect(slider('Pulse').getAttribute('aria-disabled')).toBe('true');
+  flushSync(() => setParam(id, 'source', 'wave', 'square'));
+  expect(slider('Pulse').getAttribute('aria-disabled')).toBe('false');
+  flushSync(() => setParam(id, 'source', 'wave', 'sawtooth'));
+  flushSync(() => setParam(id, 'source', 'wave2', 'square'));
+  expect(slider('Pulse').getAttribute('aria-disabled')).toBe('true');
+  flushSync(() => setParam(id, 'source', 'mix2', 0.5));
+  expect(slider('Pulse').getAttribute('aria-disabled')).toBe('false');
+  expect(lit('Source', 'Shaping')).toBe(true);
+
+  pro();
+  expect(groups()).toEqual(['Osc 2', 'Sub', 'Play']);
+  expect(sections('Source')).toEqual([]);
+});
+
+test('a modulator works on each note or the whole sound, and on the whole sound for a target outside', async () => {
+  const id = state().channelId!;
+  flushSync(() => replaceSound(id, newSound('osc', 'Test')));
+  const env = addMod(id, 'env')!;
+  await expect.poll(() => folds('Envelope').map((b) => b.textContent)).toEqual(['Shaping', 'Deep']);
+  expect(unit('Envelope').textContent).not.toContain('Each note');
+  await userEvent.click(fold('Envelope', 'Shaping'));
+  await userEvent.click(fold('Envelope', 'Deep'));
+  const choice = (label: string) =>
+    [...unit('Envelope').querySelectorAll<HTMLButtonElement>('[aria-label="Works on"] .h-button')]
+      .find((b) => b.textContent === label)!;
+  const velocity = () => unit('Envelope').querySelector('[role="slider"][aria-label="Velocity"]')!;
+  expect(choice('Each note').getAttribute('aria-pressed')).toBe('true');
+  expect(velocity().getAttribute('aria-disabled')).toBe('false');
+  await userEvent.click(choice('Whole sound'));
+  expect(sound().mods[0].per).toBe('sound');
+  await expect.poll(() => velocity().getAttribute('aria-disabled')).toBe('true');
+  expect(lit('Envelope', 'Shaping')).toBe(true);
+  await userEvent.click(choice('Each note'));
+  expect(sound().mods[0].per).toBe('note');
+
+  flushSync(() => setModTarget(id, env, { module: 'out', param: 'level' }));
+  expect(choice('Whole sound').getAttribute('aria-pressed')).toBe('true');
+  expect(choice('Each note').disabled).toBe(true);
+  expect(choice('Whole sound').disabled).toBe(true);
+  expect(velocity().getAttribute('aria-disabled')).toBe('true');
+  expect(sound().mods[0].per).toBe('note');
+  flushSync(() => setModTarget(id, env, { module: 'filter', param: 'cutoff' }));
+  expect(choice('Each note').getAttribute('aria-pressed')).toBe('true');
+  expect(choice('Each note').disabled).toBe(false);
+
+  // A new LFO works on the whole sound; in pro mode the switch and Velocity stand in the row.
+  addMod(id, 'lfo');
+  pro();
+  await expect.poll(() => units()).toContain('LFO');
+  expect(unit('LFO').querySelector('[aria-label="Works on"] [aria-pressed="true"]')!.textContent).toBe('Whole sound');
+  expect(knobs('LFO')).toEqual(['Amount', 'Rate', 'Velocity']);
+});
+
 test('the add lists and the source list are grouped by level in beginner mode and flat in pro mode', async () => {
-  expect(await addList('effect')).toEqual(['BASICS', 'Filter', 'Delay', 'Reverb', 'SHAPING', 'Drive']);
+  expect(await addList('effect')).toEqual(['BASICS', 'Delay', 'Reverb', 'SHAPING', 'Filter (whole sound)', 'Drive']);
   expect(await addList('modulator')).toEqual(['BASICS', 'Envelope', 'LFO']);
   await userEvent.click(unit('Source').querySelector('[role="combobox"]')!);
   expect([...document.querySelector('.h-select-list')!.children].map((el) => el.textContent)).toEqual([
@@ -223,7 +320,7 @@ test('the add lists and the source list are grouped by level in beginner mode an
   await userEvent.keyboard('{Escape}');
 
   pro();
-  expect(await addList('effect')).toEqual(['Filter', 'Drive', 'Delay', 'Reverb']);
+  expect(await addList('effect')).toEqual(['Filter (whole sound)', 'Drive', 'Delay', 'Reverb']);
   expect(await addList('modulator')).toEqual(['Envelope', 'LFO']);
   await userEvent.click(unit('Source').querySelector('[role="combobox"]')!);
   expect(optionTexts()).toEqual(['Oscillator', 'FM Pair', 'Noise', 'Sampler']);

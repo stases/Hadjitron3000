@@ -33,12 +33,16 @@ The song is a list of placements (`Placement`): a block put on one of four lanes
 
 A block can also stand on its own outside a project (`Block`): its notes together with the sounds that play them and their samples. `extractBlock` in `src/core/block.ts` lifts one out of a project, and the store's `insertBlock` adds one to a project, reusing a channel when the project already has the same sound. The Block Library offers the blocks of the demo song this way and the user's own blocks from the block library folder.
 
-A sound is a source, an amp envelope, a chain of effects, a set of modulators and an output:
+A sound is a source, a filter, an amp envelope, a chain of effects, a set of modulators and an output, together with how its notes follow each other (`play`: Poly, Mono or Legato, and a glide time):
 
 ```
-source -> amp envelope -> effect -> effect -> ... -> output (level, pan)
-              modulators (envelopes, LFOs) -> any parameter marked as a target
+     inside every note                         shared by all notes
+source -> filter -> amp envelope  ---+--> effect -> effect -> ... -> output (level, pan)
+                                     |
+modulators (envelopes, LFOs) -> any parameter marked as a target
 ```
+
+Source, filter and amp envelope are built for every note; the effects and the output exist once per sound. The filter (`sound.filter`, the `FILTER` definition) is part of every sound and off by default; its lamp is the parameter `on`, which the Factory draws as the unit's lamp rather than as a control. A modulator (`ModInst`) has `per`: with `'note'` it is built inside every note as well and may only move parameters that live there, the source's and the filter's (`perNote` in `src/core/modules.ts` decides); with `'sound'` it exists once and may move anything. Files without the field read as `'sound'`, which is how modulators worked before.
 
 Every module is described once in `src/core/modules.ts`: its parameters with ranges, units, knob tapers and defaults. The engine, the file format and the generic module panel in the Factory are all driven by that table. Every module and parameter also has a level from `src/core/levels.ts` (Basics when absent), which the Factory uses in beginner mode to fold Shaping and Deep controls into sections and to group the add lists; it is a property of the table only and never reaches the file format or the engine. The beginner/pro switch is a user preference in `src/app/prefs.ts`, kept in localStorage rather than in the project. Parameter values are stored in real units (hertz, seconds, semitones, decibels).
 
@@ -51,15 +55,21 @@ Sounds are saved as `.h3s`, blocks as `.h3b` and projects as `.h3k`. All three a
 `Engine` (`src/audio`) owns one audio graph per channel:
 
 ```
-voices: source -> voice gain (amp envelope x velocity) --+
-                                                         +--> effect chain -> output -> channel gain (mute/solo) -> master
-modulators -> depth gains -> audio parameters
+voices: source -> filter (stage, drive, stage) -> voice gain (amp envelope x velocity) --+
+                                                                                        +--> effect chain -> output
+                                                                                        |      -> channel gain (mute/solo) -> master
+per-note modulators -> depth gains -> parameters of their own voice
+modulators of the whole sound -> depth gains -> audio parameters, those inside the voices included
 master -> master level -> soft clip -> destination and analyser
 ```
 
 Each channel also has a tap of its own output ahead of mute and solo, made the first time the Factory's scope reads it.
 
-Each note is a voice with its own source and amp envelope. The effect chain and the modulators are shared by all voices of a channel; a modulation envelope restarts on every note and follows the most recent one. This keeps the processing cost per channel fixed no matter how many notes overlap.
+Each note is a voice with its own source, filter, amp envelope and per-note modulators; nothing is built for a part that is switched off (the filter off, the sub or the second oscillator at 0, no per-note modulators), so a sound made before the voice path plays bit for bit as it did. The effect chain and the modulators of the whole sound are shared by all voices of a channel; such a modulation envelope restarts on every note and follows the most recent one.
+
+The oscillator's pulse width is a sawtooth minus the same sawtooth delayed by the width's share of a period (`pulse` in `src/audio/modules/sources.ts`). Both are band-limited, the delay moves smoothly when the width is modulated, and at 50 % the result is the square wave harmonic for harmonic. A square at 50 % that no modulator moves is still the plain square oscillator.
+
+Glide is a straight line in cents on the parameters that follow the voice's pitch (`Follower`): the oscillators' detune, the filter's detune as far as key tracking says, and the pulse delay, whose period changes by the matching exponential ramp. In Mono a new note starts a new voice and releases the old one within 5 ms; in Legato, and for a note played with `slide` (`Engine.play`), the sounding voice is moved to the new note instead, and its envelopes go on as if the key had stayed down (`envelopeSegments` with a starting time). The channel keeps the live keys that are down, so in Mono and Legato letting go of the newer key goes back to the older one. The filter's drive is an oversampled wave shaper that delays the sound by 128 samples; the amp envelope of such a voice starts as much later, so the attack is not lost.
 
 `engine.setProject(project)` is called on every change of the document. The store is immutable, so the engine compares object identities, applies parameter changes smoothly, and rebuilds only the channels whose structure changed.
 

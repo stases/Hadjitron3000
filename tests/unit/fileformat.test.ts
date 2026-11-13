@@ -7,7 +7,7 @@ import {
   BLOCK_EXT, FORMAT_VERSION, FormatError, parseBlock, parseProject, parseSound, PROJECT_EXT, readProject, sampleId,
   serializeProject, serializeSound, SOUND_EXT, soundSampleIds,
 } from '../../src/core/fileformat';
-import { AMP, EFFECTS, MODS, MODULES, OUT, SOURCES } from '../../src/core/modules';
+import { AMP, EFFECTS, FILTER, MODS, MODULES, OUT, PLAY, SOURCES } from '../../src/core/modules';
 import { MAX_NOTE, MIN_NOTE } from '../../src/core/notes';
 import { defaultParams } from '../../src/core/params';
 import type { Project, SampleData, Sound } from '../../src/core/types';
@@ -195,7 +195,7 @@ test.each([...SOURCES, ...EFFECTS, ...MODS])('normalizes exactly the parameters 
   const entry = { id: 'test', type: def.type, params: { unknown: 'drop' } };
   if (def.kind === 'source') original.source = entry;
   if (def.kind === 'effect') original.chain = [entry];
-  if (def.kind === 'mod') original.mods = [{ ...entry, target: null, amount: 0 }];
+  if (def.kind === 'mod') original.mods = [{ ...entry, per: 'sound', target: null, amount: 0 }];
   const parsed = parseSound(soundFile(original)).sound;
   const result = def.kind === 'source' ? parsed.source : def.kind === 'effect' ? parsed.chain[0] : parsed.mods[0];
   expect(result.params).toStrictEqual(defaultParams(def));
@@ -217,10 +217,57 @@ test('coerces supplied parameter values and defaults amp, out and missing params
   expect(result.amp).toEqual({ attack: 0, decay: 5, sustain: 0.8, release: 0.2 });
   expect(result.out).toEqual({ level: 6, pan: -1 });
   expect(result.chain[0].params).toEqual(defaultParams(MODULES.filter));
-  expect(result.mods[0].params).toEqual({ wave: 'triangle', rate: 40 });
+  expect(result.mods[0].params).toEqual({ wave: 'triangle', rate: 40, vel: 0 });
   const defaults = parseSound(soundFile({ ...newSound(), amp: undefined, out: undefined })).sound;
   expect(defaults.amp).toEqual(defaultParams(AMP));
   expect(defaults.out).toEqual(defaultParams(OUT));
+});
+
+test('a sound from before the voice path reads with the filter off, Poly play and modulators of the whole sound', () => {
+  const { play: _play, filter: _filter, ...old } = newSound();
+  const mods = [{ id: 'env1', type: 'env', params: {}, target: { module: 'source', param: 'pitch' }, amount: 0.5 }];
+  const text = JSON.stringify({ format: 'hadjitron3000/sound', version: 2, sound: { ...old, mods } });
+  const parsed = parseSound(text).sound;
+  expect(parsed.play).toEqual(defaultParams(PLAY));
+  expect(parsed.filter).toEqual(defaultParams(FILTER));
+  expect(parsed.filter.on).toBe(false);
+  expect(parsed.mods[0].per).toBe('sound');
+  expect(parsed.mods[0].params.vel).toBe(0);
+});
+
+test('the voice path round trips and is always written', () => {
+  const original = newSound();
+  original.play = { mode: 'legato', glide: 0.12 };
+  original.filter = { ...original.filter, on: true, slope: '24', drive: 0.3, key: 0.5, vel: -0.25 };
+  original.source = {
+    ...original.source, on: true, params: { ...original.source.params, wave: 'square', pw: 0.3, mix2: 0.5, sub: 0.4 },
+  };
+  original.mods = [
+    { ...newMod('env'), id: 'env1', target: { module: 'filter', param: 'cutoff' } },
+    { ...newMod('lfo'), id: 'lfo1', per: 'note', target: { module: 'source', param: 'pw' } },
+  ];
+  const text = serializeSound(original, {});
+  expect(JSON.parse(text).sound.mods.map((m: { per: string }) => m.per)).toEqual(['note', 'note']);
+  expect(parseSound(text).sound).toStrictEqual(original);
+  const plain = JSON.parse(serializeSound(newSound(), {})).sound;
+  expect(plain.play).toEqual(defaultParams(PLAY));
+  expect(plain.filter).toEqual(defaultParams(FILTER));
+});
+
+test('voice path values are checked like any other parameter', () => {
+  const original = {
+    ...newSound(),
+    play: { mode: 'chords', glide: 9 },
+    filter: { on: 'yes', slope: 48, cutoff: 1e6 },
+    chain: [{ id: 'filter', type: 'drive' }],
+    mods: [{ id: 'm1', type: 'env', per: 'chord', target: { module: 'filter', param: 'cutoff' }, amount: 1 }],
+  };
+  const parsed = parseSound(soundFile(original)).sound;
+  expect(parsed.play).toEqual({ mode: 'poly', glide: 2 });
+  expect(parsed.filter).toEqual({ ...defaultParams(FILTER), cutoff: 20000 });
+  // A chain module may not take the id of a fixed unit.
+  expect(parsed.chain[0].id).not.toBe('filter');
+  expect(parsed.mods[0]).toMatchObject({ per: 'sound', target: { module: 'filter', param: 'cutoff' } });
 });
 
 test('defaults a missing sound name and accepts omitted sample tables', () => {

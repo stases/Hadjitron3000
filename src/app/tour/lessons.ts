@@ -98,19 +98,19 @@ const MAKE_A_SOUND: TourStep[] = [
   {
     title: 'A filter',
     text: 'A filter takes part of the sound away. A low pass filter lets the low notes through and dulls the '
-      + 'bright top, a bit like a hand over the speaker. Press Effect and choose Filter.',
-    target: 'add-effect',
+      + 'bright top, a bit like a hand over the speaker. Every sound has one right under the Source; click the lamp '
+      + 'at the left of the Filter unit to switch it on.',
+    target: 'unit-filter',
     view: 'factory',
-    done: (look) => !!effect(look, 'filter'),
+    done: (look) => sound(look)?.filter.on === true,
   },
   {
     title: 'The cutoff',
     text: 'Cutoff is where the filter starts to cut. Turn it down to about 300 Hz and play a few notes: the sound '
-      + 'goes dark and round. Press Shaping at the right of the unit for more: a little Reso adds a whistle right '
-      + 'at the cutoff.',
+      + 'goes dark and round. A little Reso adds a whistle right at the cutoff.',
     target: 'unit-filter',
     view: 'factory',
-    done: (look) => Number(effect(look, 'filter')?.params.cutoff ?? Infinity) <= 600,
+    done: (look) => sound(look)?.filter.on === true && Number(sound(look)?.filter.cutoff) <= 600,
   },
   {
     title: 'A modulator',
@@ -123,13 +123,11 @@ const MAKE_A_SOUND: TourStep[] = [
   {
     title: 'Point it at the cutoff',
     text: 'Set the Target of the envelope to Filter · Cutoff. Now every note opens the filter for a moment and '
-      + 'closes it again, which gives the bass its snappy start. Amount sets how far it opens.',
+      + 'closes it again, which gives the bass its snappy start. Each note gets an envelope of its own, so notes '
+      + 'that overlap do not cut each other short. Amount sets how far it opens.',
     target: 'unit-mod',
     view: 'factory',
-    done: (look) => {
-      const filter = effect(look, 'filter');
-      return !!filter && !!sound(look)?.mods.some((m) => m.target?.module === filter.id && m.target.param === 'cutoff');
-    },
+    done: (look) => !!sound(look)?.mods.some((m) => m.target?.module === 'filter' && m.target.param === 'cutoff'),
   },
   {
     title: 'Some room',

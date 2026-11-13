@@ -1,9 +1,11 @@
 import { expect, test } from 'vitest';
 import { newMod, newModule, newSound } from '../../src/core/defaults';
-import { AMP, EFFECTS, MODS, MODULES, moduleDef, modTargets, OUT, paramSpec, SOURCES } from '../../src/core/modules';
+import {
+  AMP, EFFECTS, FILTER, MODS, MODULES, moduleDef, modTargets, OUT, paramSpec, perNote, PLAY, SOURCES,
+} from '../../src/core/modules';
 
 test('MODULES contains exactly all definitions under their types', () => {
-  const defs = [...SOURCES, AMP, ...EFFECTS, ...MODS, OUT];
+  const defs = [...SOURCES, PLAY, FILTER, AMP, ...EFFECTS, ...MODS, OUT];
   expect(Object.keys(MODULES)).toEqual(defs.map((def) => def.type));
   expect(new Set(defs.map((def) => def.type)).size).toBe(defs.length);
   for (const def of defs) expect(MODULES[def.type]).toBe(def);
@@ -31,6 +33,8 @@ test('moduleDef resolves every location in a sound', () => {
   sound.chain = [{ ...newModule('filter'), id: 'filter1' }];
   sound.mods = [{ ...newMod('lfo'), id: 'lfo1' }];
   expect(moduleDef(sound, 'source')).toBe(MODULES.fm);
+  expect(moduleDef(sound, 'play')).toBe(PLAY);
+  expect(moduleDef(sound, 'filter')).toBe(FILTER);
   expect(moduleDef(sound, 'amp')).toBe(AMP);
   expect(moduleDef(sound, 'out')).toBe(OUT);
   expect(moduleDef(sound, 'filter1')).toBe(MODULES.filter);
@@ -49,11 +53,24 @@ test('modTargets follows signal order and numbers repeated effects', () => {
   sound.mods = [newMod('lfo')];
   expect(modTargets(sound)).toEqual([
     { module: 'source', param: 'pitch', label: 'Source · Pitch' },
-    { module: 'f1', param: 'cutoff', label: 'Filter · Cutoff' },
-    { module: 'f2', param: 'cutoff', label: 'Filter 2 · Cutoff' },
+    { module: 'source', param: 'pw', label: 'Source · Pulse' },
+    { module: 'filter', param: 'cutoff', label: 'Filter · Cutoff' },
+    { module: 'f1', param: 'cutoff', label: 'Filter (whole sound) · Cutoff' },
+    { module: 'f2', param: 'cutoff', label: 'Filter (whole sound) 2 · Cutoff' },
     { module: 'delay1', param: 'time', label: 'Delay · Time' },
     { module: 'delay1', param: 'mix', label: 'Delay · Mix' },
     { module: 'out', param: 'level', label: 'Output · Level' },
     { module: 'out', param: 'pan', label: 'Output · Pan' },
   ]);
+});
+
+test('a modulator works on each note only when it is set to and its target lives in the note', () => {
+  const env = newMod('env');
+  expect([env.per, newMod('lfo').per]).toEqual(['note', 'sound']);
+  expect(perNote(env)).toBe(false);
+  expect(perNote({ ...env, target: { module: 'source', param: 'pitch' } })).toBe(true);
+  expect(perNote({ ...env, target: { module: 'filter', param: 'cutoff' } })).toBe(true);
+  expect(perNote({ ...env, target: { module: 'out', param: 'level' } })).toBe(false);
+  expect(perNote({ ...env, target: { module: 'm_1', param: 'cutoff' } })).toBe(false);
+  expect(perNote({ ...env, per: 'sound', target: { module: 'filter', param: 'cutoff' } })).toBe(false);
 });

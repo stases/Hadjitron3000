@@ -248,7 +248,10 @@ test('Beginner Mode in the View menu folds or shows the Factory controls and is 
   expect($('.h-statusbar').textContent).toContain('groups the add lists by level');
 
   await userEvent.click(beginner);
-  await expect.poll(knobs).toEqual(['Pitch', 'Fine', 'Voices', 'Spread', 'Width', 'Noise']);
+  await expect.poll(knobs).toEqual([
+    'Pitch', 'Fine', 'Voices', 'Spread', 'Width', 'Noise', 'Pulse', 'Pitch 2', 'Fine 2', 'Mix 2', 'Sub', 'Sub Oct',
+    'Glide',
+  ]);
   expect($$('.h-rack-folds')).toHaveLength(0);
   expect((await item()).querySelector('.h-menu-check svg')).toBeNull();
   await userEvent.keyboard('{Escape}');

@@ -1,12 +1,9 @@
 import type { ReactNode } from 'react';
 import { create } from 'zustand';
 import { usePrefs } from '../../app/prefs';
-import { LEVEL_NAMES, byLevel, levelOf } from '../../core/levels';
+import { LEVEL_NAMES, byLevel } from '../../core/levels';
 import type { Level } from '../../core/levels';
-import { MODULES, paramSpec } from '../../core/modules';
 import type { ModuleDef } from '../../core/modules';
-import { defaultParams } from '../../core/params';
-import type { Params } from '../../core/types';
 import type { MenuItem, RackFold, SelectItem } from '../kit';
 
 /** Which sections are open, by unit type and level ("filter/2"); kept while the app runs. */
@@ -24,34 +21,56 @@ export function useShown(): (type: string, level: Level) => boolean {
   return (type, level) => !beginner || level === 1 || !!open[`${type}/${level}`];
 }
 
-/** One cell of a unit and the parameters it shows; it belongs to the level of the first one. */
+/** One cell of a unit: its control, its level, and whether that control differs from its default. */
 export interface Cell {
-  ids: string[];
   node: ReactNode;
+  level: Level;
+  changed: boolean;
+  /** A caption shared with the neighbouring cells of the same group, such as "Osc 2". */
+  group?: string;
+}
+
+/** The nodes of a row, with neighbouring cells of one group gathered under its caption. */
+function arrange(cells: Cell[]): ReactNode[] {
+  const out: ReactNode[] = [];
+  for (let i = 0; i < cells.length; ) {
+    const { group } = cells[i];
+    if (!group) {
+      out.push(cells[i++].node);
+      continue;
+    }
+    const members: ReactNode[] = [];
+    while (i < cells.length && cells[i].group === group) members.push(cells[i++].node);
+    out.push(
+      <div key={`group:${group}`} className="h-factory-group" role="group" aria-label={group}>
+        <span className="h-factory-group-label">{group}</span>
+        <div className="h-factory-row">{members}</div>
+      </div>,
+    );
+  }
+  return out;
 }
 
 /**
  * Lays out the cells of a unit. In pro mode every cell is in the row, in table order. In beginner mode the row holds
- * the Basics cells and each higher level that has cells gets a fold.
+ * the Basics cells and each higher level that has cells gets a fold. Sections are kept open by unit type.
  */
-export function useLevels(type: string, params: Params, cells: Cell[]): { row: ReactNode[]; folds: RackFold[] } {
+export function useLevels(type: string, cells: Cell[]): { row: ReactNode[]; folds: RackFold[] } {
   const beginner = usePrefs((p) => p.beginner);
   const shown = useShown();
-  if (!beginner) return { row: cells.map((c) => c.node), folds: [] };
-  const def = MODULES[type];
-  const defaults = defaultParams(def);
-  const groups = byLevel(cells.map((c) => ({ ...c, level: levelOf(paramSpec(def, c.ids[0])!) })));
+  if (!beginner) return { row: arrange(cells), folds: [] };
+  const groups = byLevel(cells);
   const folds = ([2, 3] as const)
     .filter((level) => groups[level].length > 0)
     .map((level) => ({
       label: LEVEL_NAMES[level],
       open: shown(type, level),
-      lit: groups[level].some((c) => c.ids.some((id) => params[id] !== defaults[id])),
+      lit: groups[level].some((c) => c.changed),
       hint: FOLD_HINTS[level],
       onToggle: () => useFolds.setState((s) => ({ [`${type}/${level}`]: !s[`${type}/${level}`] })),
-      children: <div className="h-factory-row">{groups[level].map((c) => c.node)}</div>,
+      children: <div className="h-factory-row">{arrange(groups[level])}</div>,
     }));
-  return { row: groups[1].map((c) => c.node), folds };
+  return { row: arrange(groups[1]), folds };
 }
 
 /** The heading of a level and an item for each of its modules, or nothing when it has none. */

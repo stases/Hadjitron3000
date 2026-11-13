@@ -1,6 +1,6 @@
 // Fresh documents: ids, an empty sound, an empty block, an empty project.
 
-import { AMP, MODULES, OUT } from './modules';
+import { AMP, FILTER, MODULES, OUT, PLAY } from './modules';
 import { defaultParams } from './params';
 import type { ModInst, ModuleInst, NoteInit, Pattern, Project, Sound } from './types';
 
@@ -25,14 +25,17 @@ export function newModule(type: string): ModuleInst {
   return { id: uid('m'), type, params: defaultParams(MODULES[type]), on: true };
 }
 
+/** A new envelope works on each note, a new LFO on the whole sound. */
 export function newMod(type: string): ModInst {
-  return { ...newModule(type), target: null, amount: 0.5 };
+  return { ...newModule(type), per: type === 'env' ? 'note' : 'sound', target: null, amount: 0.5 };
 }
 
 export function newSound(sourceType = 'osc', name = 'New Sound'): Sound {
   return {
     name,
     source: { id: 'source', type: sourceType, params: defaultParams(MODULES[sourceType]) },
+    play: defaultParams(PLAY),
+    filter: defaultParams(FILTER),
     amp: defaultParams(AMP),
     chain: [],
     mods: [],

@@ -55,13 +55,24 @@ export function releaseSegments(level: number, at: number, release: number): Seg
   ];
 }
 
-/** The whole envelope of a note held `gate` seconds (Infinity while held), starting from `from`. */
-export function envelopeSegments(env: Adsr, gate = Infinity, from = 0): Segment[] {
+/**
+ * The envelope of a note held `gate` seconds (Infinity while held), starting from `from`. Given `at`, it is the rest
+ * of that envelope from `at` on, with the level `from` there: the attack goes on to its peak when `at` falls inside
+ * it, otherwise the level settles towards sustain. A note tied to the next one goes on this way without restarting.
+ */
+export function envelopeSegments(env: Adsr, gate = Infinity, from = 0, at = 0): Segment[] {
   const a = Math.max(env.attack, MIN_ATTACK);
-  const g = Math.max(gate, 0);
-  const attackEnd = Math.min(a, g);
-  const segs: Segment[] = [{ start: 0, end: attackEnd, from, to: from + ((1 - from) * attackEnd) / a, tau: 0 }];
-  if (g > a) segs.push({ start: a, end: g, from: 1, to: env.sustain, tau: Math.max(env.decay, MIN_DECAY) / 4 });
+  const g = Math.max(gate, at);
+  const segs: Segment[] = [];
+  if (at < a) {
+    const end = Math.min(a, g);
+    segs.push({ start: at, end, from, to: from + ((1 - from) * (end - at)) / (a - at), tau: 0 });
+  }
+  if (g > Math.max(a, at)) {
+    const start = Math.max(a, at);
+    segs.push({ start, end: g, from: at < a ? 1 : from, to: env.sustain, tau: Math.max(env.decay, MIN_DECAY) / 4 });
+  }
+  if (segs.length === 0) segs.push({ start: at, end: at, from, to: from, tau: 0 });
   if (g === Infinity) return segs;
   return segs.concat(releaseSegments(valueAt(segs, g), g, env.release));
 }

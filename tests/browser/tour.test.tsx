@@ -12,7 +12,7 @@ import { LESSONS } from '../../src/app/tour/lessons';
 import { closeTour, startLesson, useTour } from '../../src/app/tour/tourStore';
 import { platform } from '../../src/platform';
 import { demoProject } from '../../src/presets/projects';
-import { newNote, TICKS_PER_STEP } from '../../src/core/defaults';
+import { newNote, newSound, TICKS_PER_STEP } from '../../src/core/defaults';
 import * as store from '../../src/state/store';
 
 vi.mock('../../src/app/audio', async (original) => ({
@@ -140,7 +140,6 @@ test('Make a Sound can be walked from the first step to the last by doing each t
   renderApp();
   await startLesson('sound');
   const channel = () => state().channelId!;
-  const filter = () => state().project.channels.find((c) => c.id === channel())!.sound.chain[0].id;
 
   await expect.poll(count).toBe('Step 1 of 13');
   expect($('.h-tour-frame')).toBeNull();
@@ -168,12 +167,13 @@ test('Make a Sound can be walked from the first step to the last by doing each t
   store.setParam(channel(), 'amp', 'sustain', 0);
   await doneThenNext();
 
-  await pointsAt('add-effect');
-  store.addEffect(channel(), 'filter');
+  await pointsAt('unit-filter');
+  expect(ticked()).toBe(false);
+  await userEvent.click($('[data-tour="unit-filter"] .h-led')!);
   await doneThenNext();
 
   await pointsAt('unit-filter');
-  store.setParam(channel(), filter(), 'cutoff', 300);
+  store.setParam(channel(), 'filter', 'cutoff', 300);
   await doneThenNext();
 
   await pointsAt('add-modulator');
@@ -181,7 +181,7 @@ test('Make a Sound can be walked from the first step to the last by doing each t
   await doneThenNext();
 
   await pointsAt('unit-mod');
-  store.setModTarget(channel(), env, { module: filter(), param: 'cutoff' });
+  store.setModTarget(channel(), env, { module: 'filter', param: 'cutoff' });
   await doneThenNext();
 
   store.addEffect(channel(), 'delay');
@@ -338,19 +338,19 @@ test('the frame follows its target when the target appears and when it scrolls',
   await page.viewport(1024, 680);
   renderApp();
   await startLesson('sound');
-  for (let i = 0; i < 6; i++) await next();
-  await expect.poll(count).toBe('Step 7 of 13');
+  store.addChannel(newSound('osc', 'Oscillator'));
+  for (let i = 0; i < 8; i++) await next();
+  await expect.poll(count).toBe('Step 9 of 13');
   const channel = state().channelId!;
   expect($('.h-tour-frame')).toBeNull();
-  store.addEffect(channel, 'filter');
-  await pointsAt('unit-filter');
+  store.addMod(channel, 'env');
+  await pointsAt('unit-mod');
 
-  for (const type of ['drive', 'delay', 'reverb']) store.addEffect(channel, type, 0);
-  store.addMod(channel, 'lfo');
-  await pointsAt('unit-filter');
+  for (const type of ['drive', 'delay', 'reverb', 'filter']) store.addEffect(channel, type, 0);
+  await pointsAt('unit-mod');
   const scroller = $('.h-factory-scroll')!;
   const before = $('.h-tour-frame')!.getBoundingClientRect().top;
   scroller.scrollTop += 40;
   await expect.poll(() => $('.h-tour-frame')!.getBoundingClientRect().top).toBe(before - 40);
-  await pointsAt('unit-filter');
+  await pointsAt('unit-mod');
 });

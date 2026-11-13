@@ -45,7 +45,6 @@ function walk(lesson: LessonId, actions: (() => void)[]): void {
 const nothing = () => {};
 
 test('the steps of Make a Sound are done by building a plucky bass', () => {
-  let filter = '';
   let env = '';
   walk('sound', [
     nothing,
@@ -53,10 +52,10 @@ test('the steps of Make a Sound are done by building a plucky bass', () => {
     nothing,
     () => app.setParam(channel(), 'source', 'wave', 'square'),
     () => app.setParam(channel(), 'amp', 'sustain', 0),
-    () => (filter = app.addEffect(channel(), 'filter')!),
-    () => app.setParam(channel(), filter, 'cutoff', 300),
+    () => app.setParam(channel(), 'filter', 'on', true),
+    () => app.setParam(channel(), 'filter', 'cutoff', 300),
     () => (env = app.addMod(channel(), 'env')!),
-    () => app.setModTarget(channel(), env, { module: filter, param: 'cutoff' }),
+    () => app.setModTarget(channel(), env, { module: 'filter', param: 'cutoff' }),
     () => app.addEffect(channel(), 'reverb'),
     () => app.renameSound(channel(), 'Pluck Bass'),
     nothing,
@@ -134,4 +133,16 @@ test('every step that points at a control names it, and the lessons keep to ten 
       expect(step.text).not.toMatch(/!/);
     }
   }
+});
+
+test('the cutoff step waits for the filter to be on, and a whole-sound filter does not count', () => {
+  app.addChannel(newSound('osc', 'Oscillator'));
+  app.setParam(channel(), 'filter', 'cutoff', 300);
+  expect(done('sound', 6)).toBe(false);
+  app.setParam(channel(), 'filter', 'on', true);
+  expect(done('sound', 6)).toBe(true);
+  const env = app.addMod(channel(), 'env')!;
+  const whole = app.addEffect(channel(), 'filter')!;
+  app.setModTarget(channel(), env, { module: whole, param: 'cutoff' });
+  expect(done('sound', 8)).toBe(false);
 });

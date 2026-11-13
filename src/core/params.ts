@@ -66,6 +66,8 @@ function formatFloat(spec: FloatSpec, v: number): string {
       return `${signed(v)} st`;
     case 'ct':
       return `${signed(v)} ct`;
+    case 'oct':
+      return `${signed(v)} oct`;
     case 'x':
       return `×${v.toFixed(2)}`;
     case 'pan': {

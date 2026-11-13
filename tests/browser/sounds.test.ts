@@ -2,6 +2,7 @@
 
 import { expect, test } from 'vitest';
 import { renderProject, renderSound } from '../../src/audio';
+import { preset } from '../../src/presets';
 import { adsr, amplitudeAt, db, effect, finite, freq, maxJump, mod, peak, project, rms, slice, sound } from './helpers';
 
 test('kick: a sine with a fast downward pitch envelope', async () => {
@@ -78,4 +79,20 @@ test('pad: a detuned saw chord through low pass, delay and reverb', async () => 
   expect(l.length / 44100).toBeGreaterThan(2 + 1.25);
   expect(l.length / 44100).toBeLessThan(2 + 6);
   expect(peak(l.subarray(l.length - 2205))).toBeLessThan(1e-4);
+});
+
+test('acid: a resonant, driven per-note filter that slides between overlapping notes without clicks', async () => {
+  // Overlapping notes slide in Legato; the gaps start the envelopes again.
+  const line = { 0: { note: 48, vel: 1, len: 1.5 }, 1: { note: 60, vel: 0.8, len: 1 }, 3: { note: 51, vel: 1, len: 0.5 },
+    4: { note: 48, vel: 0.6, len: 1.5 }, 5: { note: 55, vel: 1, len: 2 }, 7: { note: 63, vel: 0.8, len: 0.5 } };
+  const p = project([{ id: 'acid', sound: preset('Acid Bass') }], { acid: line }, { bpm: 130 });
+  const pcm = await renderProject(p, { kind: 'pattern', patternId: p.patterns[0].id }, { loops: 2, tail: 1 });
+  const d = pcm.channels[0];
+  expect(finite(d)).toBe(true);
+  expect(peak(d)).toBeLessThan(0.9);
+  expect(db(rms(slice(d, 0, 1.5)))).toBeGreaterThan(-30);
+  // Step 1 slides up from step 0, 65 Hz to 131 Hz, in 70 ms, and holds the new pitch to the end of the step.
+  const slid = slice(d, 0.19, 0.23);
+  expect(amplitudeAt(slid, 130.8)).toBeGreaterThan(3 * amplitudeAt(slid, 65.4));
+  expect(maxJump(d)).toBeLessThan(0.1);
 });

@@ -1,7 +1,7 @@
 import {
   CHANNEL_COLORS, MAX_BARS, MAX_SONG_BARS, MAX_TICKS, SONG_LANES, STEPS_PER_BAR, TICKS_PER_STEP, newPattern, uid,
 } from './defaults';
-import { AMP, MODULES, OUT, paramSpec } from './modules';
+import { AMP, FILTER, MODULES, OUT, PLAY, paramSpec } from './modules';
 import type { ModuleDef, ModuleKind } from './modules';
 import { MAX_NOTE, MIN_NOTE, cleanNotes } from './notes';
 import { coerce } from './params';
@@ -145,11 +145,13 @@ function readSound(value: unknown, samples: Record<string, SampleData>): Sound {
   const raw = object(value, 'sound');
   const chain = array(raw.chain, 'sound chain');
   const mods = array(raw.mods, 'sound modulators');
-  const ids = new Set(['source', 'amp', 'out']);
+  const ids = new Set(['source', 'play', 'filter', 'amp', 'out']);
   const reserved = new Set([...chain, ...mods].flatMap((m) => isObject(m) && typeof m.id === 'string' ? [m.id] : []));
   const sound: Sound = {
     name: typeof raw.name === 'string' ? raw.name : 'New Sound',
     source: module(raw.source, 'source', ids, reserved),
+    play: params(raw.play, PLAY),
+    filter: params(raw.filter, FILTER),
     amp: params(raw.amp, AMP),
     chain: chain.map((m) => module(m, 'effect', ids, reserved)),
     mods: [],
@@ -162,6 +164,7 @@ function readSound(value: unknown, samples: Record<string, SampleData>): Sound {
   }
   const targets = new Map([
     ['source', MODULES[sound.source.type]],
+    ['filter', FILTER],
     ...sound.chain.map((m): [string, ModuleDef] => [m.id, MODULES[m.type]]),
     ['out', OUT],
   ]);
@@ -177,7 +180,7 @@ function readSound(value: unknown, samples: Record<string, SampleData>): Sound {
         target = { module: moduleId, param };
       }
     }
-    return { ...inst, target, amount: number(rawMod.amount, 0, -1, 1) };
+    return { ...inst, per: rawMod.per === 'note' ? 'note' : 'sound', target, amount: number(rawMod.amount, 0, -1, 1) };
   });
   return sound;
 }

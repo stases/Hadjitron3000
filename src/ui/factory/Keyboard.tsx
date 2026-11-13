@@ -28,12 +28,13 @@ export function Piano({ channelId }: { channelId: string | null }) {
   );
   const down = new Set(held.split(',').map(Number));
 
+  // The new key goes down before the old one comes up, so a drag across the keys slides in Legato.
   const play = (note: number | null) => {
     const p = pressed.current;
     if (!p || p.note === note) return;
+    if (note !== null) noteOn(p.channelId, note);
     if (p.note !== null) noteOff(p.channelId, p.note);
     p.note = note;
-    if (note !== null) noteOn(p.channelId, note);
   };
   const noteAt = (e: PointerEvent) => {
     const key = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-note]');

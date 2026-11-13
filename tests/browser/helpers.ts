@@ -128,8 +128,10 @@ export function effect(type: string, params: Params = {}, on = true): ModuleInst
   return { id: `fx${ids++}`, type, params: { ...defaultParams(MODULES[type]), ...params }, on };
 }
 
+/** A modulator of the whole sound; spread in `per: 'note'` for one built in every note. */
 export function mod(type: string, target: ModTarget | null, amount: number, params: Params = {}, on = true): ModInst {
-  return { id: `mod${ids++}`, type, params: { ...defaultParams(MODULES[type]), ...params }, on, target, amount };
+  const all = { ...defaultParams(MODULES[type]), ...params };
+  return { id: `mod${ids++}`, type, params: all, on, per: 'sound', target, amount };
 }
 
 /** A one-pattern project; `steps` maps channel ids to their steps, which become notes. */

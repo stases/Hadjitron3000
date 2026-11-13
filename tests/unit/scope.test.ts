@@ -28,6 +28,16 @@ test('the fundamental follows the note and the source tuning, and is unknown for
   expect(fundamental(withSource('sample'), 60)).toBeNull();
 });
 
+test('with a second oscillator or a sub the fundamental is the lowest pitch that sounds', () => {
+  expect(fundamental(withSource('osc', { mix2: 0.5, pitch2: -7 }), 69)).toBeCloseTo(noteFreq(62), 9);
+  expect(fundamental(withSource('osc', { mix2: 0.5, pitch2: 12 }), 69)).toBeCloseTo(440, 9);
+  // At full mix only the second oscillator sounds.
+  expect(fundamental(withSource('osc', { mix2: 1, pitch2: 12 }), 69)).toBeCloseTo(880, 9);
+  expect(fundamental(withSource('osc', { mix2: 0, pitch2: -12 }), 69)).toBeCloseTo(440, 9);
+  expect(fundamental(withSource('osc', { sub: 0.3, subOct: -2, pitch: 1 }), 69)).toBeCloseTo(noteFreq(70 - 24), 9);
+  expect(fundamental(withSource('osc', { sub: 0, subOct: -2 }), 69)).toBeCloseTo(440, 9);
+});
+
 test('the timebase is a 1-2-5 step that shows between 2.5 and 6.25 cycles', () => {
   expect(timebase(440)).toBe(1e-3);
   expect(timebase(null)).toBe(2e-3);

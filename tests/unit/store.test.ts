@@ -304,7 +304,7 @@ test('mod targets require a modulatable float on source, output, or an effect', 
   const mod = app.addMod(a, 'lfo')!;
   for (const target of [
     { module: 'source', param: 'pitch' }, { module: 'out', param: 'pan' },
-    { module: filter, param: 'cutoff' },
+    { module: filter, param: 'cutoff' }, { module: 'filter', param: 'cutoff' }, { module: 'source', param: 'pw' },
   ]) {
     app.setModTarget(a, mod, target);
     expect(sound(a).mods[0].target).toEqual(target);
@@ -312,7 +312,8 @@ test('mod targets require a modulatable float on source, output, or an effect', 
   for (const target of [
     { module: 'source', param: 'fine' }, { module: 'source', param: 'wave' },
     { module: 'source', param: 'missing' }, { module: 'missing', param: 'pitch' },
-    { module: 'amp', param: 'attack' }, { module: mod, param: 'rate' }, null,
+    { module: 'amp', param: 'attack' }, { module: mod, param: 'rate' }, { module: 'filter', param: 'reso' },
+    { module: 'play', param: 'glide' }, null,
   ]) {
     app.setModTarget(a, mod, { module: 'source', param: 'pitch' });
     app.setModTarget(a, mod, target);
@@ -322,6 +323,24 @@ test('mod targets require a modulatable float on source, output, or an effect', 
   expect(sound(a).mods[0].amount).toBe(1);
   app.setModAmount(a, mod, -3);
   expect(sound(a).mods[0].amount).toBe(-1);
+});
+
+test('the voice filter, the play controls and where a modulator works are set like any other part', () => {
+  const a = app.addChannel(newSound());
+  app.setParam(a, 'filter', 'on', true);
+  app.setParam(a, 'filter', 'cutoff', 99999);
+  app.setParam(a, 'filter', 'slope', '24');
+  app.setParam(a, 'play', 'mode', 'legato');
+  app.setParam(a, 'play', 'glide', -1);
+  app.setParam(a, 'play', 'missing', 1);
+  expect(sound(a).filter).toMatchObject({ on: true, cutoff: 20000, slope: '24' });
+  expect(sound(a).play).toEqual({ mode: 'legato', glide: 0 });
+  const env = app.addMod(a, 'env')!;
+  expect(sound(a).mods[0].per).toBe('note');
+  app.setModPer(a, env, 'sound');
+  expect(sound(a).mods[0].per).toBe('sound');
+  app.undo();
+  expect(sound(a).mods[0].per).toBe('note');
 });
 
 test('notes are added in range, kept sorted, refused on the same start and pitch, and empty rows are removed', () => {

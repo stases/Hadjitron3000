@@ -20,11 +20,21 @@ export interface Sweep {
   length: number;
 }
 
-/** The pitch in hertz a sound plays `note` at, or null when its source has no pitch of its own. */
+/**
+ * The pitch in hertz a sound plays `note` at, or null when its source has no pitch of its own. With a second
+ * oscillator or a sub it is the lowest of the pitches that sound.
+ */
 export function fundamental(sound: Sound, note: number): number | null {
-  const { type, params } = sound.source;
+  const { type, params: p } = sound.source;
   if (type !== 'osc' && type !== 'fm') return null;
-  return noteFreq(note + (params.pitch as number) + (params.fine as number) / 100);
+  const base = note + (p.pitch as number) + (p.fine as number) / 100;
+  if (type === 'fm') return noteFreq(base);
+  const pitches = [
+    ...((p.mix2 as number) < 1 ? [base] : []),
+    ...((p.mix2 as number) > 0 ? [base + (p.pitch2 as number) + (p.fine2 as number) / 100] : []),
+    ...((p.sub as number) > 0 ? [base + 12 * (p.subOct as number)] : []),
+  ];
+  return noteFreq(Math.min(...pitches));
 }
 
 /** Seconds per division: the shortest that shows a few cycles of `freq`. */

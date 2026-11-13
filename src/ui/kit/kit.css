@@ -905,14 +905,14 @@ button.h-led:focus-visible {
 .h-rack-plate {
   flex: none;
   align-self: stretch;
-  width: 14px;
+  min-width: 14px;
   margin-right: -8px;
   padding: 2px 0 2px 1px;
   font: var(--font-small);
   letter-spacing: 1px;
   text-align: center;
   text-transform: uppercase;
-  white-space: nowrap;
+  white-space: pre;
   color: var(--face-hi);
   background: var(--ink);
   writing-mode: sideways-lr;

@@ -1,12 +1,14 @@
 import { expect, test } from 'vitest';
 import { emptyProject, newMod, newModule, newNote, newPattern, newSound, uid } from '../../src/core/defaults';
-import { AMP, EFFECTS, MODS, OUT, SOURCES } from '../../src/core/modules';
+import { AMP, EFFECTS, FILTER, MODS, OUT, PLAY, SOURCES } from '../../src/core/modules';
 import { defaultParams } from '../../src/core/params';
 
 test.each(SOURCES)('newSound creates the exact defaults for $type', (def) => {
   expect(newSound(def.type, 'Test')).toEqual({
     name: 'Test',
     source: { id: 'source', type: def.type, params: defaultParams(def) },
+    play: defaultParams(PLAY),
+    filter: defaultParams(FILTER),
     amp: defaultParams(AMP),
     chain: [],
     mods: [],

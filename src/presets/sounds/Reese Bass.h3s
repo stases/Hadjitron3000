@@ -1,0 +1,59 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Reese Bass",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sawtooth",
+        "pitch": -12,
+        "fine": -7,
+        "wave2": "sawtooth",
+        "fine2": 14,
+        "mix2": 0.5
+      }
+    },
+    "play": {
+      "mode": "mono",
+      "glide": 0.04
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 420,
+      "reso": 0.2,
+      "slope": "24",
+      "drive": 0.2
+    },
+    "amp": {
+      "attack": 0.006,
+      "decay": 0.5,
+      "sustain": 0.9,
+      "release": 0.18
+    },
+    "chain": [],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "lfo",
+        "params": {
+          "wave": "sine",
+          "rate": 0.25
+        },
+        "per": "sound",
+        "target": {
+          "module": "filter",
+          "param": "cutoff"
+        },
+        "amount": 0.12
+      }
+    ],
+    "out": {
+      "level": -6,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

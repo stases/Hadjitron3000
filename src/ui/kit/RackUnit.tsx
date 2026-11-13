@@ -32,6 +32,7 @@ interface RackUnitProps {
 
 /**
  * One module in the rack: an ink nameplate up the left edge, two screws at the right and the controls in a row.
+ * A name ending in a part in brackets, "Filter (whole sound)", has that part as a second line on the plate.
  * The lamp has its own column whether or not it is drawn, so the controls start at the same x in every unit.
  * The fold toggles sit at the top of the right edge and each open fold adds a labelled row under the controls.
  * The move buttons are drawn when either move handler is given (null draws it disabled); the remove button when
@@ -43,7 +44,7 @@ export function RackUnit({
   const moves = onMoveUp !== undefined || onMoveDown !== undefined;
   return (
     <div className="h-rack" role="group" aria-label={name} data-tour={tour}>
-      <div className="h-rack-plate">{name}</div>
+      <div className="h-rack-plate">{name.replace(/ \((.*)\)$/, '\n$1')}</div>
       <span className="h-rack-led">
         {led && <Led on={led.on} onClick={led.onToggle} hint={led.on ? 'Click to bypass.' : 'Click to switch on.'} />}
       </span>

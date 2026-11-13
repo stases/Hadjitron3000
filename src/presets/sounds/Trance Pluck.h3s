@@ -1,0 +1,76 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Trance Pluck",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sawtooth",
+        "voices": 5,
+        "spread": 18,
+        "width": 0.8
+      }
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 380,
+      "reso": 0.3,
+      "key": 0.5
+    },
+    "amp": {
+      "attack": 0.001,
+      "decay": 0.4,
+      "sustain": 0,
+      "release": 0.3
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "delay",
+        "params": {
+          "sync": "1/8d",
+          "feedback": 0.4,
+          "tone": 3500,
+          "mix": 0.25,
+          "pingpong": true
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "reverb",
+        "params": {
+          "size": 1.8,
+          "tone": 5000,
+          "mix": 0.15
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.2,
+          "sustain": 0,
+          "release": 0.2,
+          "vel": 0.4
+        },
+        "per": "note",
+        "target": {
+          "module": "filter",
+          "param": "cutoff"
+        },
+        "amount": 0.6
+      }
+    ],
+    "out": {
+      "level": -16,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

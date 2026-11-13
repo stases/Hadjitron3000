@@ -1,0 +1,77 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "PWM Lead",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "square"
+      }
+    },
+    "play": {
+      "mode": "mono",
+      "glide": 0.08
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 3200,
+      "reso": 0.2
+    },
+    "amp": {
+      "attack": 0.01,
+      "decay": 0.4,
+      "sustain": 0.8,
+      "release": 0.25
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "delay",
+        "params": {
+          "sync": "1/8",
+          "feedback": 0.3,
+          "tone": 3000,
+          "mix": 0.15
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "lfo",
+        "params": {
+          "wave": "triangle",
+          "rate": 0.7
+        },
+        "per": "sound",
+        "target": {
+          "module": "source",
+          "param": "pw"
+        },
+        "amount": 0.7
+      },
+      {
+        "id": "mod2",
+        "type": "lfo",
+        "params": {
+          "wave": "sine",
+          "rate": 5.5
+        },
+        "per": "sound",
+        "target": {
+          "module": "source",
+          "param": "pitch"
+        },
+        "amount": 0.003
+      }
+    ],
+    "out": {
+      "level": -13,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

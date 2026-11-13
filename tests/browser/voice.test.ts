@@ -5,36 +5,17 @@ import { expect, test } from 'vitest';
 import { Engine, renderSound } from '../../src/audio';
 import { defaultParams } from '../../src/core/params';
 import { FILTER } from '../../src/core/modules';
+import { STOCK_SHAPES, encodeShape } from '../../src/core/shape';
 import type { ModInst, Params, Sound } from '../../src/core/types';
 import { preset } from '../../src/presets';
 import {
-  adsr, amplitudeAt, db, freq, maxJump, mod, onset, peak, project, rms, slice, sound, SR, tone, wav,
+  adsr, amplitudeAt, db, freq, maxJump, mod, notes, onset, peak, project, rms, slice, sound, SR, tone, wav,
 } from './helpers';
 
 const flat = adsr(0.002, 0.1, 1, 0.02);
 const filter = (params: Params = {}): Params => ({ ...defaultParams(FILTER), on: true, reso: 0, ...params });
 const play = (mode: string, glide = 0): Params => ({ mode, glide });
 const perNote = (m: ModInst): ModInst => ({ ...m, per: 'note' });
-
-/** Render one channel playing `notes` ([note, time, dur, vel?]); `live` runs engine calls at given times. */
-async function notes(
-  s: Sound,
-  list: [number, number, number, number?][],
-  seconds: number,
-  live: [number, (e: Engine) => void][] = [],
-  samples = {},
-): Promise<Float32Array> {
-  const ctx = new OfflineAudioContext(2, Math.round(seconds * SR), SR);
-  const engine = new Engine(ctx);
-  engine.setProject(project([{ id: 'a', sound: s }], {}, { samples }));
-  await engine.ready();
-  for (const [note, time, dur, vel = 1] of list) engine.play('a', note, vel, time, dur);
-  for (const [at, run] of live) void ctx.suspend(at).then(() => {
-    run(engine);
-    return ctx.resume();
-  });
-  return (await ctx.startRendering()).getChannelData(0);
-}
 
 /** Level of a sine through the voice filter, against the same sine unfiltered. */
 async function through(params: Params, note: number, vel = 1): Promise<number> {
@@ -155,14 +136,14 @@ test('mono cuts the note before; legato glides into a held note without starting
 test('live keys play last-note priority: letting go of the newer key goes back to the older one', async () => {
   for (const mode of ['mono', 'legato']) {
     const s = { ...sound('osc', { wave: 'sine' }, { amp: adsr(0.002, 0.1, 1, 0.05) }), play: play(mode) };
-    const d = await notes(s, [], 1.6, [
+    const d = await notes(s, [], 1.6, { live: [
       [0, (e) => e.noteOn('a', 57, 1)],
       [0.3, (e) => e.noteOn('a', 64, 1)],
       [0.6, (e) => e.noteOff('a', 64)],
       [0.9, (e) => e.noteOn('a', 69, 1)],
       [1.0, (e) => e.noteOff('a', 57)],
       [1.2, (e) => e.noteOff('a', 69)],
-    ]);
+    ] });
     expect(Math.abs(freq(slice(d, 0.1, 0.3)) / 220 - 1), mode).toBeLessThan(0.01);
     expect(Math.abs(freq(slice(d, 0.35, 0.6)) / 329.63 - 1), mode).toBeLessThan(0.01);
     expect(Math.abs(freq(slice(d, 0.65, 0.9)) / 220 - 1), mode).toBeLessThan(0.01);
@@ -180,7 +161,7 @@ test('glide reaches the new pitch in the set time for the oscillator, the fm pai
   ];
   for (const [type, params, low] of sources) {
     const s = { ...sound(type, params, { amp: flat }), play: play('poly', 0.2) };
-    const d = await notes(s, [[low, 0, 0.4], [low + 12, 0.5, 0.6]], 1.2, [], samples);
+    const d = await notes(s, [[low, 0, 0.4], [low + 12, 0.5, 0.6]], 1.2, { samples });
     expect(Math.abs(freq(slice(d, 0.501, 0.515)) / 222 - 1), type).toBeLessThan(0.04);
     expect(Math.abs(freq(slice(d, 0.595, 0.605)) / 311 - 1), type).toBeLessThan(0.03);
     expect(Math.abs(freq(slice(d, 0.71, 1)) / 440 - 1), type).toBeLessThan(0.005);
@@ -296,4 +277,46 @@ test('24 voices with every part of the voice switched on render well faster than
   const ratio = (performance.now() - t0) / 1000 / seconds;
   expect(rms(slice(d, 1, 4))).toBeGreaterThan(0.01);
   expect(ratio).toBeLessThan(0.5);
+});
+
+test('a drawn sine plays like the sine oscillator', async () => {
+  const play = async (params: Params) => {
+    const s = sound('osc', params, { amp: flat, out: { level: -6 } });
+    return (await renderSound(s, {}, { note: 69, dur: 0.3 })).channels[0];
+  };
+  const sine = await play({ wave: 'sine' });
+  const drawn = await play({ wave: 'draw', shape: encodeShape(STOCK_SHAPES.sine) });
+  expect(peak(sine.map((v, i) => v - drawn[i]))).toBeLessThan(0.002 * peak(sine));
+});
+
+test('a drawn saw has the harmonics of a saw and nothing folds back from above Nyquist', async () => {
+  const shape = encodeShape(STOCK_SHAPES.sawtooth);
+  const saw = sound('osc', { wave: 'draw', shape }, { amp: flat, out: { level: -6 } });
+  const low = slice((await renderSound(saw, {}, { note: 45, dur: 0.5 })).channels[0], 0.1, 0.45);
+  for (let k = 2; k <= 12; k++) {
+    expect(Math.abs(db((k * amplitudeAt(low, 110 * k)) / amplitudeAt(low, 110))), `harmonic ${k}`).toBeLessThan(1);
+  }
+  // At 4186 Hz only five harmonics fit below Nyquist, which the drawn saw keeps as the stock one does; the next five
+  // would fold back to the frequencies below.
+  const high = async (s: Sound) => slice((await renderSound(s, {}, { note: 108, dur: 0.5 })).channels[0], 0.1, 0.45);
+  const drawn = await high(saw);
+  const stock = await high(sound('osc', { wave: 'sawtooth' }, { amp: flat, out: { level: -6 } }));
+  const f = 4186.01;
+  const rel = (d: Float32Array, k: number) => db(amplitudeAt(d, k * f) / amplitudeAt(d, f));
+  for (let k = 2; k <= 4; k++) expect(Math.abs(rel(drawn, k) - rel(stock, k)), `harmonic ${k}`).toBeLessThan(1);
+  for (let k = 6; k <= 10; k++) {
+    expect(amplitudeAt(drawn, SR - k * f) / amplitudeAt(drawn, f), `harmonic ${k}`).toBeLessThan(1e-3);
+  }
+});
+
+test('drawing again while a note is held changes it without a click', async () => {
+  const s = (shape: number[]) =>
+    sound('osc', { wave: 'draw', shape: encodeShape(shape) }, { amp: flat, out: { level: -6 } });
+  const redrawn = project([{ id: 'a', sound: s(STOCK_SHAPES.triangle) }]);
+  const d = await notes(s(STOCK_SHAPES.sine), [[57, 0, 1]], 1, { live: [[0.5, (e) => e.setProject(redrawn)]] });
+  const third = (t: number) => amplitudeAt(slice(d, t, t + 0.3), 660) / amplitudeAt(slice(d, t, t + 0.3), 220);
+  expect(third(0.1)).toBeLessThan(0.01);
+  // A triangle's third harmonic is a ninth of its first.
+  expect(third(0.6)).toBeCloseTo(1 / 9, 1);
+  expect(maxJump(slice(d, 0.45, 0.6))).toBeLessThan(1.2 * maxJump(slice(d, 0.1, 0.4)));
 });

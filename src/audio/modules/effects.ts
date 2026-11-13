@@ -121,7 +121,7 @@ function routing(p: Params): number[] {
   return [1 - pp / 2, pp / 2, 1 - pp, fb * (1 - pp), fb * (1 - pp), fb * pp, fb * pp];
 }
 
-const delayTime = (p: Params, bpm: number) =>
+export const delayTime = (p: Params, bpm: number) =>
   Math.min(p.sync === 'free' ? num(p, 'time') : (SYNC_BEATS[p.sync as string] * 60) / bpm, MAX_DELAY);
 
 /**

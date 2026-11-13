@@ -1,0 +1,77 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Glass Draw",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "draw",
+        "shape": "jJoqtcxCzN0Azty1x6xbxqyt0U2G3i4L3q16zHvqsIpEm-mEmVnepAqXrBqmpAmZjJfyc0aoZbZIZYZvZpYrWlTZPYLDHBD3B_BmCmEoHMJwL5NUOEOYOsPfRPUNYYdh",
+        "voices": 2,
+        "spread": 8,
+        "width": 0.6
+      }
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 1800,
+      "reso": 0.1,
+      "key": 0.5
+    },
+    "amp": {
+      "attack": 0.002,
+      "decay": 1.2,
+      "sustain": 0,
+      "release": 0.8
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "delay",
+        "params": {
+          "sync": "1/8d",
+          "feedback": 0.35,
+          "tone": 3500,
+          "mix": 0.2,
+          "pingpong": true
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "reverb",
+        "params": {
+          "size": 2.5,
+          "tone": 6000,
+          "mix": 0.25
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.3,
+          "sustain": 0,
+          "release": 0.3,
+          "vel": 0.5
+        },
+        "per": "note",
+        "target": {
+          "module": "filter",
+          "param": "cutoff"
+        },
+        "amount": 0.35
+      }
+    ],
+    "out": {
+      "level": -8,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

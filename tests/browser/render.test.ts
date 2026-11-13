@@ -1,9 +1,9 @@
 import { expect, test } from 'vitest';
-import { decodeSample, encodeMp3, renderProject, renderSound } from '../../src/audio';
+import { decodeSample, encodeMp3, renderProject, renderSound, ringOut } from '../../src/audio';
 import { TICKS_PER_STEP } from '../../src/core/defaults';
 import { tickTime } from '../../src/core/sequencer';
 import type { Project } from '../../src/core/types';
-import { adsr, db, onset, project, rms, slice, sound, SR } from './helpers';
+import { adsr, db, effect, onset, project, rms, slice, sound, SR } from './helpers';
 
 const maxDiff = (a: Float32Array, b: Float32Array) => a.reduce((m, v, i) => Math.max(m, Math.abs(v - b[i])), 0);
 
@@ -60,6 +60,24 @@ test('an export of a 7/8 block lasts its fourteen steps a bar, and its notes fal
   expect(two.channels[0].length).toBe(2 * loop);
   // The second pass starts with the block's first note, 28 steps in.
   expect(onset(two.channels[0], loop / SR - 0.01)).toBeCloseTo(loop / SR, 2);
+});
+
+test('the tail lets the longest release, reverb and echoes ring out, up to a minute', async () => {
+  const pad = (release: number, size: number) =>
+    sound('osc', { wave: 'sine' }, { amp: adsr(0.01, 0.1, 1, release), chain: [effect('reverb', { size })] });
+  expect(ringOut([sound('osc')], 120)).toBe(6);
+  expect(ringOut([pad(10, 20), sound('osc')], 120)).toBeCloseTo(32.5);
+  expect(ringOut([pad(30, 30)], 120)).toBe(60);
+  // A dotted eighth at 120 bpm, 0.375 s, with feedback 0.8 falls by 80 dB in 41 repeats.
+  const echoes = sound('osc', {}, { chain: [effect('delay', { sync: '1/8d', feedback: 0.8 })] });
+  expect(ringOut([echoes], 120)).toBeCloseTo(0.25 + 0.375 * (Math.log(1e-4) / Math.log(0.8)), 3);
+
+  // Release 8 s and an 8 s room ring on well past the 6 s tail renders used to have, until they fall below -80 dB.
+  const sr = 8000;
+  const p = project([{ id: 'a', sound: pad(8, 8) }], { a: { 0: { note: 69, vel: 1, len: 1 } } });
+  const seconds = (await renderProject(p, scopeOf(p), { sampleRate: sr })).channels[0].length / sr;
+  expect(seconds).toBeGreaterThan(2 + 6 + 3);
+  expect(seconds).toBeLessThan(2 + ringOut([pad(8, 8)], 120) + 0.06);
 });
 
 test('render progress advances during the render', async () => {

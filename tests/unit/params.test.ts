@@ -2,6 +2,7 @@ import { expect, test } from 'vitest';
 import { MODULES } from '../../src/core/modules';
 import type { FloatSpec, ParamSpec, Unit } from '../../src/core/modules';
 import { coerce, defaultParams, formatAmount, formatValue, fromNorm, snap, toNorm } from '../../src/core/params';
+import { DEFAULT_SHAPE, STOCK_SHAPES, encodeShape } from '../../src/core/shape';
 
 const floats = Object.values(MODULES).flatMap((def) => def.params
   .filter((p): p is FloatSpec => p.kind === 'float').map((spec) => ({ label: `${def.type}.${spec.id}`, spec })));
@@ -88,6 +89,18 @@ test('formatAmount uses modulation span, sign, precision and units', () => {
   expect(formatAmount(pitch, 0.75)).toBe('+36 st');
   expect(formatAmount(pitch, -0.5)).toBe('-24 st');
   expect(formatAmount(pitch, 0)).toBe('0 st');
+  expect(formatAmount(pitch, 0.003)).toBe('+0.1 st');
   expect(formatAmount({ ...float, mod: { depth: 6000, span: 5, unit: 'oct' } }, 0.5)).toBe('+2.5 oct');
   expect(formatAmount({ ...float, mod: { depth: 12, span: 12, unit: '' } }, -0.5)).toBe('-6.0');
+});
+
+test('a rate below 0.1 Hz shows the seconds of one cycle, and a drawn shape is checked', () => {
+  const rate = MODULES.lfo.params.find((p) => p.id === 'rate')!;
+  expect(formatValue(rate, 0.002)).toBe('500 s');
+  expect(formatValue(rate, 0.05)).toBe('20.0 s');
+  expect(formatValue(rate, 0.1)).toBe('0.10 Hz');
+  const shape = MODULES.osc.params.find((p) => p.id === 'shape')!;
+  expect(coerce(shape, 'not a drawing')).toBe(DEFAULT_SHAPE);
+  expect(coerce(shape, encodeShape(STOCK_SHAPES.square))).toBe(encodeShape(STOCK_SHAPES.square));
+  expect(formatValue(shape, DEFAULT_SHAPE)).toBe('Drawn');
 });

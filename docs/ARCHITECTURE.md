@@ -41,10 +41,12 @@ A sound is a source, a filter, an amp envelope, a chain of effects, a set of mod
      inside every note                         shared by all notes
 source -> filter -> amp envelope  ---+--> effect -> effect -> ... -> output (level, pan)
                                      |
-modulators (envelopes, LFOs) -> any parameter marked as a target
+modulators (envelopes, LFOs, drifts) -> any parameter marked as a target
 ```
 
 Source, filter and amp envelope are built for every note; the effects and the output exist once per sound. The filter (`sound.filter`, the `FILTER` definition) is part of every sound and off by default; its lamp is the parameter `on`, which the Factory draws as the unit's lamp rather than as a control. A modulator (`ModInst`) has `per`: with `'note'` it is built inside every note as well and may only move parameters that live there, the source's and the filter's (`perNote` in `src/core/modules.ts` decides); with `'sound'` it exists once and may move anything. Files without the field read as `'sound'`, which is how modulators worked before.
+
+A drawn wave is one cycle of 64 points in -1..1 (`src/core/shape.ts`), kept in the source's parameters `shape` and `shape2` as a string of two base-64 digits per point, so the parameter model (number, string or boolean) stays as it is; the choice Draw of `wave` or `wave2` plays it. Parameters that a file lacks read as their defaults, so sounds from before keep their meaning: LFOs run free without fade or retrigger, and each oscillator has a sine to draw from.
 
 Every module is described once in `src/core/modules.ts`: its parameters with ranges, units, knob tapers and defaults. The engine, the file format and the generic module panel in the Factory are all driven by that table. Every module and parameter also has a level from `src/core/levels.ts` (Basics when absent), which the Factory uses in beginner mode to fold Shaping and Deep controls into sections and to group the add lists; it is a property of the table only and never reaches the file format or the engine. The beginner/pro switch is a user preference in `src/app/prefs.ts`, kept in localStorage rather than in the project. Parameter values are stored in real units (hertz, seconds, semitones, decibels).
 
@@ -60,8 +62,8 @@ Sounds are saved as `.h3s`, blocks as `.h3b` and projects as `.h3k`. All three a
 voices: source -> filter (stage, drive, stage) -> voice gain (amp envelope x velocity) --+
                                                                                         +--> effect chain -> output
                                                                                         |      -> channel gain (mute/solo) -> master
-per-note modulators -> depth gains -> parameters of their own voice
-modulators of the whole sound -> depth gains -> audio parameters, those inside the voices included
+per-note modulators -> (fade) -> depth gains -> parameters of their own voice
+modulators of the whole sound -> (fade) -> depth gains -> audio parameters, those inside the voices included
 master -> master level -> soft clip -> destination and analyser
 ```
 
@@ -69,13 +71,19 @@ Each channel also has a tap of its own output ahead of mute and solo, made the f
 
 Each note is a voice with its own source, filter, amp envelope and per-note modulators; nothing is built for a part that is switched off (the filter off, the sub or the second oscillator at 0, no per-note modulators), so a sound made before the voice path plays bit for bit as it did. The effect chain and the modulators of the whole sound are shared by all voices of a channel; such a modulation envelope restarts on every note and follows the most recent one.
 
+What a modulator plays before its depth comes from `src/audio/modules/modulators.ts`. An envelope is a constant source whose level the channel schedules, as before. An LFO is an oscillator followed by a gain for its fade-in. With Sync its frequency is one cycle per note value at the tempo (`lfoRate`), and `ChannelGraph.update`, which gets every change of tempo, moves it, in the LFOs of the whole sound and of the sounding notes alike. The fade gain rises in a straight line from 0 to 1 from the start of a note; for an LFO of the whole sound every new note dips it to 0 in 5 ms and starts the rise again, and Retrigger replaces its oscillator with a new one started at the note, since an oscillator's phase cannot be reset. An LFO in every note is built with its note, so it always starts there.
+
+Drift is a looping buffer of 4096 random values in -1..1, 64 samples each at a nominal 3 kHz, read by an `AudioBufferSourceNode` at a speed that passes `rate` values a second. Smooth decides the buffer: every value holds for the first (1 - smooth) of its cell and glides along half a cosine to the next in the rest, so 0 is sample-and-hold and 1 glides all the time. All settings share the same values, so a change of Smooth crossfades over 30 ms to the other buffer at the same place, which the drift computes from where and how fast it has been reading. Each drift starts at its own place in the loop, from the engine's voice counter (`serial`) times the golden ratio, so notes wander differently, a render is the same every time, and at the fastest rate the loop takes nearly seven minutes to come round. The buffers are built once per setting and shared by every context.
+
+A drawn wave is a `PeriodicWave` of 512 harmonics. Joining the points with straight lines gives the points' own spectrum, repeated every 64 harmonics and multiplied by sinc² (`shapeHarmonics`); the oscillator leaves out whatever would lie above Nyquist at the note's pitch, as it does for the stock waves, and plays the drawing at the level it was drawn, without its constant. The last few waves are cached per context by their string. A drawn wave plays on two oscillators started together, one of them silent; a new drawing goes into the silent one, which then takes over with a 5 ms crossfade, so a held note follows the drawing without a click. The Factory sends a drawing to the store, and so to the engine, at most every 100 ms while the mouse moves, and once more when it is let go.
+
 The oscillator's pulse width is a sawtooth minus the same sawtooth delayed by the width's share of a period (`pulse` in `src/audio/modules/sources.ts`). Both are band-limited, the delay moves smoothly when the width is modulated, and at 50 % the result is the square wave harmonic for harmonic. A square at 50 % that no modulator moves is still the plain square oscillator.
 
 Glide is a straight line in cents on the parameters that follow the voice's pitch (`Follower`): the oscillators' detune, the filter's detune as far as key tracking says, and the pulse delay, whose period changes by the matching exponential ramp. In Mono a new note starts a new voice and releases the old one within 5 ms; in Legato, and for a note played with `slide` (`Engine.play`), the sounding voice is moved to the new note instead, and its envelopes go on as if the key had stayed down (`envelopeSegments` with a starting time). The channel keeps the live keys that are down, so in Mono and Legato letting go of the newer key goes back to the older one. The filter's drive is an oversampled wave shaper that delays the sound by 128 samples; the amp envelope of such a voice starts as much later, so the attack is not lost.
 
 `engine.setProject(project)` is called on every change of the document. The store is immutable, so the engine compares object identities, applies parameter changes smoothly, and rebuilds only the channels whose structure changed.
 
-The engine takes any `BaseAudioContext`. The same code plays live through an `AudioContext` and renders an export through an `OfflineAudioContext`.
+The engine takes any `BaseAudioContext`. The same code plays live through an `AudioContext` and renders an export through an `OfflineAudioContext`. An export that rings out renders on after its last note for `ringOut` in `src/audio/render.ts`: for every sound 1.25 times its release (when the release reaches silence), then each reverb's size and each delay's time multiplied by the repeats its feedback takes to fall by 80 dB, the longest of the sounds, at least 6 s and at most 60 s. The silence at the end is trimmed off afterwards, so a long estimate costs only rendering time.
 
 ## Time
 

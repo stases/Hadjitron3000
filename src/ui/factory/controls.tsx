@@ -1,20 +1,22 @@
 import { usePrefs } from '../../app/prefs';
 import { levelOf } from '../../core/levels';
-import { MODULES, SOURCES } from '../../core/modules';
+import { MODULES, SOURCES, paramSpec } from '../../core/modules';
 import type { ParamSpec } from '../../core/modules';
 import type { Params } from '../../core/types';
 import { setParam, setSourceType } from '../../state/store';
 import { ParamControl, Select } from '../kit';
 import { PARAM_HINTS } from './hints';
-import { sourceItems } from './levels';
+import { sourceItems, useShown } from './levels';
 import type { Cell } from './levels';
+import { ShapeEditor } from './ShapeEditor';
 
 /** In the module table both delay controls are called "time"; side by side they read SYNC and TIME. */
 const LABELS: Readonly<Record<string, Readonly<Record<string, string>>>> = { delay: { sync: 'Sync', time: 'Time' } };
 
-/** Controls that only work in some settings: the Delay's Time with Sync at Free, Pulse with a square wave. */
+/** Controls that only work in some settings: Time and Rate with Sync at Free, Pulse with a square wave. */
 const IDLE: Readonly<Record<string, Readonly<Record<string, (p: Params) => boolean>>>> = {
   delay: { time: (p) => p.sync !== 'free' },
+  lfo: { rate: (p) => p.sync !== 'free' },
   osc: { pw: (p) => p.wave !== 'square' && !(p.wave2 === 'square' && (p.mix2 as number) > 0) },
 };
 
@@ -23,6 +25,9 @@ const GROUPS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   osc: { wave2: 'Osc 2', pitch2: 'Osc 2', fine2: 'Osc 2', mix2: 'Osc 2', sub: 'Sub', subOct: 'Sub' },
   play: { mode: 'Play', glide: 'Play' },
 };
+
+/** The wave parameter of each drawing: a drawing is shown next to its wave while that is set to Draw. */
+const DRAWN: Readonly<Record<string, string>> = { shape: 'wave', shape2: 'wave2' };
 
 interface ControlProps {
   channelId: string;
@@ -33,12 +38,20 @@ interface ControlProps {
   disabled?: boolean;
 }
 
-/** The control of one parameter, wired to the store. */
+/**
+ * The control of one parameter, wired to the store. A choice offers the options whose level is on screen, and the
+ * one it is set to.
+ */
 export function Control({ channelId, moduleId, type, spec, params, disabled }: ControlProps) {
+  const shown = useShown();
   const label = LABELS[type]?.[spec.id];
+  const offered: ParamSpec =
+    spec.kind === 'choice'
+      ? { ...spec, options: spec.options.filter(([v, , level]) => v === params[spec.id] || shown(type, level ?? 1)) }
+      : spec;
   return (
     <ParamControl
-      spec={label ? { ...spec, label } : spec}
+      spec={label ? { ...offered, label } : offered}
       value={params[spec.id]}
       onChange={(v) => setParam(channelId, moduleId, spec.id, v)}
       hint={PARAM_HINTS[type][spec.id]}
@@ -56,9 +69,18 @@ export function Param(props: ControlProps) {
   );
 }
 
-/** A cell for a parameter of a module, as the module table describes it. */
+/** A cell for a parameter of a module, as the module table describes it. A drawing goes with its wave. */
 export function paramCell(props: ControlProps): Cell {
-  const { moduleId, type, spec, params } = props;
+  const { channelId, moduleId, type, spec, params } = props;
+  if (spec.kind === 'shape') {
+    const wave = paramSpec(MODULES[type], DRAWN[spec.id])!;
+    return {
+      node: <ShapeEditor key={spec.id} channelId={channelId} id={spec.id} value={params[spec.id] as string} />,
+      level: levelOf(wave),
+      changed: params[spec.id] !== spec.def,
+      group: GROUPS[type]?.[wave.id],
+    };
+  }
   return {
     node: <Param key={`${moduleId}.${spec.id}`} {...props} />,
     level: levelOf(spec),
@@ -69,7 +91,7 @@ export function paramCell(props: ControlProps): Cell {
 
 /**
  * A cell for every parameter of a module that has a control, in the order of the module table; `disabled` greys
- * out some of them. The voice filter's `on` is its lamp, not a control.
+ * out some of them. The voice filter's `on` is its lamp, not a control, and a drawing shows while its wave is Draw.
  */
 export function paramCells(
   channelId: string,
@@ -80,6 +102,7 @@ export function paramCells(
 ): Cell[] {
   return MODULES[type].params
     .filter((spec) => spec.kind !== 'sample' && !(spec.kind === 'bool' && spec.id === 'on'))
+    .filter((spec) => spec.kind !== 'shape' || params[DRAWN[spec.id]] === 'draw')
     .map((spec) => paramCell({ channelId, moduleId, type, spec, params, disabled: disabled?.(spec.id) }));
 }
 

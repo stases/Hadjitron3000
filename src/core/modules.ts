@@ -2,7 +2,8 @@
 // The audio engine, the file format and the interface are all driven by this table,
 // so a new module starts here (and gets its audio in src/audio/modules).
 
-import type { Levelled } from './levels';
+import type { Level, Levelled } from './levels';
+import { DEFAULT_SHAPE } from './shape';
 import type { ModInst, ModTarget, Sound } from './types';
 
 export type Taper = 'lin' | 'log' | 'cube';
@@ -32,7 +33,8 @@ export interface ChoiceSpec extends Levelled {
   kind: 'choice';
   id: string;
   label: string;
-  options: readonly (readonly [value: string, label: string])[];
+  /** An option with a level is offered in beginner mode only while that level's controls are shown. */
+  options: readonly (readonly [value: string, label: string, level?: Level])[];
   def: string;
 }
 
@@ -50,7 +52,15 @@ export interface SampleSpec extends Levelled {
   label: string;
 }
 
-export type ParamSpec = FloatSpec | ChoiceSpec | BoolSpec | SampleSpec;
+/** One cycle of a drawn wave, written by core/shape.ts. */
+export interface ShapeSpec extends Levelled {
+  kind: 'shape';
+  id: string;
+  label: string;
+  def: string;
+}
+
+export type ParamSpec = FloatSpec | ChoiceSpec | BoolSpec | SampleSpec | ShapeSpec;
 export type ModuleKind = 'source' | 'play' | 'filter' | 'amp' | 'effect' | 'mod' | 'out';
 
 /** A module and each of its parameters have a level (src/core/levels.ts), Basics when not given. */
@@ -78,6 +88,7 @@ const c = (id: string, label: string, options: ChoiceSpec['options'], def = opti
   def,
 });
 const b = (id: string, label: string, def: boolean): BoolSpec => ({ kind: 'bool', id, label, def });
+const shape = (id: string, label: string): ShapeSpec => ({ kind: 'shape', id, label, def: DEFAULT_SHAPE, level: 3 });
 const shaping = <T extends ParamSpec>(spec: T): T => ({ ...spec, level: 2 });
 const deep = <T extends ParamSpec>(spec: T): T => ({ ...spec, level: 3 });
 
@@ -93,10 +104,10 @@ const filterModes = c('mode', 'Mode', [
 ]);
 const fine = shaping(f('fine', 'Fine', -100, 100, 0, { unit: 'ct', step: 1 }));
 const adsr = (attack: number, decay: number, sustain: number, release: number): FloatSpec[] => [
-  f('attack', 'Attack', 0, 5, attack, { unit: 's', taper: 'cube' }),
-  f('decay', 'Decay', 0, 5, decay, { unit: 's', taper: 'cube' }),
+  f('attack', 'Attack', 0, 30, attack, { unit: 's', taper: 'cube' }),
+  f('decay', 'Decay', 0, 30, decay, { unit: 's', taper: 'cube' }),
   f('sustain', 'Sustain', 0, 1, sustain, { unit: '%' }),
-  f('release', 'Release', 0, 10, release, { unit: 's', taper: 'cube' }),
+  f('release', 'Release', 0, 30, release, { unit: 's', taper: 'cube' }),
 ];
 // Values are Web Audio OscillatorType names.
 const WAVES = [
@@ -105,6 +116,8 @@ const WAVES = [
   ['sawtooth', 'Saw'],
   ['square', 'Square'],
 ] as const;
+// The oscillator also plays a cycle drawn by hand, its `shape` (or `shape2`).
+const OSC_WAVES = [...WAVES, ['draw', 'Draw', 3]] as const;
 
 export const SOURCES: readonly ModuleDef[] = [
   {
@@ -112,7 +125,8 @@ export const SOURCES: readonly ModuleDef[] = [
     kind: 'source',
     label: 'Oscillator',
     params: [
-      c('wave', 'Wave', WAVES, 'sawtooth'),
+      c('wave', 'Wave', OSC_WAVES, 'sawtooth'),
+      shape('shape', 'Shape'),
       pitch,
       fine,
       shaping(f('voices', 'Voices', 1, 7, 1, { step: 1 })),
@@ -121,7 +135,8 @@ export const SOURCES: readonly ModuleDef[] = [
       shaping(f('noise', 'Noise', 0, 1, 0, { unit: '%' })),
       // The pulse width of every square oscillator of the voice; the duty cycle moves by up to 50 % at amount 1.
       shaping(f('pw', 'Pulse', 0.05, 0.95, 0.5, { unit: '%', mod: { depth: 0.5, span: 50, unit: '%' } })),
-      shaping(c('wave2', 'Wave 2', WAVES, 'sawtooth')),
+      shaping(c('wave2', 'Wave 2', OSC_WAVES, 'sawtooth')),
+      shape('shape2', 'Shape 2'),
       shaping(f('pitch2', 'Pitch 2', -24, 24, 0, { unit: 'st', step: 1 })),
       shaping(f('fine2', 'Fine 2', -100, 100, 0, { unit: 'ct', step: 1 })),
       shaping(f('mix2', 'Mix 2', 0, 1, 0, { unit: '%' })),
@@ -275,7 +290,7 @@ export const EFFECTS: readonly ModuleDef[] = [
     kind: 'effect',
     label: 'Reverb',
     params: [
-      f('size', 'Size', 0.2, 10, 2, { taper: 'log', unit: 's' }),
+      f('size', 'Size', 0.2, 30, 2, { taper: 'log', unit: 's' }),
       shaping(f('tone', 'Tone', 500, 20000, 6000, { taper: 'log', unit: 'Hz' })),
       f('mix', 'Mix', 0, 1, 0.25, { unit: '%', mod: percent }),
     ],
@@ -291,7 +306,46 @@ export const MODS: readonly ModuleDef[] = [
     type: 'lfo',
     kind: 'mod',
     label: 'LFO',
-    params: [c('wave', 'Wave', WAVES, 'sine'), f('rate', 'Rate', 0.02, 40, 2, { taper: 'log', unit: 'Hz' }), modVel],
+    params: [
+      c('wave', 'Wave', WAVES, 'sine'),
+      f('rate', 'Rate', 0.002, 40, 2, { taper: 'log', unit: 'Hz' }),
+      shaping(
+        c('sync', 'Sync', [
+          ['free', 'Free'],
+          ['8bar', '8 bars'],
+          ['4bar', '4 bars'],
+          ['2bar', '2 bars'],
+          ['1bar', '1 bar'],
+          ['1/2', '1/2'],
+          ['1/4d', '1/4 dotted'],
+          ['1/4', '1/4'],
+          ['1/4t', '1/4 triplet'],
+          ['1/8d', '1/8 dotted'],
+          ['1/8', '1/8'],
+          ['1/8t', '1/8 triplet'],
+          ['1/16', '1/16'],
+          ['1/16t', '1/16 triplet'],
+          ['1/32', '1/32'],
+        ]),
+      ),
+      // The depth rises from nothing over this time after a note starts.
+      deep(f('fade', 'Fade', 0, 30, 0, { unit: 's', taper: 'cube' })),
+      // An LFO of the whole sound starts its wave again with every note; one in every note always does.
+      deep(b('retrigger', 'Retrigger', false)),
+      modVel,
+    ],
+  },
+  {
+    // A random value that wanders: a new one `rate` times a second, jumped to (smooth 0) or glided to (smooth 1).
+    type: 'drift',
+    kind: 'mod',
+    label: 'Drift',
+    level: 2,
+    params: [
+      f('rate', 'Rate', 0.005, 10, 0.2, { taper: 'log', unit: 'Hz' }),
+      f('smooth', 'Smooth', 0, 1, 1, { unit: '%', step: 0.1 }),
+      modVel,
+    ],
   },
 ];
 
@@ -310,15 +364,22 @@ export const MODULES: Readonly<Record<string, ModuleDef>> = Object.fromEntries(
   [...SOURCES, PLAY, FILTER, AMP, ...EFFECTS, ...MODS, OUT].map((d) => [d.type, d]),
 );
 
-/** Length of a tempo-synced delay time in beats (quarter notes). */
+/** Length of a tempo-synced delay time or LFO cycle in beats (quarter notes). */
 export const SYNC_BEATS: Readonly<Record<string, number>> = {
+  '8bar': 32,
+  '4bar': 16,
+  '2bar': 8,
+  '1bar': 4,
   '1/2': 2,
+  '1/4d': 1.5,
   '1/4': 1,
+  '1/4t': 2 / 3,
   '1/8d': 0.75,
   '1/8': 0.5,
   '1/8t': 1 / 3,
   '1/16d': 0.375,
   '1/16': 0.25,
+  '1/16t': 1 / 6,
   '1/32': 0.125,
 };
 

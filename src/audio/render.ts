@@ -6,11 +6,16 @@ import { eventsBetween, loopSteps, stepSeconds } from '../core/sequencer';
 import type { NoteEvent, Pcm, PlayScope, Project, SampleData, Sound } from '../core/types';
 import { Engine } from './engine';
 import { playEvent } from './transport';
+import { delayTime } from './modules/effects';
 
 // Rendering pauses this often (in audio seconds) to schedule the next notes and report progress.
 const CHUNK = 0.5;
 const SILENCE = 1e-4; // -80 dB
 const TRIM_PAD = 0.05;
+// The tail after the last note is long enough for every sound to ring out, within these bounds; the silence at its
+// end is trimmed off afterwards.
+const MIN_TAIL = 6;
+const MAX_TAIL = 60;
 
 const yieldToPage = () => new Promise((r) => setTimeout(r, 0));
 
@@ -48,6 +53,28 @@ async function render(
   return buf;
 }
 
+/**
+ * How long a sound can go on after its last note ends: its release, then each effect in turn, a reverb for its size
+ * and a delay until its echoes have fallen by 80 dB.
+ */
+function ringTime(sound: Sound, bpm: number): number {
+  let t = 1.25 * (sound.amp.release as number);
+  for (const m of sound.chain) {
+    if (m.on === false) continue;
+    if (m.type === 'reverb') t += m.params.size as number;
+    if (m.type === 'delay') {
+      const feedback = m.params.feedback as number;
+      t += delayTime(m.params, bpm) * (feedback > 0 ? Math.log(SILENCE) / Math.log(feedback) : 1);
+    }
+  }
+  return t;
+}
+
+/** The tail a render of these sounds needs to let them ring out. */
+export function ringOut(sounds: Sound[], bpm: number): number {
+  return Math.min(MAX_TAIL, Math.max(MIN_TAIL, ...sounds.map((s) => ringTime(s, bpm))));
+}
+
 /** The channels cut after the last sample above -80 dB (plus a short pad), but never shorter than `min` frames. */
 function trimmed(buf: AudioBuffer, min: number): Pcm {
   const data = [buf.getChannelData(0), buf.getChannelData(1)];
@@ -63,7 +90,8 @@ export async function renderProject(
   scope: PlayScope,
   opts: { loops?: number; tail?: number; sampleRate?: number; onProgress?: (fraction: number) => void } = {},
 ): Promise<Pcm> {
-  const { loops = 1, tail = 6, sampleRate = 44100, onProgress } = opts;
+  const { loops = 1, sampleRate = 44100, onProgress } = opts;
+  const tail = opts.tail ?? ringOut(project.channels.map((c) => c.sound), project.bpm);
   const steps = loopSteps(project, scope) * loops;
   const loopSeconds = steps * stepSeconds(project.bpm);
   const events = eventsBetween(project, scope, 0, steps * TICKS_PER_STEP);
@@ -76,7 +104,7 @@ export async function renderSound(
   samples: Record<string, SampleData>,
   opts: { note?: number; vel?: number; dur?: number; tail?: number; sampleRate?: number } = {},
 ): Promise<Pcm> {
-  const { note = 60, vel = 0.8, dur = 1, tail = 6, sampleRate = 44100 } = opts;
+  const { note = 60, vel = 0.8, dur = 1, tail = ringOut([sound], 120), sampleRate = 44100 } = opts;
   const project: Project = {
     name: sound.name,
     bpm: 120,

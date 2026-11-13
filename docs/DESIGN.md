@@ -48,6 +48,8 @@ Anything that shows a signal or a number that matters is an amber display: `--cr
 
 The Factory's scope is a bench scope: a dotted `--amber-dim` graticule, a sweep that starts on a rising zero crossing so the wave stands still, and a range and timebase that step in 1-2-5 like a real one. When the sound falls quiet its last trace holds in `--amber-mid`, steps down to `--amber-dim` and then clears to a resting line; it never fades smoothly.
 
+A display you draw on, the drawn wave, has no handles: the pointer is the pen, and the line, a one-pixel `--amber` trace over a dotted `--amber-dim` centre line and quarter marks, follows it at once. The buttons that act on the drawing stand beside the display, not on it.
+
 ## Controls
 
 Buttons are 23px high with 10px of side padding; small square buttons are 19 to 25px. The menu bar, the title bar and the status bar are 20px high. The cursor is always the plain arrow; buttons do not get a hand.

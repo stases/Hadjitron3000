@@ -13,7 +13,6 @@ const FORMATS = [
   { value: 'wav', label: 'WAV, 16-bit' },
   ...[128, 192, 256, 320].map((kbps) => ({ value: String(kbps), label: `MP3, ${kbps} kbit/s` })),
 ];
-const RING_OUT_SECONDS = 6;
 const SELECT_WIDTH = 220; // "Block: " and a name of 24 characters
 
 /** Render the song or the current block and save it as WAV or MP3. */
@@ -50,7 +49,8 @@ export function ExportDialog() {
       setProgress({ label: 'Rendering…', value: 0 });
       const pcm = await renderProject(project, scope, {
         loops: what === 'pattern' ? repeats : 1,
-        tail: ringOut ? RING_OUT_SECONDS : 0,
+        // Left out, the tail is as long as the sounds of the project need to ring out.
+        tail: ringOut ? undefined : 0,
         onProgress: (value) => {
           if (!cancelled.current) setProgress({ label: 'Rendering…', value: mp3 ? value / 2 : value });
         },

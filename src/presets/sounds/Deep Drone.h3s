@@ -1,0 +1,78 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Deep Drone",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sawtooth",
+        "pitch": -12,
+        "wave2": "sawtooth",
+        "pitch2": 7,
+        "fine2": 6,
+        "mix2": 0.4,
+        "sub": 0.6
+      }
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 500,
+      "reso": 0.25
+    },
+    "amp": {
+      "attack": 4,
+      "decay": 2,
+      "sustain": 1,
+      "release": 12
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "reverb",
+        "params": {
+          "size": 20,
+          "tone": 3000,
+          "mix": 0.45
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "drift",
+        "params": {
+          "rate": 0.03,
+          "smooth": 1
+        },
+        "per": "sound",
+        "target": {
+          "module": "out",
+          "param": "pan"
+        },
+        "amount": 0.6
+      },
+      {
+        "id": "mod2",
+        "type": "drift",
+        "params": {
+          "rate": 0.02,
+          "smooth": 1
+        },
+        "per": "sound",
+        "target": {
+          "module": "filter",
+          "param": "cutoff"
+        },
+        "amount": 0.25
+      }
+    ],
+    "out": {
+      "level": -19,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

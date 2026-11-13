@@ -1,6 +1,7 @@
 // Parameter values: knob travel, snapping, defaults and how values are written out.
 
 import type { FloatSpec, ModuleDef, ParamSpec } from './modules';
+import { decodeShape } from './shape';
 import type { Params, ParamValue } from './types';
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -44,6 +45,8 @@ export function coerce(spec: ParamSpec, v: unknown): ParamValue {
       return typeof v === 'boolean' ? v : spec.def;
     case 'sample':
       return typeof v === 'string' ? v : '';
+    case 'shape':
+      return typeof v === 'string' && decodeShape(v) ? v : spec.def;
   }
 }
 
@@ -52,6 +55,8 @@ const signed = (v: number, digits = 0) => (v > 0 ? '+' : '') + v.toFixed(digits)
 function formatFloat(spec: FloatSpec, v: number): string {
   switch (spec.unit) {
     case 'Hz':
+      // A slow rate reads better as the length of one cycle.
+      if (v < 0.1) return `${(1 / v).toFixed(1 / v < 100 ? 1 : 0)} s`;
       if (v >= 10000) return `${(v / 1000).toFixed(1)} kHz`;
       if (v >= 1000) return `${(v / 1000).toFixed(2)} kHz`;
       return `${v.toFixed(v >= 100 ? 0 : v >= 10 ? 1 : 2)} Hz`;
@@ -90,6 +95,8 @@ export function formatValue(spec: ParamSpec, v: ParamValue): string {
       return v ? 'On' : 'Off';
     case 'sample':
       return v ? String(v) : 'None';
+    case 'shape':
+      return 'Drawn';
   }
 }
 
@@ -97,6 +104,7 @@ export function formatValue(spec: ParamSpec, v: ParamValue): string {
 export function formatAmount(target: FloatSpec, amount: number): string {
   if (!target.mod) return '';
   const v = amount * target.mod.span;
-  const digits = Math.abs(target.mod.span) >= 20 ? 0 : 1;
+  // A wide span reads in whole units, except below one, where vibrato and drift of the pitch live.
+  const digits = Math.abs(target.mod.span) >= 20 && (v === 0 || Math.abs(v) >= 1) ? 0 : 1;
   return `${signed(v, digits)}${target.mod.unit ? ' ' + target.mod.unit : ''}`;
 }

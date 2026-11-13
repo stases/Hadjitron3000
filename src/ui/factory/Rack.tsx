@@ -13,7 +13,7 @@ import {
 } from '../../state/store';
 import { Button, Icon, Knob, ParamControl, RackUnit, openMenu } from '../kit';
 import type { MenuItem } from '../kit';
-import { SourceSelect, paramCells } from './controls';
+import { SourceSelect, paramCell, paramCells } from './controls';
 import { EnvelopeDisplay } from './EnvelopeDisplay';
 import { MOD_HINTS } from './hints';
 import { addMenu, useLevels, useShown } from './levels';
@@ -92,8 +92,14 @@ function ModUnit({ channelId, sound, mod, name }: { channelId: string; sound: So
   // A modulator can only work on each note when its target lives in the note.
   const fixed = !!mod.target && !inVoice(mod.target.module);
   const per = fixed ? 'sound' : mod.per;
-  // Velocity scales a per-note modulator only.
-  const cells = paramCells(channelId, mod.id, mod.type, mod.params, (id) => id === 'vel' && per === 'sound');
+  // Velocity scales a per-note modulator only. An LFO in every note starts with it, so Retrigger shows on and fixed.
+  const cells = MODULES[mod.type].params.map((spec) => {
+    const pinned = spec.id === 'retrigger' && per === 'note';
+    const params = pinned ? { ...mod.params, retrigger: true } : mod.params;
+    const disabled = pinned || (spec.id === 'vel' && per === 'sound');
+    const cell = paramCell({ channelId, moduleId: mod.id, type: mod.type, spec, params, disabled });
+    return pinned ? { ...cell, changed: false } : cell;
+  });
   const perCell: Cell = {
     node: (
       <div key="per" className="h-factory-cell is-wide is-switch">
@@ -224,7 +230,7 @@ export function Rack({ channelId, sound }: { channelId: string; sound: Sound }) 
       ))}
       <AddButton
         label="Modulator"
-        hint="Adds an envelope or an LFO that can move any control marked as a target."
+        hint="Adds an envelope, an LFO or a drift that can move any control marked as a target."
         items={() => addMenu(beginner, MODS, (type) => addMod(channelId, type))}
       />
       <LevelUnit

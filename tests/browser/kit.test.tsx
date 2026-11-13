@@ -5,7 +5,7 @@ import { createRoot } from 'react-dom/client';
 import type { Root } from 'react-dom/client';
 import { afterEach, expect, test, vi } from 'vitest';
 import { userEvent } from 'vitest/browser';
-import { EFFECTS, SOURCES } from '../../src/core/modules';
+import { EFFECTS, MODS, SOURCES } from '../../src/core/modules';
 import type { FloatSpec, ParamSpec } from '../../src/core/modules';
 import { fromNorm, toNorm } from '../../src/core/params';
 import type { ParamValue } from '../../src/core/types';
@@ -438,7 +438,7 @@ function TestParam({ spec, onValue }: { spec: ParamSpec; onValue(v: ParamValue):
 }
 
 const param = (type: string, id: string) =>
-  [...SOURCES, ...EFFECTS].find((d) => d.type === type)!.params.find((p) => p.id === id)!;
+  [...SOURCES, ...EFFECTS, ...MODS].find((d) => d.type === type)!.params.find((p) => p.id === id)!;
 
 test('param control: a logarithmic float travels along its taper', async () => {
   const cutoff = param('filter', 'cutoff') as FloatSpec;
@@ -467,7 +467,7 @@ test('param control: a coarse linear float clicks into whole steps', async () =>
   expect(onValue.mock.calls.map((c) => c[0])).toEqual([2]);
 });
 
-test('param control: a choice is a select and the waves are four toggles', async () => {
+test('param control: a choice is a select and a choice of waves is a row of toggles', async () => {
   const onMode = vi.fn();
   const host = render(<TestParam spec={param('filter', 'mode')} onValue={onMode} />);
   await userEvent.click(byRole(host, 'combobox'));
@@ -477,11 +477,14 @@ test('param control: a choice is a select and the waves are four toggles', async
   const onWave = vi.fn();
   const waves = render(<TestParam spec={param('osc', 'wave')} onValue={onWave} />);
   const buttons = waves.querySelectorAll('button');
-  expect(buttons).toHaveLength(4);
+  expect(buttons).toHaveLength(5);
   expect(buttons[2].getAttribute('aria-pressed')).toBe('true');
   await userEvent.click(buttons[1]);
   expect(onWave).toHaveBeenLastCalledWith('triangle');
   expect(buttons[1].getAttribute('aria-pressed')).toBe('true');
+  await userEvent.click(buttons[4]);
+  expect(onWave).toHaveBeenLastCalledWith('draw');
+  expect(render(<TestParam spec={param('lfo', 'wave')} onValue={onWave} />).querySelectorAll('button')).toHaveLength(4);
 });
 
 test('param control: a bool is a checkbox and a sample renders nothing', async () => {

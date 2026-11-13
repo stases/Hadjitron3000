@@ -172,6 +172,23 @@
   padding: 0;
 }
 
+/* A drawn wave: the display to draw on, and beside it two rows of stock shapes over Smooth. */
+.h-factory-shape {
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.h-factory-shape-tools {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+}
+
+.h-factory-shape-tools .h-button:last-child {
+  grid-column: span 2;
+}
+
 .h-factory-add {
   padding: 1px 0 1px 39px;
 }

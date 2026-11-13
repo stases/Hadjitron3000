@@ -11,9 +11,10 @@ import type { ModuleDef } from '../../src/core/modules';
 import { encodeWav } from '../../src/core/wav';
 import { preset } from '../../src/presets';
 import { demoProject } from '../../src/presets/projects';
+import { STOCK_SHAPES, decodeShape, encodeShape, smoothShape } from '../../src/core/shape';
 import {
-  addEffect, addMod, moveEffect, openProject, removeModule, replaceSound, selectChannel, setModTarget, setModuleOn,
-  setParam, setSample, setSourceType, useApp,
+  addEffect, addMod, moveEffect, openProject, removeModule, replaceSound, selectChannel, setModPer, setModTarget,
+  setModuleOn, setParam, setSample, setSourceType, useApp,
 } from '../../src/state/store';
 import { FactoryView } from '../../src/ui/factory';
 import { PARAM_HINTS } from '../../src/ui/factory/hints';
@@ -307,12 +308,12 @@ test('a modulator works on each note or the whole sound, and on the whole sound 
   pro();
   await expect.poll(() => units()).toContain('LFO');
   expect(unit('LFO').querySelector('[aria-label="Works on"] [aria-pressed="true"]')!.textContent).toBe('Whole sound');
-  expect(knobs('LFO')).toEqual(['Amount', 'Rate', 'Velocity']);
+  expect(knobs('LFO')).toEqual(['Amount', 'Rate', 'Fade', 'Velocity']);
 });
 
 test('the add lists and the source list are grouped by level in beginner mode and flat in pro mode', async () => {
   expect(await addList('effect')).toEqual(['BASICS', 'Delay', 'Reverb', 'SHAPING', 'Filter (whole sound)', 'Drive']);
-  expect(await addList('modulator')).toEqual(['BASICS', 'Envelope', 'LFO']);
+  expect(await addList('modulator')).toEqual(['BASICS', 'Envelope', 'LFO', 'SHAPING', 'Drift']);
   await userEvent.click(unit('Source').querySelector('[role="combobox"]')!);
   expect([...document.querySelector('.h-select-list')!.children].map((el) => el.textContent)).toEqual([
     'Basics', 'Oscillator', 'Noise', 'Sampler', 'Shaping', 'FM Pair',
@@ -321,7 +322,7 @@ test('the add lists and the source list are grouped by level in beginner mode an
 
   pro();
   expect(await addList('effect')).toEqual(['Filter (whole sound)', 'Drive', 'Delay', 'Reverb']);
-  expect(await addList('modulator')).toEqual(['Envelope', 'LFO']);
+  expect(await addList('modulator')).toEqual(['Envelope', 'LFO', 'Drift']);
   await userEvent.click(unit('Source').querySelector('[role="combobox"]')!);
   expect(optionTexts()).toEqual(['Oscillator', 'FM Pair', 'Noise', 'Sampler']);
   expect(document.querySelector('.h-select-heading')).toBeNull();
@@ -465,4 +466,99 @@ test('the scope shows the selected sound: a resting line, then a standing wave w
   tapped.note = 69;
   await expect.poll(() => rows(amber).length).toBeGreaterThan(60);
   expect(host.querySelector('.h-factory-scope-time')!.textContent).toBe('1 ms/div');
+});
+
+test('Sync locks an LFO to the tempo and greys out Rate; in each note Retrigger is on and fixed', async () => {
+  const id = state().channelId!;
+  flushSync(() => replaceSound(id, newSound('osc', 'Test')));
+  const lfo = addMod(id, 'lfo')!;
+  await expect.poll(() => folds('LFO').map((b) => b.textContent)).toEqual(['Shaping', 'Deep']);
+  const rate = () => unit('LFO').querySelector('[role="slider"][aria-label="Rate"]')!;
+  expect(rate().getAttribute('aria-disabled')).toBe('false');
+  await userEvent.click(fold('LFO', 'Shaping'));
+  await userEvent.click(unit('LFO').querySelector('.h-rack-section [role="combobox"]')!);
+  await userEvent.click([...document.querySelectorAll('.h-select-option')].find((o) => o.textContent === '1/8')!);
+  expect(sound().mods[0].params.sync).toBe('1/8');
+  await expect.poll(() => rate().getAttribute('aria-disabled')).toBe('true');
+  expect(lit('LFO', 'Shaping')).toBe(true);
+
+  await userEvent.click(fold('LFO', 'Deep'));
+  expect(knobs('LFO')).toEqual(['Amount', 'Rate', 'Fade', 'Velocity']);
+  const retrigger = () => unit('LFO').querySelector<HTMLButtonElement>('[role="checkbox"]')!;
+  expect(retrigger().getAttribute('aria-checked')).toBe('false');
+  await userEvent.click(retrigger());
+  expect(sound().mods[0].params.retrigger).toBe(true);
+  flushSync(() => setParam(id, lfo, 'retrigger', false));
+  flushSync(() => setModTarget(id, lfo, { module: 'filter', param: 'cutoff' }));
+  flushSync(() => setModPer(id, lfo, 'note'));
+  expect(retrigger().getAttribute('aria-checked')).toBe('true');
+  expect(retrigger().disabled).toBe(true);
+  expect(lit('LFO', 'Deep')).toBe(false);
+  flushSync(() => setParam(id, lfo, 'rate', 0.004));
+  flushSync(() => setParam(id, lfo, 'sync', 'free'));
+  expect(rate().getAttribute('aria-valuetext')).toBe('250 s');
+});
+
+test('Drift is a Shaping modulator with its rate and smoothness at hand', async () => {
+  const id = state().channelId!;
+  flushSync(() => replaceSound(id, newSound('osc', 'Test')));
+  const drift = addMod(id, 'drift')!;
+  await expect.poll(units).toContain('Drift');
+  expect(knobs('Drift')).toEqual(['Amount', 'Rate', 'Smooth']);
+  expect(folds('Drift').map((b) => b.textContent)).toEqual(['Shaping', 'Deep']);
+  flushSync(() => setParam(id, drift, 'rate', 0.01));
+  expect(unit('Drift').querySelector('[aria-label="Rate"]')!.getAttribute('aria-valuetext')).toBe('100 s');
+  pro();
+  expect(knobs('Drift')).toEqual(['Amount', 'Rate', 'Smooth', 'Velocity']);
+});
+
+test('Draw is a Deep wave with a display to draw one cycle on, stock shapes and Smooth', async () => {
+  const id = state().channelId!;
+  flushSync(() => replaceSound(id, newSound('osc', 'Test')));
+  const waves = () => [...unit('Source').querySelectorAll('[aria-label="Wave"] .h-button')];
+  const shape = () => sound().source.params.shape as string;
+  expect(waves()).toHaveLength(4);
+  expect(unit('Source').querySelector('.h-factory-shape')).toBeNull();
+  await userEvent.click(fold('Source', 'Deep'));
+  expect(waves()).toHaveLength(5);
+  await userEvent.click(waves()[4]);
+  expect(sound().source.params.wave).toBe('draw');
+  // A sound that draws its wave keeps showing Draw with the Deep section closed.
+  await userEvent.click(fold('Source', 'Deep'));
+  expect(waves()).toHaveLength(5);
+  const canvas = unit('Source').querySelector<HTMLCanvasElement>('.h-factory-shape canvas')!;
+  expect([canvas.width, canvas.height]).toEqual([180, 60]);
+
+  // One fast move from x 10 to x 80 near the top sets every point in between.
+  canvas.scrollIntoView({ block: 'center', inline: 'center' });
+  const r = canvas.getBoundingClientRect();
+  const at = (x: number, y: number) => ({ coords: { x: Math.round(r.left + x), y: Math.round(r.top + y) } });
+  const pixels = canvas.toDataURL();
+  await userEvent.pointer([at(10, 5), { keys: '[MouseLeft>]' }, at(80, 5), { keys: '[/MouseLeft]' }]);
+  const drawn = decodeShape(shape())!;
+  for (let i = 4; i <= 28; i++) expect(drawn[i], `point ${i}`).toBeCloseTo((29.5 - 5) / 27.5, 2);
+  expect(drawn[40]).toBeCloseTo(Math.sin((2 * Math.PI * 40) / 64), 3);
+  await expect.poll(() => canvas.toDataURL()).not.toBe(pixels);
+
+  // With Shift a stroke is a straight line from where it began.
+  await userEvent.keyboard('{Shift>}');
+  await userEvent.pointer([at(110, 55), { keys: '[MouseLeft>]' }, at(140, 30), at(170, 5), { keys: '[/MouseLeft]' }]);
+  await userEvent.keyboard('{/Shift}');
+  const line = decodeShape(shape())!.slice(39, 61);
+  line.forEach((v, i) => i && expect(v, `point ${39 + i}`).toBeGreaterThan(line[i - 1]));
+
+  const button = (label: string) =>
+    [...unit('Source').querySelectorAll<HTMLElement>('.h-factory-shape .h-button')].find((b) => b.textContent === label)!;
+  await userEvent.click(button('Saw'));
+  expect(shape()).toBe(encodeShape(STOCK_SHAPES.sawtooth));
+  await userEvent.click(button('Smooth'));
+  expect(shape()).toBe(encodeShape(smoothShape(decodeShape(encodeShape(STOCK_SHAPES.sawtooth))!)));
+  await userEvent.click(button('Square'));
+  expect(shape()).toBe(encodeShape(STOCK_SHAPES.square));
+
+  pro();
+  expect(waves()).toHaveLength(5);
+  expect(unit('Source').querySelectorAll('.h-factory-shape')).toHaveLength(1);
+  flushSync(() => setParam(id, 'source', 'wave2', 'draw'));
+  expect(unit('Source').querySelector('.h-factory-group[aria-label="Osc 2"] .h-factory-shape')).not.toBeNull();
 });

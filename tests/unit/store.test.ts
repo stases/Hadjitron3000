@@ -241,7 +241,7 @@ test('parameters use each module definition and changes structurally share untou
   expect(sound(a).amp.attack).toBe(0);
   expect(sound(a).out.pan).toBe(1);
   expect(sound(a).chain[0].params.cutoff).toBe(20000);
-  expect(sound(a).mods[0].params.rate).toBe(0.02);
+  expect(sound(a).mods[0].params.rate).toBe(0.002);
   expect(sound(a).source.params).toMatchObject({ wave: 'sawtooth', fine: 2 });
 });
 

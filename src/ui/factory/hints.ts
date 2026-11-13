@@ -10,10 +10,12 @@ const adsr = (what: string) => ({
 const pitch = 'Tunes the sound up or down in semitones; twelve make an octave.';
 const modVel = 'How much harder notes get more of this modulator and softer ones less; it works on each note only.';
 const fine = 'Nudges the tuning by hundredths of a semitone, for gentle detuning.';
+const draw = 'Draw one cycle of the wave with the mouse; hold Shift for a straight line. Notes you hold follow along.';
 
 export const PARAM_HINTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   osc: {
-    wave: 'The basic shape of the tone: sine is pure, saw is bright and buzzy, square is hollow.',
+    wave: 'The basic shape of the tone: sine is pure, saw is bright and buzzy, square is hollow; Draw is your own.',
+    shape: draw,
     pitch,
     fine,
     voices: 'How many copies of the oscillator play at once; more voices sound fatter.',
@@ -22,6 +24,7 @@ export const PARAM_HINTS: Readonly<Record<string, Readonly<Record<string, string
     noise: 'How much hiss is mixed in with the tone.',
     pw: 'How wide the square wave is: 50 % is the plain square, narrower sounds thin and nasal; an LFO here shimmers.',
     wave2: 'The shape of the second oscillator, which plays along with the first.',
+    shape2: draw,
     pitch2: 'Tunes the second oscillator against the first: seven semitones is a fifth, twelve an octave.',
     fine2: 'Detunes the second oscillator a little against the first, for a slow, fat beating.',
     mix2: 'How much of the second oscillator you hear: none at the left, half of each in the middle, all at the right.',
@@ -89,7 +92,15 @@ export const PARAM_HINTS: Readonly<Record<string, Readonly<Record<string, string
   env: { ...adsr('this envelope'), vel: modVel },
   lfo: {
     wave: 'The shape of the wobble: sine glides, square jumps between two values.',
-    rate: 'How fast the wobble goes, in cycles per second.',
+    rate: 'How fast the wobble goes, in cycles per second; below 0.1 Hz it shows how many seconds one cycle takes.',
+    sync: 'Locks the wobble to the tempo, one cycle per bar, beat or note; Free lets you set the rate yourself.',
+    fade: 'How long the wobble takes to grow from nothing to its full amount after a note starts.',
+    retrigger: 'Starts the wobble from the beginning with every note. An LFO in each note always does.',
+    vel: modVel,
+  },
+  drift: {
+    rate: 'How often the drift heads for a new random value: slow settings wander over minutes.',
+    smooth: 'At 0 % the drift jumps from value to value; at 100 % it glides gently between them.',
     vel: modVel,
   },
   out: {

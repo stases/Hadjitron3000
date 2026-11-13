@@ -6,6 +6,7 @@ import type { ModInst, ModuleInst, Sound } from '../core/types';
 import { cut, dbToGain, glide, schedule, type Plan } from './automation';
 import { Bus, mix, type Slot } from './mix';
 import { EFFECT_BUILDERS, type Effect } from './modules/effects';
+import { modSource, type ModSource } from './modules/modulators';
 import { SOURCE_BUILDERS, type Follower, type SourceVoice } from './modules/sources';
 import { voiceFilter, type VoiceFilter } from './modules/voicefilter';
 
@@ -30,7 +31,7 @@ interface Bend {
 /** A modulator built inside one voice; `scale` is what the note's velocity makes of its amount. */
 interface NoteMod {
   inst: ModInst;
-  node: ConstantSourceNode | OscillatorNode;
+  src: ModSource;
   depth: GainNode;
   depthPerAmount: number;
   scale: number;
@@ -57,7 +58,7 @@ interface Voice {
 
 interface Mod {
   inst: ModInst;
-  node: ConstantSourceNode | OscillatorNode;
+  src: ModSource;
   depth: GainNode;
   depthPerAmount: number;
   env?: Plan & { note: number; held: boolean };
@@ -166,14 +167,10 @@ export class ChannelGraph {
         this.noteMods.push({ inst, depthPerAmount });
         continue;
       }
-      const node =
-        inst.type === 'lfo'
-          ? new OscillatorNode(ctx, { type: inst.params.wave as OscillatorType, frequency: inst.params.rate as number })
-          : new ConstantSourceNode(ctx, { offset: 0 });
+      const src = modSource(ctx, inst.type, inst.params, bpm, { t0: ctx.currentTime, perNote: false, seed: serial });
       const depth = new GainNode(ctx, { gain: inst.amount * depthPerAmount });
-      node.connect(depth);
-      node.start(ctx.currentTime);
-      this.mods.push({ inst, node, depth, depthPerAmount });
+      src.output.connect(depth);
+      this.mods.push({ inst, src, depth, depthPerAmount });
       const key = `${inst.target.module}.${inst.target.param}`;
       if (!byTarget.has(key)) byTarget.set(key, { ...inst.target, depths: [] });
       byTarget.get(key)!.depths.push(depth);
@@ -193,34 +190,30 @@ export class ChannelGraph {
   /** Apply a sound with the same structure in place. */
   update(sound: Sound, bpm: number): void {
     const old = this.sound;
+    const tempo = bpm !== this.bpm;
     const t = this.ctx.currentTime;
     this.sound = sound;
     for (const m of sound.chain) {
       const prev = old.chain.find((o) => o.id === m.id);
-      if (prev?.params !== m.params || bpm !== this.bpm) this.effects.get(m.id)?.update(m.params, bpm);
+      if (prev?.params !== m.params || tempo) this.effects.get(m.id)?.update(m.params, bpm);
     }
     this.bpm = bpm;
     const inst = (id: string) => sound.mods.find((m) => m.id === id)!;
     for (const mod of this.mods) {
-      if (inst(mod.inst.id) === mod.inst) continue;
+      if (inst(mod.inst.id) === mod.inst && !tempo) continue;
       mod.inst = inst(mod.inst.id);
       glide(mod.depth.gain, mod.inst.amount * mod.depthPerAmount, t);
-      if (mod.node instanceof OscillatorNode) {
-        mod.node.type = mod.inst.params.wave as OscillatorType;
-        glide(mod.node.frequency, mod.inst.params.rate as number, t);
-      }
+      mod.src.update(mod.inst.params, bpm);
     }
     this.noteMods = this.noteMods.map((m) => ({ ...m, inst: inst(m.inst.id) }));
     for (const v of this.voices) {
       if (sound.filter !== old.filter) v.filter?.update(sound.filter);
+      if (sound.source.params !== old.source.params) v.src.redraw?.(sound.source.params, t);
       for (const m of v.mods) {
-        if (inst(m.inst.id) === m.inst) continue;
+        if (inst(m.inst.id) === m.inst && !tempo) continue;
         m.inst = inst(m.inst.id);
         glide(m.depth.gain, m.inst.amount * m.depthPerAmount * m.scale, t);
-        if (m.node instanceof OscillatorNode) {
-          m.node.type = m.inst.params.wave as OscillatorType;
-          glide(m.node.frequency, m.inst.params.rate as number, t);
-        }
+        m.src.update(m.inst.params, bpm);
       }
     }
     if (sound.out !== old.out) {
@@ -269,7 +262,7 @@ export class ChannelGraph {
     }
     const from = last ? pitchAt(last, t) : this.lastNote;
     this.lastNote = note;
-    this.retriggerEnvelopes(note, t, gate);
+    this.restartMods(note, t, gate);
     const { type, params } = this.sound.source;
     const src = SOURCE_BUILDERS[type]?.(this.ctx, params, {
       note, t0: t, serial: this.serial(), modulated: this.modulated,
@@ -305,19 +298,14 @@ export class ChannelGraph {
     const mods = this.noteMods.map(({ inst, depthPerAmount }): NoteMod => {
       const share = inst.params.vel as number;
       const scale = 1 - share + share * vel;
-      const { wave, rate } = inst.params;
-      const node =
-        inst.type === 'lfo'
-          ? new OscillatorNode(this.ctx, { type: wave as OscillatorType, frequency: rate as number })
-          : new ConstantSourceNode(this.ctx, { offset: 0 });
+      const src = modSource(this.ctx, inst.type, inst.params, this.bpm, { t0: t, perNote: true, seed: this.serial });
       const depth = new GainNode(this.ctx, { gain: inst.amount * depthPerAmount * scale });
-      node.connect(depth);
-      node.start(t);
+      src.output.connect(depth);
       for (const target of targets(inst.target!.module, inst.target!.param)) depth.connect(target);
-      const mod: NoteMod = { inst, node, depth, depthPerAmount, scale };
-      if (node instanceof ConstantSourceNode) {
-        mod.env = { t0: t, scale: 1, segs: envelopeSegments(adsrOf(inst.params), length), param: node.offset };
-        schedule(node.offset, mod.env);
+      const mod: NoteMod = { inst, src, depth, depthPerAmount, scale };
+      if (src.level) {
+        mod.env = { t0: t, scale: 1, segs: envelopeSegments(adsrOf(inst.params), length), param: src.level };
+        schedule(src.level, mod.env);
       }
       return mod;
     });
@@ -345,10 +333,10 @@ export class ChannelGraph {
       this.release(v, t, v.adsr.release);
       for (const m of v.mods) if (m.env) releaseEnv(m.env.param, m.env, t, adsrOf(m.inst.params).release);
     }
-    for (const { node, env, inst } of this.mods) {
-      if (!(node instanceof ConstantSourceNode) || !env?.held || env.note !== note) continue;
+    for (const { src, env, inst } of this.mods) {
+      if (!src.level || !env?.held || env.note !== note) continue;
       env.held = false;
-      releaseEnv(node.offset, env, t, adsrOf(inst.params).release);
+      releaseEnv(src.level, env, t, adsrOf(inst.params).release);
     }
   }
 
@@ -362,8 +350,8 @@ export class ChannelGraph {
     const t = this.ctx.currentTime;
     glide(this.gain.gain, 0, t, MUTE_TAU);
     for (const v of this.voices) v.done = true;
-    for (const v of this.voices) for (const n of [...v.src.nodes, ...v.mods.map((m) => m.node)]) n.stop(t + 0.03);
-    for (const mod of this.mods) mod.node.stop(t + 0.03);
+    for (const v of this.voices) this.stopNodes(v, t + 0.03);
+    for (const mod of this.mods) mod.src.stop(t + 0.03);
     for (const fx of this.effects.values()) fx.dispose();
     this.slot.until = t + 0.2;
     setTimeout(() => {
@@ -384,8 +372,8 @@ export class ChannelGraph {
     holdEnv(v.gain.gain, v.env, t + lag, v.adsr, v.gateEnd + lag);
     for (const m of v.mods) if (m.env) holdEnv(m.env.param, m.env, t, adsrOf(m.inst.params), v.gateEnd);
     for (const mod of this.mods) {
-      if (!(mod.node instanceof ConstantSourceNode) || !mod.env) continue;
-      holdEnv(mod.node.offset, mod.env, t, adsrOf(mod.inst.params), v.gateEnd);
+      if (!mod.src.level || !mod.env) continue;
+      holdEnv(mod.src.level, mod.env, t, adsrOf(mod.inst.params), v.gateEnd);
       mod.env.note = note;
       mod.env.held = v.held;
     }
@@ -419,7 +407,12 @@ export class ChannelGraph {
 
   private scheduleStop(v: Voice): void {
     v.stopAt = v.slot.until = v.env.t0 + v.env.segs[v.env.segs.length - 1].end;
-    for (const n of [...v.src.nodes, ...v.mods.map((m) => m.node)]) n.stop(v.stopAt);
+    this.stopNodes(v, v.stopAt);
+  }
+
+  private stopNodes(v: Voice, t: number): void {
+    for (const n of v.src.nodes) n.stop(t);
+    for (const m of v.mods) m.src.stop(t);
   }
 
   private end(v: Voice): void {
@@ -430,14 +423,20 @@ export class ChannelGraph {
     this.voices = this.voices.filter((x) => x !== v);
   }
 
-  /** Modulation envelopes restart on every note, from wherever they are, and follow that note. */
-  private retriggerEnvelopes(note: number, t: number, gate: number): void {
+  /**
+   * Modulation envelopes of the whole sound restart on every note, from wherever they are, and follow that note;
+   * LFOs fade in again and restart their wave when they are set to.
+   */
+  private restartMods(note: number, t: number, gate: number): void {
     for (const mod of this.mods) {
-      if (!(mod.node instanceof ConstantSourceNode)) continue;
-      const from = mod.env ? cut(mod.node.offset, mod.env, t) : 0;
+      if (!mod.src.level) {
+        mod.src.noteOn(t);
+        continue;
+      }
+      const from = mod.env ? cut(mod.src.level, mod.env, t) : 0;
       const segs = envelopeSegments(adsrOf(mod.inst.params), gate, from);
       mod.env = { t0: t, scale: 1, segs, note, held: gate === Infinity };
-      schedule(mod.node.offset, mod.env);
+      schedule(mod.src.level, mod.env);
     }
   }
 }

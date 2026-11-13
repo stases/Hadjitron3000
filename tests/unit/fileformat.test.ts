@@ -11,6 +11,7 @@ import {
 import { AMP, EFFECTS, FILTER, MODS, MODULES, OUT, PLAY, SOURCES } from '../../src/core/modules';
 import { MAX_NOTE, MIN_NOTE } from '../../src/core/notes';
 import { defaultParams } from '../../src/core/params';
+import { DEFAULT_SHAPE, STOCK_SHAPES, encodeShape } from '../../src/core/shape';
 import type { Project, SampleData, Sound } from '../../src/core/types';
 import { stepNote } from '../support/steps';
 
@@ -215,10 +216,12 @@ test('coerces supplied parameter values and defaults amp, out and missing params
   expect(result.source.params).toEqual({
     sample: '', pitch: 24, fine: -4, start: 0, end: 1, loop: false, reverse: true, mode: 'oneshot',
   });
-  expect(result.amp).toEqual({ attack: 0, decay: 5, sustain: 0.8, release: 0.2 });
+  expect(result.amp).toEqual({ attack: 0, decay: 30, sustain: 0.8, release: 0.2 });
   expect(result.out).toEqual({ level: 6, pan: -1 });
   expect(result.chain[0].params).toEqual(defaultParams(MODULES.filter));
-  expect(result.mods[0].params).toEqual({ wave: 'triangle', rate: 40, vel: 0 });
+  expect(result.mods[0].params).toEqual({
+    wave: 'triangle', rate: 40, sync: 'free', fade: 0, retrigger: false, vel: 0,
+  });
   const defaults = parseSound(soundFile({ ...newSound(), amp: undefined, out: undefined })).sound;
   expect(defaults.amp).toEqual(defaultParams(AMP));
   expect(defaults.out).toEqual(defaultParams(OUT));
@@ -269,6 +272,29 @@ test('voice path values are checked like any other parameter', () => {
   // A chain module may not take the id of a fixed unit.
   expect(parsed.chain[0].id).not.toBe('filter');
   expect(parsed.mods[0]).toMatchObject({ per: 'sound', target: { module: 'filter', param: 'cutoff' } });
+});
+
+test('sounds from before long movement read with free LFOs, no fade or retrigger, and a sine to draw', () => {
+  const old = {
+    ...newSound(),
+    mods: [{ id: 'lfo1', type: 'lfo', params: { wave: 'sine', rate: 0.25 }, target: { module: 'out', param: 'pan' } }],
+  };
+  delete (old.source.params as Record<string, unknown>).shape;
+  const result = parseSound(soundFile(old)).sound;
+  expect(result.mods[0].params).toEqual({
+    wave: 'sine', rate: 0.25, sync: 'free', fade: 0, retrigger: false, vel: 0,
+  });
+  expect(result.source.params.shape).toBe(DEFAULT_SHAPE);
+  expect(result.source.params.shape2).toBe(DEFAULT_SHAPE);
+
+  const drawn = newSound();
+  const square = encodeShape(STOCK_SHAPES.square);
+  drawn.source.params = { ...drawn.source.params, wave: 'draw', shape: square, shape2: 'nope' };
+  drawn.mods = [{ ...newMod('drift'), id: 'd1', per: 'note', target: { module: 'filter', param: 'cutoff' } }];
+  const back = parseSound(serializeSound(drawn, {})).sound;
+  expect(back.source.params.shape).toBe(square);
+  expect(back.source.params.shape2).toBe(DEFAULT_SHAPE);
+  expect(back.mods).toEqual([{ ...drawn.mods[0], on: true }]);
 });
 
 test('defaults a missing sound name and accepts omitted sample tables', () => {

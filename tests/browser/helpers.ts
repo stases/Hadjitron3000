@@ -1,5 +1,6 @@
-// Measurements on rendered audio, and small builders for test sounds and projects.
+// Measurements on rendered audio, small builders for test sounds and projects, and rendering notes of a sound.
 
+import { Engine } from '../../src/audio';
 import { AMP, MODULES } from '../../src/core/modules';
 import { defaultParams } from '../../src/core/params';
 import { emptyProject, newSound } from '../../src/core/defaults';
@@ -144,4 +145,31 @@ export function project(
   p.channels = channels.map((c) => ({ color: 0, mute: false, solo: false, ...c }));
   p.patterns[0].notes = rowsOf(steps);
   return { ...p, master: 0, ...extra };
+}
+
+interface NotesOptions {
+  /** Engine calls at given times. */
+  live?: [number, (e: Engine) => void][];
+  samples?: Project['samples'];
+  bpm?: number;
+  sampleRate?: number;
+}
+
+/** Render the left channel of one channel 'a' playing `list` ([note, time, dur, vel?]) for `seconds`. */
+export async function notes(
+  s: Sound,
+  list: [number, number, number, number?][],
+  seconds: number,
+  { live = [], samples = {}, bpm = 120, sampleRate = SR }: NotesOptions = {},
+): Promise<Float32Array> {
+  const ctx = new OfflineAudioContext(2, Math.round(seconds * sampleRate), sampleRate);
+  const engine = new Engine(ctx);
+  engine.setProject(project([{ id: 'a', sound: s }], {}, { samples, bpm }));
+  await engine.ready();
+  for (const [note, time, dur, vel = 1] of list) engine.play('a', note, vel, time, dur);
+  for (const [at, run] of live) void ctx.suspend(at).then(() => {
+    run(engine);
+    return ctx.resume();
+  });
+  return (await ctx.startRendering()).getChannelData(0);
 }

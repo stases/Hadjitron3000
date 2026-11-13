@@ -22,7 +22,7 @@ test('byLevel splits a module by level and keeps table order', () => {
   expect([ids(osc[1]), ids(osc[2]), ids(osc[3])]).toEqual([
     ['wave', 'pitch'],
     ['fine', 'voices', 'spread', 'noise', 'pw', 'wave2', 'pitch2', 'fine2', 'mix2', 'sub', 'subOct'],
-    ['width'],
+    ['shape', 'width', 'shape2'],
   ]);
   expect(ids(byLevel(MODULES.reverb.params)[2])).toEqual(['tone']);
   expect(byLevel(AMP.params)[1]).toEqual(AMP.params);

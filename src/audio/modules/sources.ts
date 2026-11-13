@@ -1,6 +1,7 @@
 // Per-voice sources. Each builder creates and starts the nodes of one note.
 
 import { noteFreq } from '../../core/notes';
+import { decodeShape, shapeHarmonics } from '../../core/shape';
 import type { Params } from '../../core/types';
 import { mix } from '../mix';
 import { noiseBuffer, type NoiseColor } from '../random';
@@ -22,6 +23,8 @@ export interface SourceVoice {
   followers: Follower[];
   /** A one-shot sample plays for this long whatever the note length. */
   length?: number;
+  /** Follow a new drawing of a drawn wave while the note sounds. */
+  redraw?(p: Params, t: number): void;
 }
 
 export interface VoiceStart {
@@ -39,6 +42,28 @@ export type SourceBuilder = (ctx: BaseAudioContext, p: Params, v: VoiceStart) =>
 const REGION_FADE = 0.004;
 // The longest pulse period, in seconds (a note of 4 Hz).
 const MAX_PERIOD = 0.25;
+// A drawn wave has this many harmonics, enough for the lowest notes; the oscillator drops those above Nyquist.
+const DRAWN_HARMONICS = 512;
+// The last few drawn waves of each context are kept, so that notes of the same drawing share one.
+const DRAWN_CACHE = 8;
+// A new drawing crossfades into a held note with this time constant.
+const REDRAW_TAU = 0.005;
+const drawnWaves = new WeakMap<BaseAudioContext, Map<string, PeriodicWave>>();
+
+/** The band-limited wave of a drawing, at the level it was drawn. */
+function drawnWave(ctx: BaseAudioContext, shape: string): PeriodicWave {
+  let cache = drawnWaves.get(ctx);
+  if (!cache) drawnWaves.set(ctx, (cache = new Map()));
+  let wave = cache.get(shape);
+  if (!wave) {
+    const { real, imag } = shapeHarmonics(decodeShape(shape)!, DRAWN_HARMONICS);
+    wave = new PeriodicWave(ctx, { real, imag, disableNormalization: true });
+    if (cache.size >= DRAWN_CACHE) cache.delete(cache.keys().next().value!);
+  }
+  cache.delete(shape);
+  cache.set(shape, wave);
+  return wave;
+}
 
 const cents = (p: Params) => (p.pitch as number) * 100 + (p.fine as number);
 const follow = (param: AudioParam): Follower => ({ param, base: param.value, k: 1 });
@@ -81,31 +106,65 @@ const osc: SourceBuilder = (ctx, p, { note, t0, serial, modulated }) => {
   const pw = p.pw as number;
   const out = new GainNode(ctx);
   const voice: SourceVoice = { output: out, nodes: [], targets: { pitch: [] }, followers: [] };
-  const oscillator = (type: OscillatorType, detune: number, pan: number) => {
-    const o = new OscillatorNode(ctx, { type, frequency: noteFreq(note), detune });
+  const redraws: ((p: Params, t: number) => void)[] = [];
+  const started = (o: OscillatorNode) => {
     o.start(t0);
     voice.nodes.push(o);
     voice.targets.pitch.push(o.detune);
     voice.followers.push(follow(o.detune));
+    return o;
+  };
+  /**
+   * A drawn wave plays on two oscillators started together, one of them silent. A new drawing goes into the silent
+   * one, which then crossfades in; started at the same moment and moved alike, the two never drift apart in phase.
+   */
+  const drawn = (key: string, detune: number): AudioNode => {
+    let shape = p[key] as string;
+    const pair = [0, 1].map(() =>
+      started(new OscillatorNode(ctx, { frequency: noteFreq(note), detune, periodicWave: drawnWave(ctx, shape) })),
+    );
+    const gains = pair.map((o, i) => {
+      const gain = new GainNode(ctx, { gain: 1 - i });
+      o.connect(gain);
+      return gain;
+    });
+    let live = 0;
+    redraws.push((p, t) => {
+      if (p[key] === shape) return;
+      shape = p[key] as string;
+      live = 1 - live;
+      pair[live].setPeriodicWave(drawnWave(ctx, shape));
+      gains[live].gain.setTargetAtTime(1, t, REDRAW_TAU);
+      gains[1 - live].gain.setTargetAtTime(0, t, REDRAW_TAU);
+    });
+    return mix(ctx, gains);
+  };
+  const oscillator = (wave: string, shape: string, detune: number, pan: number) => {
+    const o = wave === 'draw'
+      ? drawn(shape, detune)
+      : started(new OscillatorNode(ctx, { type: wave as OscillatorType, frequency: noteFreq(note), detune }));
     return n > 1 ? o.connect(new StereoPannerNode(ctx, { pan })) : o;
   };
-  /** One oscillator with its unison voices; a square becomes a pulse when its width is not 50 % or is moved. */
-  const stack = (wave: string, at: number): AudioNode => {
+  /**
+   * One oscillator with its unison voices; a square becomes a pulse when its width is not 50 % or is moved. `shape`
+   * is the parameter that holds its drawing.
+   */
+  const stack = (wave: string, shape: string, at: number): AudioNode => {
     const square = wave === 'square' && (pw !== 0.5 || modulated.has('pw'));
-    const type = square ? 'sawtooth' : (wave as OscillatorType);
+    const type = square ? 'sawtooth' : wave;
     const panned = Array.from({ length: n }, (_, i) => {
       const x = n > 1 ? (2 * i) / (n - 1) - 1 : 0;
-      return oscillator(type, at + x * spread, x * width);
+      return oscillator(type, shape, at + x * spread, x * width);
     });
     const sum = mix(ctx, panned);
     return square ? pulse(ctx, sum, pw, noteFreq(note + at / 100), t0, voice) : sum;
   };
   // Each part and its gain; the tone stage divides by the square root of the unison count.
   const parts: [AudioNode, number][] = [];
-  if (mix2 < 1) parts.push([stack(p.wave as string, cents(p)), 1 - mix2]);
+  if (mix2 < 1) parts.push([stack(p.wave as string, 'shape', cents(p)), 1 - mix2]);
   const cents2 = cents(p) + (p.pitch2 as number) * 100 + (p.fine2 as number);
-  if (mix2 > 0) parts.push([stack(p.wave2 as string, cents2), mix2]);
-  if (sub > 0) parts.push([oscillator('sine', cents(p) + 1200 * (p.subOct as number), 0), sub * Math.sqrt(n)]);
+  if (mix2 > 0) parts.push([stack(p.wave2 as string, 'shape2', cents2), mix2]);
+  if (sub > 0) parts.push([oscillator('sine', '', cents(p) + 1200 * (p.subOct as number), 0), sub * Math.sqrt(n)]);
   const tone = new GainNode(ctx, { gain: (1 - amount) / Math.sqrt(n) });
   tone.connect(out);
   if (parts.length === 1 && parts[0][1] === 1) parts[0][0].connect(tone);
@@ -115,6 +174,7 @@ const osc: SourceBuilder = (ctx, p, { note, t0, serial, modulated }) => {
     nz.connect(new GainNode(ctx, { gain: amount })).connect(out);
     voice.nodes.push(nz);
   }
+  if (redraws.length) voice.redraw = (p, t) => redraws.forEach((redraw) => redraw(p, t));
   return voice;
 };
 

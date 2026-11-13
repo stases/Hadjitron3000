@@ -17,10 +17,11 @@ interface ParamControlProps {
 
 /** A float with at most this many positions gets a knob that clicks into each one. */
 const MAX_KNOB_STEPS = 50;
-const WAVES = ['sine', 'triangle', 'sawtooth', 'square'] as const;
+const WAVES = ['sine', 'triangle', 'sawtooth', 'square', 'draw'] as const;
 
+/** A choice of waves, all or some of them, is a row of picture buttons. */
 const isWaveChoice = (spec: ChoiceSpec) =>
-  spec.options.length === WAVES.length && spec.options.every(([v], i) => v === WAVES[i]);
+  spec.options.every(([v]) => (WAVES as readonly string[]).includes(v));
 
 export function ParamControl({ spec, value, onChange, hint, disabled }: ParamControlProps) {
   switch (spec.kind) {
@@ -63,8 +64,11 @@ export function ParamControl({ spec, value, onChange, hint, disabled }: ParamCon
         </div>
       );
     case 'bool':
-      return <Checkbox checked={value as boolean} onChange={onChange} label={spec.label} hint={hint} />;
+      return (
+        <Checkbox checked={value as boolean} onChange={onChange} label={spec.label} hint={hint} disabled={disabled} />
+      );
     case 'sample':
+    case 'shape':
       return null;
   }
 }

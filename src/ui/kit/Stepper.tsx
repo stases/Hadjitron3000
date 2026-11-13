@@ -11,6 +11,8 @@ interface StepperProps {
   step?: number;
   onChange: (value: number) => void;
   format?: (value: number) => string;
+  /** Reads a typed value back when `format` writes something parseFloat cannot read. */
+  parse?: (text: string) => number;
   width?: number;
   hint?: string;
   disabled?: boolean;
@@ -20,7 +22,9 @@ const REPEAT_DELAY = 400;
 const REPEAT_EVERY = 50;
 const DRAG_PX = 3;
 
-export function Stepper({ value, min, max, step = 1, onChange, format, width = 64, hint, disabled }: StepperProps) {
+export function Stepper({
+  value, min, max, step = 1, onChange, format, parse, width = 64, hint, disabled,
+}: StepperProps) {
   const hover = useHint(hint);
   const decimals = Math.max(0, -Math.floor(Math.log10(step) + 1e-9));
   const show = format ?? ((v: number) => v.toFixed(decimals));
@@ -68,7 +72,7 @@ export function Stepper({ value, min, max, step = 1, onChange, format, width = 6
   };
 
   const commit = (text: string) => {
-    const v = parseFloat(text.replace(',', '.'));
+    const v = parse ? parse(text) : parseFloat(text.replace(',', '.'));
     if (Number.isFinite(v)) set(v);
     setEditing(null);
   };

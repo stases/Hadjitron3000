@@ -16,6 +16,7 @@ import {
   setScope, undo, useApp,
 } from '../../src/state/store';
 import { TrackView } from '../../src/ui/track';
+import { closeRoll } from '../../src/ui/track/rollState';
 
 vi.mock('../../src/app/audio', () => ({ tap: vi.fn(), position: vi.fn(() => -1) }));
 vi.mock('../../src/app/commands', () => ({
@@ -34,6 +35,7 @@ let host: HTMLElement;
 beforeEach(async () => {
   await page.viewport(1400, 800);
   openProject(demoProject(), null);
+  closeRoll();
   vi.clearAllMocks();
   vi.mocked(position).mockReturnValue(-1);
   host = document.createElement('div');
@@ -197,7 +199,7 @@ test('the wheel over a step changes its velocity in small amounts', () => {
 
 test('mute, solo and the level slider call through', async () => {
   const head = host.querySelectorAll('.h-track-head')[CLAP];
-  const [mute, solo] = head.querySelectorAll('button');
+  const [, mute, solo] = head.querySelectorAll('button');
   await click(mute);
   expect(state().project.channels[CLAP].mute).toBe(true);
   await click(solo);
@@ -441,11 +443,13 @@ test('ordinary editing keeps a chord and an off-grid note whole', async () => {
     [0, 62], [0, 66], [0, 69], [24, 62], [52, 70], [72, 62], [96, 72],
   ]);
 
-  // A click takes out everything that starts in the step: the whole chord.
+  // A click on a chord or an off-grid note selects it instead of taking it out; a plain step still goes.
   await click(cell(KALIMBA, 0));
-  expect(notesOf(KALIMBA).map((n) => n.start)).toEqual([24, 52, 72, 96]);
   await click(cell(KALIMBA, 2));
-  expect(notesOf(KALIMBA).map((n) => n.start)).toEqual([24, 72, 96]);
+  expect(notesOf(KALIMBA).map((n) => n.start)).toEqual([0, 0, 0, 24, 52, 72, 96]);
+  expect(state().step).toEqual({ channelId: channelId(KALIMBA), index: 2 });
+  await click(cell(KALIMBA, 1));
+  expect(notesOf(KALIMBA).map((n) => n.start)).toEqual([0, 0, 0, 52, 72, 96]);
 });
 
 test('the inspector names a chord and moves it whole', async () => {

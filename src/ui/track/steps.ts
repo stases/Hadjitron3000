@@ -51,6 +51,11 @@ export function makeCell(index: number, notes: readonly Note[]): Cell {
 
 export type Cells = ReadonlyMap<number, Cell>;
 
+/** A cell the grid cannot show whole: a chord, or a note that starts between grid lines. */
+export function richCell(cell: Cell): boolean {
+  return cell.notes.length > 1 || cell.notes.some((n) => n.start % TICKS_PER_STEP !== 0);
+}
+
 /** The notes of a row grouped by the step they start in. */
 export function rowCells(notes: readonly Note[] | undefined): Map<number, Cell> {
   const groups = new Map<number, Note[]>();

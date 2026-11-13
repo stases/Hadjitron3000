@@ -1,0 +1,230 @@
+/* The piano roll. Row height, the key column and the velocity lane must match src/ui/track/roll.ts and
+   PianoRoll.tsx; the columns are the step grid's (steps.ts, track.css). */
+
+.h-roll-title {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  margin: 0 4px;
+}
+
+.h-roll .h-track-corner,
+.h-roll-mini-name,
+.h-roll-keys,
+.h-roll-foot-name {
+  width: 72px;
+}
+
+.h-roll-head {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  width: max-content;
+  min-width: 100%;
+  padding-bottom: 3px;
+  background: var(--face);
+}
+
+.h-roll-mark {
+  position: absolute;
+  top: 12px;
+  display: flex;
+}
+
+/* One thin row per sound: where its notes are. */
+
+.h-roll-mini {
+  display: flex;
+  height: 12px;
+  margin-top: 1px;
+}
+
+.h-roll-mini-name {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  flex: none;
+  padding: 0 4px;
+  overflow: hidden;
+  font: var(--font-small);
+  white-space: nowrap;
+  color: var(--ink-soft);
+  background: var(--face);
+}
+
+.h-roll-mini.is-active .h-roll-mini-name {
+  color: var(--sel-ink);
+  background: var(--sel);
+}
+
+.h-roll-mini-lane {
+  flex: none;
+  padding: 0 4px;
+}
+
+.h-roll-mini-box {
+  position: relative;
+  height: 12px;
+  background-color: var(--face-lo);
+}
+
+.h-roll-mini.is-active .h-roll-mini-box {
+  background-color: var(--face);
+}
+
+.h-roll-mini-note {
+  position: absolute;
+  top: 2px;
+  height: 8px;
+  background: var(--cell);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+/* Keys and notes */
+
+.h-roll-body {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+}
+
+.h-roll-keys {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  flex: none;
+  box-shadow: inset -1px 0 var(--ink);
+}
+
+.h-roll-key {
+  height: 12px;
+  padding-right: 4px;
+  font: var(--font-small);
+  text-align: right;
+  color: var(--ink-soft);
+  background: var(--paper);
+  box-shadow: inset -1px 0 var(--ink);
+}
+
+/* A black key from the back of the keyboard, and the line between the two white keys beside it. */
+.h-roll-key.is-black {
+  background: linear-gradient(to right, var(--ink) 0 42px, transparent 42px),
+    linear-gradient(to bottom, transparent 0 6px, var(--lo) 6px 7px, transparent 7px), var(--paper);
+}
+
+.h-roll-key.is-c,
+.h-roll-key.is-f {
+  box-shadow: inset -1px 0 var(--ink), inset 0 -1px var(--lo);
+}
+
+.h-roll-key.is-white.is-down {
+  background: var(--face-lo);
+}
+
+.h-roll-key.is-black.is-down {
+  background: linear-gradient(to right, var(--ink-soft) 0 42px, transparent 42px),
+    linear-gradient(to bottom, transparent 0 6px, var(--lo) 6px 7px, transparent 7px), var(--paper);
+}
+
+.h-roll-sheet {
+  flex: none;
+  padding: 0 4px;
+  background: color-mix(in srgb, var(--face-lo) 70%, var(--lo));
+}
+
+.h-roll-notes {
+  position: relative;
+}
+
+.h-roll-now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--h-track-now);
+  display: none;
+  width: 24px;
+  background: var(--dither);
+}
+
+.h-track-scroll[data-now] .h-roll-now {
+  display: block;
+}
+
+/* A note is a lit key like a step of the grid, shaded by its velocity. */
+.h-roll-note {
+  position: absolute;
+  height: 12px;
+  padding: 0 3px;
+  overflow: hidden;
+  font: var(--font-small);
+  line-height: 12px;
+  white-space: nowrap;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--cell) var(--shade), var(--face));
+  box-shadow: inset 0 0 0 1px var(--ink), inset 2px 2px color-mix(in srgb, var(--cell) 50%, var(--hi)),
+    inset -2px -2px color-mix(in srgb, var(--cell) 55%, var(--ink));
+}
+
+/* Selected: ink with a line of the sound's colour inside, so it stands out on any colour. */
+.h-roll-note.is-selected {
+  color: var(--hi);
+  background: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink), inset 0 0 0 2px var(--cell);
+}
+
+.h-roll-band {
+  position: absolute;
+  outline: 1px dotted var(--ink);
+  pointer-events: none;
+}
+
+/* The velocity lane: an amber display along the bottom. */
+
+.h-roll-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+  padding-top: 3px;
+  background: var(--face);
+}
+
+.h-roll-foot-name {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  flex: none;
+  padding: 2px 4px 0;
+  font: var(--font-small);
+  color: var(--ink-soft);
+  background: var(--face);
+}
+
+.h-roll-vel-lane {
+  flex: none;
+  padding: 0 4px;
+  background: var(--crt);
+}
+
+.h-roll-vel-box {
+  position: relative;
+  height: 40px;
+}
+
+.h-roll-vel {
+  --vel: var(--amber-mid);
+  position: absolute;
+  bottom: 0;
+  width: 5px;
+  border-top: 2px solid var(--vel);
+  background: linear-gradient(var(--vel), var(--vel)) 2px 0 / 1px 100% no-repeat;
+}
+
+.h-roll-vel.is-selected {
+  --vel: var(--amber);
+  background-position: 1px 0;
+  background-size: 3px 100%;
+}

@@ -64,6 +64,8 @@ Tempo, swing and the master volume are in the bar at the top of the window. The 
 
 Each row has a mute button, a solo button and a level slider. Double-click the name of a row to open that sound in the Factory. Drop audio files anywhere on the window to add them as new rows.
 
+For chords, pads and notes between the steps, open a row in the piano roll with the small keyboard button on its header, or double-click a step that holds a chord. The roll takes the place of the grid, with a thin strip of every row above it so you can see the rest of the block and click another sound to switch to it. Pitch runs up the keys at the left (click one to hear it) and time runs across in the same columns as the grid. Click empty space to add a note and keep the button down to drag out its length; click on the same beat at another pitch to build a chord. Drag a note to move it, drag either end to make it start earlier or later or to change its length, and drag the bars in the amber lane at the bottom to set how hard each note plays. A click selects a note, Shift-click adds more, and dragging with Shift or the right button selects everything inside the rectangle; moving, the arrow keys, Delete and the bar at the bottom act on the whole selection. Snap sets the grid the notes stick to (sixteenths, thirty-seconds, two kinds of triplets, or off), and holding Alt while you drag ignores it. Copy puts a small teal mark in the ruler right after the copied notes and Paste puts them there, moving the mark on, so pasting again lays the copies end to end; click the ruler to put the mark somewhere else. Repeat (Cmd+D) copies the selection directly after itself. The Grid button or Esc goes back to the step grid, which shows the same notes.
+
 ```
 +--------------------------------------------------------------------------+
 |  3. THE SONG                                                             |
@@ -128,6 +130,8 @@ Projects, sounds and blocks are plain JSON, so they are safe to keep in git or t
 | Z, X                   | Octave down, octave up                    |
 | Arrow keys             | Move the selected step, or change its note |
 | Delete                 | Remove the selected step                  |
+| Cmd+C, Cmd+X, Cmd+V    | Copy, cut, paste notes in the piano roll  |
+| Cmd+D, Cmd+A           | Repeat or select notes in the piano roll  |
 
 The full list is under Help, Keyboard Shortcuts.
 

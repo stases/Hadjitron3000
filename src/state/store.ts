@@ -382,6 +382,38 @@ export function addNote(patternId: string, channelId: string, note: NoteInit): s
   return id;
 }
 
+/**
+ * Add several notes to a row in one change. Returns the ids of those added; a note that starts outside the block
+ * range or on the start and pitch of another note of the row (or of one before it in the list) is left out.
+ */
+export function addNotes(patternId: string, channelId: string, notes: readonly NoteInit[]): string[] {
+  const { project } = useApp.getState();
+  const pattern = project.patterns.find((p) => p.id === patternId);
+  if (!pattern || !project.channels.some((c) => c.id === channelId)) return [];
+  const row = pattern.notes[channelId] ?? [];
+  const taken = new Set(row.map((n) => n.id));
+  const fresh = notes.filter(finiteNote).map((n) => {
+    let id: string;
+    do { id = uid('n'); } while (taken.has(id));
+    taken.add(id);
+    return { ...n, id };
+  });
+  const clean = cleanNotes([...row, ...fresh]);
+  const kept = new Set(clean.map((n) => n.id));
+  const added = fresh.flatMap((n) => (kept.has(n.id) ? [n.id] : []));
+  if (added.length > 0) {
+    edit((p) => { p.patterns.find((pattern) => pattern.id === patternId)!.notes[channelId] = clean; });
+  }
+  return added;
+}
+
+/** Give notes of a row new values, matched by id, all at once; nothing happens when two would share start and pitch. */
+export function updateNotes(patternId: string, channelId: string, notes: readonly Note[]): void {
+  if (!notes.every(finiteNote)) return;
+  const byId = new Map(notes.map((n) => [n.id, n]));
+  editNotes(patternId, channelId, [...byId.keys()], (n) => byId.get(n.id)!, 'update');
+}
+
 /** Take notes out of a row. */
 export function removeNotes(patternId: string, channelId: string, ids: readonly string[]): void {
   edit((p) => {

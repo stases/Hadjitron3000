@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from 'react';
-import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
+import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { tap } from '../../app/audio';
 import { addSound } from '../../app/commands';
 import { STEPS_PER_BAR, TICKS_PER_STEP, newNote } from '../../core/defaults';
@@ -17,11 +17,12 @@ import { Button, Icon, Led, Slider, Well, openMenu, setHint, useHint } from '../
 import { cx } from '../kit/cx';
 import { SpriteImage } from '../kit/Icon';
 import { getHeard, subscribeHeard, useHeard } from './playhead';
+import { openRoll } from './rollState';
 import type { Heard } from './playhead';
 import type { Cell, Cells } from './steps';
 import {
-  CELL_W, cellX, columnAt, fitNotes, lastNote, laneWidth, makeCell, maxLength, rememberNote, resizeCell, rowCells,
-  spanWidth, stepOver,
+  CELL_W, cellX, columnAt, fitNotes, lastNote, laneWidth, makeCell, maxLength, rememberNote, resizeCell, richCell,
+  rowCells, spanWidth, stepOver,
 } from './steps';
 
 const LEVEL = paramSpec(OUT, 'level') as FloatSpec;
@@ -40,7 +41,7 @@ const MARKER = {
 const HINTS = {
   empty: 'Click to add a step here; keep the button down and move sideways to add more.',
   step: 'Click to take this step out, drag up or down to change its note, scroll to make it louder or softer.',
-  chord: 'Click to take these notes out, drag up or down to move them all, scroll to make them louder or softer.',
+  rich: 'Double-click to open these notes in the piano roll. Drag up or down to move them, scroll to make them louder.',
   edge: 'Drag this edge sideways to make the step longer or shorter.',
 };
 
@@ -182,7 +183,7 @@ export function Grid() {
     if (!g) {
       const hit = hitTest(e.target, e.clientX);
       setHint(!hit || hit.column < 0 ? null : hit.start < 0 ? HINTS.empty : onEdge(hit) ? HINTS.edge
-        : hit.cells.get(hit.start)!.notes.length > 1 ? HINTS.chord : HINTS.step);
+        : richCell(hit.cells.get(hit.start)!) ? HINTS.rich : HINTS.step);
       return;
     }
     const pattern = currentPattern();
@@ -239,8 +240,11 @@ export function Grid() {
     if (g.created && (g.mode === 'press' || g.mode === 'pitch')) {
       addNote(patternId, g.channelId, lead);
     } else if (g.mode === 'press' && !g.moved) {
-      removeNotes(patternId, g.channelId, ids(g.original));
-      selectStep(null);
+      // A click selects what the grid cannot show whole, so that it is not lost by accident.
+      if (!richCell(g.original)) {
+        removeNotes(patternId, g.channelId, ids(g.original));
+        selectStep(null);
+      }
     } else if (g.mode === 'pitch') {
       moveNotes(patternId, g.channelId, ids(g.original), 0, g.shift);
     } else if (g.mode === 'length') {
@@ -263,6 +267,12 @@ export function Grid() {
         onPointerUp={finish}
         onLostPointerCapture={finish}
         onPointerLeave={() => !gesture.current && setHint(null)}
+        onDoubleClick={(e) => {
+          // The pointer was captured by the scroller, so the event's target is the scroller itself.
+          const hit = hitTest(document.elementFromPoint(e.clientX, e.clientY), e.clientX);
+          const cell = hit && hit.start >= 0 ? hit.cells.get(hit.start)! : null;
+          if (cell && richCell(cell)) openRoll(hit!.channelId, ids(cell));
+        }}
         onContextMenu={(e) => {
           if ((e.target as Element).closest('.h-track-lane')) e.preventDefault();
         }}
@@ -298,7 +308,7 @@ export function Grid() {
 }
 
 /** When the play position runs off the visible part of the lanes, turn the page to the bar it is in. */
-function followPage(el: HTMLElement, heard: Heard): void {
+export function followPage(el: HTMLElement, heard: Heard): void {
   const head = el.querySelector<HTMLElement>('.h-track-corner')?.offsetWidth ?? 0;
   const x = cellX(heard.step) + LANE_PAD;
   const view = el.clientWidth - head;
@@ -306,7 +316,8 @@ function followPage(el: HTMLElement, heard: Heard): void {
   el.scrollLeft = cellX(heard.step - (heard.step % STEPS_PER_BAR));
 }
 
-const Ruler = memo(function Ruler({ columns }: { columns: number }) {
+/** Bar numbers and beat ticks over the lanes, the play marker, and whatever marks a view adds. */
+export const Ruler = memo(function Ruler({ columns, children }: { columns: number; children?: ReactNode }) {
   return (
     <div className="h-track-ruler">
       <div className="h-track-corner" />
@@ -320,6 +331,7 @@ const Ruler = memo(function Ruler({ columns }: { columns: number }) {
           <span className="h-track-marker">
             <SpriteImage sprite={MARKER} />
           </span>
+          {children}
         </div>
       </div>
     </div>
@@ -431,6 +443,14 @@ const Header = memo(function Header({ channel, index, active }: { channel: Chann
       <span className="h-track-name" onDoubleClick={() => openInFactory(id)} {...nameHint.props}>
         {sound.name}
       </span>
+      <Button
+        small
+        square
+        onClick={() => openRoll(id)}
+        hint={`Open ${sound.name} in the piano roll, for chords and notes between the steps.`}
+      >
+        <Icon name="roll" />
+      </Button>
       <Button
         small
         pressed={channel.mute}

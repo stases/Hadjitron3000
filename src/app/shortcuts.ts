@@ -8,6 +8,7 @@ export function modKey(key: string, shift = false): string {
 }
 
 const SHIFT = IS_MAC ? '⇧' : 'Shift+';
+const ALT = IS_MAC ? '⌥' : 'Alt';
 
 export const SHORTCUT_GROUPS: { label: string; keys: [string, string][] }[] = [
   {
@@ -40,6 +41,22 @@ export const SHORTCUT_GROUPS: { label: string; keys: [string, string][] }[] = [
       [`${SHIFT}↑ ${SHIFT}↓`, 'Note up or down an octave'],
       ['Delete, Backspace', 'Remove the step'],
       ['Esc', 'Clear the selection'],
+    ],
+  },
+  {
+    label: 'Track, in the piano roll',
+    keys: [
+      [modKey('A'), 'Select all notes of the row'],
+      [`${modKey('C')}, ${modKey('X')}`, 'Copy, cut the selected notes'],
+      [modKey('V'), 'Paste at the paste mark in the ruler'],
+      [modKey('D'), 'Repeat the selected notes right after themselves'],
+      ['← →', 'Move the selected notes by the snap'],
+      [`${SHIFT}← ${SHIFT}→`, 'Move the selected notes by a bar'],
+      ['↑ ↓', 'Selected notes up or down a semitone'],
+      [`${SHIFT}↑ ${SHIFT}↓`, 'Selected notes up or down an octave'],
+      ['Delete, Backspace', 'Remove the selected notes'],
+      ['Esc', 'Clear the selection, then back to the grid'],
+      [`${ALT} while dragging`, 'Place notes without snapping'],
     ],
   },
 ];

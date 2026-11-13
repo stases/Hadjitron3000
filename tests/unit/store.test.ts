@@ -388,6 +388,44 @@ test('an edit that would put two notes of a row on the same start and pitch does
   expect(row(a).map((n) => [n.start, n.note])).toEqual([[24, 60], [24, 64], [48, 60]]);
 });
 
+test('several notes are added in one change, leaving out those outside the range or on a taken start and pitch', () => {
+  const a = app.addChannel(newSound());
+  const p = state().patternId;
+  const x = put(p, a, 0)!;
+  const history = state().past.length;
+  const added = app.addNotes(p, a, [
+    newNote(0, 60), newNote(0, 64), newNote(12, 60), newNote(12, 60), newNote(MAX_TICKS), { ...newNote(), len: NaN },
+  ]);
+  expect(added).toHaveLength(2);
+  expect(state().past).toHaveLength(history + 1);
+  expect(pattern().notes[a].map((n) => [n.id, n.start, n.note])).toEqual([
+    [x, 0, 60], [added[0], 0, 64], [added[1], 12, 60],
+  ]);
+  expect(app.addNotes(p, a, [newNote(0, 60)])).toEqual([]);
+  expect(app.addNotes(p, 'missing', [newNote(48)])).toEqual([]);
+  expect(app.addNotes('missing', a, [newNote(48)])).toEqual([]);
+  expect(state().past).toHaveLength(history + 1);
+});
+
+test('notes take new values by id together, in range, and not at all when two would share start and pitch', () => {
+  const a = app.addChannel(newSound());
+  const p = state().patternId;
+  const [x, y, z] = [[0, 60], [0, 64], [36, 62]].map(([start, note]) => app.addNote(p, a, newNote(start, note))!);
+  const at = (id: string) => pattern().notes[a].find((n) => n.id === id)!;
+  app.updateNotes(p, a, [{ ...at(x), start: 50, len: 12.4 }, { ...at(y), start: -5, note: 200, vel: 3 }]);
+  expect(row(a)).toEqual([
+    { start: 0, len: 24, note: MAX_NOTE, vel: 1 }, { start: 36, len: 24, note: 62, vel: 0.8 },
+    { start: 50, len: 12, note: 60, vel: 0.8 },
+  ]);
+  const before = state();
+  app.updateNotes(p, a, [{ ...at(x), start: 36, note: 62 }]);
+  app.updateNotes(p, a, [{ ...at(z), len: Infinity }]);
+  app.updateNotes(p, a, [{ ...at(z), id: 'missing' }]);
+  expect(state()).toBe(before);
+  app.updateNotes(p, a, [{ ...at(x), start: 36 }, { ...at(z), start: 50 }]);
+  expect(row(a).map((n) => [n.start, n.note])).toEqual([[0, MAX_NOTE], [36, 60], [50, 62]]);
+});
+
 test('pattern length is bounded while hidden notes survive shortening', () => {
   const a = app.addChannel(newSound());
   const p = state().patternId;

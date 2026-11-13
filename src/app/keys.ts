@@ -1,10 +1,15 @@
-// The one global keyboard handler: menu shortcuts, the computer-keyboard piano and step entry.
+// The one global keyboard handler: menu shortcuts, the computer-keyboard piano, step entry and the piano roll.
 
 import { STEPS_PER_BAR, TICKS_PER_STEP, newNote } from '../core/defaults';
 import { KEY_SEMITONES, MAX_NOTE, MIN_NOTE } from '../core/notes';
 import {
   addNote, moveNotes, redo, removeNotes, selectStep, setOctave, setPlaying, setView, undo, useApp,
 } from '../state/store';
+import { BAR_TICKS } from '../ui/track/roll';
+import {
+  closeRoll, copySelection, cutSelection, deleteSelection, nudgeSelection, paste, repeatSelection, selectAll,
+  selectNotes, useRoll,
+} from '../ui/track/rollState';
 import { rowCells } from '../ui/track/steps';
 import { noteOff, noteOn, tap } from './audio';
 import { exportAudio, newProject, openProject, saveProject, saveProjectAs } from './commands';
@@ -36,6 +41,43 @@ function command(e: KeyboardEvent): (() => unknown) | null {
   if (e.code === 'Digit2') return () => setView('track');
   if (e.code === 'Digit3') return () => setView('song');
   return null;
+}
+
+const rollOpen = () => useApp.getState().view === 'track' && useRoll.getState().open;
+
+/** Cmd/Ctrl with A, C, X, V or D in the piano roll. */
+function rollCommand(e: KeyboardEvent): (() => unknown) | null {
+  if (!rollOpen() || e.shiftKey) return null;
+  const commands: Record<string, () => unknown> = {
+    a: selectAll, c: copySelection, x: cutSelection, v: paste, d: repeatSelection,
+  };
+  return commands[e.key.toLowerCase()] ?? null;
+}
+
+/** Arrows, Delete and Escape in the piano roll. True when the key was used. */
+function rollKey(e: KeyboardEvent): boolean {
+  if (!rollOpen()) return false;
+  const { snap, selected } = useRoll.getState();
+  const octave = e.shiftKey ? 12 : 1;
+  switch (e.key) {
+    case 'ArrowLeft':
+    case 'ArrowRight':
+      nudgeSelection((e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? BAR_TICKS : snap), 0);
+      return true;
+    case 'ArrowUp':
+    case 'ArrowDown':
+      nudgeSelection(0, (e.key === 'ArrowDown' ? -1 : 1) * octave);
+      return true;
+    case 'Backspace':
+    case 'Delete':
+      deleteSelection();
+      return true;
+    case 'Escape':
+      if (selected.length > 0) selectNotes([]);
+      else closeRoll();
+      return true;
+  }
+  return false;
 }
 
 /** Arrows, Delete and Escape on the selected step of the Track view. True when the key was used. */
@@ -109,7 +151,7 @@ function onKeyDown(e: KeyboardEvent): void {
   if (e.defaultPrevented || typing(e.target) || busy()) return;
   const mod = IS_MAC ? e.metaKey : e.ctrlKey;
   if (mod && !e.altKey) {
-    const run = command(e);
+    const run = command(e) ?? rollCommand(e);
     if (!run) return;
     e.preventDefault();
     if (!e.repeat) void run();
@@ -123,7 +165,7 @@ function onKeyDown(e: KeyboardEvent): void {
     if (!e.repeat) setOctave(useApp.getState().octave + (key === 'z' ? -1 : 1));
   } else if (Object.hasOwn(KEY_SEMITONES, key)) {
     pianoKey(e, KEY_SEMITONES[key]);
-  } else if (!stepKey(e)) {
+  } else if (!rollKey(e) && !stepKey(e)) {
     return;
   }
   e.preventDefault();

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { STEPS_PER_BAR } from '../core/defaults';
-import { locate } from '../core/sequencer';
+import { heardAt, songBars } from '../core/sequencer';
 import { platform } from '../platform';
 import { playScope, setView, useApp } from '../state/store';
 import type { AppState, View } from '../state/store';
@@ -50,18 +50,15 @@ function useSampleRate(): number {
 
 /** Where the transport is: the pattern and bar.beat while playing, otherwise what Play would play. */
 function playText(state: AppState): string {
-  const step = state.playing ? position() : -1;
-  const at = locate(state.project, playScope(state), Math.max(0, Math.floor(step)));
-  if (!at) return 'Song is empty';
-  if (step < 0) {
-    const { name, bars } = at.pattern;
-    return state.scope === 'song'
-      ? `Song · ${state.project.song.length} patterns`
-      : `Pattern ${name} · ${bars} ${bars === 1 ? 'bar' : 'bars'}`;
-  }
-  const bar = Math.floor(at.step / STEPS_PER_BAR) + 1;
-  const beat = Math.floor((at.step % STEPS_PER_BAR) / 4) + 1;
-  return `Pattern ${at.pattern.name} ${bar}.${beat}`;
+  const { project, scope } = state;
+  const bars = (n: number) => `${n} ${n === 1 ? 'bar' : 'bars'}`;
+  const pattern = project.patterns.find((p) => p.id === state.patternId)!;
+  if (scope === 'song' && project.song.length === 0) return 'Song is empty';
+  if (!state.playing) return scope === 'song' ? `Song · ${bars(songBars(project))}` : `Block ${pattern.name} · ${bars(pattern.bars)}`;
+  const step = Math.max(0, Math.floor(position()));
+  const at = scope === 'song' ? step % (songBars(project) * STEPS_PER_BAR) : heardAt(project, playScope(state), step)[0].step;
+  const place = `${Math.floor(at / STEPS_PER_BAR) + 1}.${Math.floor((at % STEPS_PER_BAR) / 4) + 1}`;
+  return scope === 'song' ? `Song ${place}` : `Block ${pattern.name} ${place}`;
 }
 
 function Status() {

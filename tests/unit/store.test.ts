@@ -374,33 +374,6 @@ test('patterns use unused names, new patterns use current bars, and duplicates c
   expect(state()).toBe(before);
 });
 
-test('removing patterns repairs selection, removes every song occurrence, and preserves the last pattern', () => {
-  const first = state().patternId;
-  const second = app.addPattern()!;
-  const third = app.addPattern()!;
-  app.setSong([first, second, third, second]);
-  app.selectPattern(second);
-  app.removePattern(second);
-  expect(state().patternId).toBe(third);
-  expect(project().song).toEqual([first, third]);
-  app.removePattern(third);
-  expect(state().patternId).toBe(first);
-  const before = state();
-  app.removePattern(first);
-  expect(state()).toBe(before);
-});
-
-test('songs filter invalid ids before limiting to 64 entries and permit repeats and empty songs', () => {
-  const first = state().patternId;
-  const second = app.addPattern()!;
-  app.setSong(['missing', ...Array<string>(70).fill(second), first]);
-  expect(project().song).toEqual(Array<string>(64).fill(second));
-  app.setSong([first, second, first]);
-  expect(project().song).toEqual([first, second, first]);
-  app.setSong([]);
-  expect(project().song).toEqual([]);
-});
-
 test('missing entities and invalid grid indices do nothing and create no history', () => {
   const a = app.addChannel(newSound());
   const p = state().patternId;
@@ -466,7 +439,6 @@ test('unchanged values and equivalent replacement objects preserve the project a
   app.patchStep(p, a, 0, { note: 60 });
   app.setStep(p, a, 1, null);
   app.setPatternBars(p, 1);
-  app.setSong([...project().song]);
   app.replaceSound(a, structuredClone(sound(a)));
   expect(state()).toBe(before);
   app.clearPattern(p);

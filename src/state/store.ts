@@ -368,7 +368,7 @@ export function removePattern(patternId: string): void {
   const neighbour = state.project.patterns[index + 1] ?? state.project.patterns[index - 1];
   edit((p) => {
     p.patterns.splice(index, 1);
-    if (p.song.includes(patternId)) p.song = p.song.filter((id) => id !== patternId);
+    p.song = p.song.filter((placement) => placement.pattern !== patternId);
   }, undefined, state.patternId === patternId ? { patternId: neighbour.id, step: null } : {});
 }
 
@@ -377,10 +377,6 @@ export function clearPattern(patternId: string): void {
     const pattern = p.patterns.find((pattern) => pattern.id === patternId);
     if (pattern) pattern.cells = {};
   });
-}
-
-export function setSong(patternIds: string[]): void {
-  edit((p) => { p.song = patternIds.filter((id) => p.patterns.some((pattern) => pattern.id === id)).slice(0, 64); });
 }
 
 export function undo(): void {

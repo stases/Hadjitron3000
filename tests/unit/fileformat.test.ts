@@ -40,10 +40,13 @@ function project(): Project {
       color: 5, mute: false, solo: true },
   ];
   result.patterns = [
-    { id: 'a', name: 'A', bars: 1, cells: { c1: { 0: { note: 60, vel: 0.7, len: 1 } } } },
-    { id: 'b', name: 'B', bars: 2, cells: { c2: { 17: { note: 65, vel: 0.5, len: 3 } } } },
+    { id: 'a', name: 'A', color: 3, bars: 1, cells: { c1: { 0: { note: 60, vel: 0.7, len: 1 } } } },
+    { id: 'b', name: 'B', color: 0, bars: 2, cells: { c2: { 17: { note: 65, vel: 0.5, len: 3 } } } },
   ];
-  result.song = ['a', 'b', 'a'];
+  result.song = [
+    { id: 's1', pattern: 'a', lane: 0, bar: 0, bars: 1 },
+    { id: 's2', pattern: 'b', lane: 2, bar: 0, bars: 4 },
+  ];
   result.samples = { kick: { name: 'kick.wav', bytes: new Uint8Array([0, 127, 128, 255]) } };
   return result;
 }
@@ -370,14 +373,18 @@ test('normalizes steps, drops invalid indices and drops cells for missing channe
 
 test.each([[], undefined])('a project without patterns receives an empty pattern A: %s', (patterns) => {
   const parsed = parseProject(projectFile({ ...emptyProject(), patterns, song: ['missing'] }));
-  expect(parsed.patterns).toEqual([{ id: expect.any(String), name: 'A', bars: 1, cells: {} }]);
+  expect(parsed.patterns).toEqual([{ id: expect.any(String), name: 'A', color: 0, bars: 1, cells: {} }]);
   expect(parsed.patterns[0].id).not.toBe('');
   expect(parsed.song).toEqual([]);
 });
 
-test('song keeps only existing pattern ids, in order and including repetitions', () => {
-  const parsed = parseProject(projectFile({ ...project(), song: ['b', 'missing', 1, null, 'a', 'b'] }));
-  expect(parsed.song).toEqual(['b', 'a', 'b']);
+test('a version 1 song, a list of pattern ids, becomes placements one after another in the first lane', () => {
+  const parsed = parseProject(projectFile({ ...project(), song: ['b', 'missing', 'a', 'b'] }));
+  expect(parsed.song).toEqual([
+    { id: expect.any(String), pattern: 'b', lane: 0, bar: 0, bars: 2 },
+    { id: expect.any(String), pattern: 'a', lane: 0, bar: 2, bars: 1 },
+    { id: expect.any(String), pattern: 'b', lane: 0, bar: 3, bars: 2 },
+  ]);
 });
 
 test('unknown fields are stripped at every level of the returned document', () => {
@@ -408,7 +415,7 @@ test('dictionary ids such as __proto__ survive without prototype lookup or mutat
   original.patterns = [{ ...newPattern('A'), cells: Object.fromEntries([
     ['__proto__', { 0: { note: 60, vel: 1, len: 1 } }],
   ]) }];
-  original.song = [original.patterns[0].id];
+  original.song = [{ id: 's1', pattern: original.patterns[0].id, lane: 0, bar: 0, bars: 1 }];
   expect(parseProject(serializeProject(original))).toStrictEqual(original);
   const samples: Record<string, SampleData> = Object.create({ kick: { name: 'inherited', bytes: new Uint8Array() } });
   expect(JSON.parse(serializeSound(sound(), samples)).samples).toEqual({});

@@ -1,4 +1,4 @@
-// Fresh documents: ids, an empty sound, an empty pattern, an empty project.
+// Fresh documents: ids, an empty sound, an empty block, an empty project.
 
 import { AMP, MODULES, OUT } from './modules';
 import { defaultParams } from './params';
@@ -7,7 +7,10 @@ import type { ModInst, ModuleInst, Pattern, Project, Sound, Step } from './types
 export const STEPS_PER_BAR = 16;
 export const MAX_BARS = 8;
 export const CHANNEL_COLORS = 8;
-export const PATTERN_NAMES = 'ABCDEFGH';
+export const SONG_LANES = 4;
+export const MAX_SONG_BARS = 256;
+/** Default block names; a project holds at most this many blocks. */
+export const PATTERN_NAMES = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 /** A short random id, e.g. "c_k3f9x2a1". */
 export function uid(prefix: string): string {
@@ -37,8 +40,8 @@ export function newStep(note = 60): Step {
   return { note, vel: 0.8, len: 1 };
 }
 
-export function newPattern(name: string): Pattern {
-  return { id: uid('p'), name, bars: 1, cells: {} };
+export function newPattern(name: string, color = 0): Pattern {
+  return { id: uid('p'), name, color, bars: 1, cells: {} };
 }
 
 export function emptyProject(): Project {
@@ -50,7 +53,7 @@ export function emptyProject(): Project {
     master: 0,
     channels: [],
     patterns: [pattern],
-    song: [pattern.id],
+    song: [],
     samples: {},
   };
 }

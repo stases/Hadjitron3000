@@ -36,7 +36,7 @@ test('the starter and demo projects survive a save and a load unchanged', () => 
 test('the demo song plays notes on every channel', () => {
   const demo = demoProject();
   const events = eventsBetween(demo, { kind: 'song' }, 0, loopSteps(demo, { kind: 'song' }));
-  expect(loopSteps(demo, { kind: 'song' })).toBe(128);
+  expect(loopSteps(demo, { kind: 'song' })).toBe(256);
   for (const channel of demo.channels) {
     expect(events.some((e) => e.channelId === channel.id), channel.sound.name).toBe(true);
   }

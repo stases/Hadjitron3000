@@ -1,13 +1,13 @@
-import { CHANNEL_COLORS, MAX_BARS, newPattern, uid } from './defaults';
+import { CHANNEL_COLORS, MAX_BARS, MAX_SONG_BARS, SONG_LANES, newPattern, uid } from './defaults';
 import { AMP, MODULES, OUT, paramSpec } from './modules';
 import type { ModuleDef, ModuleKind } from './modules';
 import { MAX_NOTE, MIN_NOTE } from './notes';
 import { coerce } from './params';
-import type { ModInst, ModuleInst, Params, Pattern, Project, SampleData, Sound, Step } from './types';
+import type { ModInst, ModuleInst, Params, Pattern, Placement, Project, SampleData, Sound, Step } from './types';
 
 export const SOUND_EXT = 'h3s';
 export const PROJECT_EXT = 'h3k';
-export const FORMAT_VERSION = 1;
+export const FORMAT_VERSION = 2;
 
 /** Thrown for any file the app cannot read. Its message is shown to the user as is. */
 export class FormatError extends Error {}
@@ -188,6 +188,7 @@ function readPattern(value: unknown, ids: Set<string>, channels: Set<string>): P
   return {
     id: uniqueId(raw.id, ids, 'pattern'),
     name: typeof raw.name === 'string' ? raw.name : '',
+    color: Math.round(number(raw.color, 0, 0, CHANNEL_COLORS - 1)),
     bars: Math.round(number(raw.bars, 1, 1, MAX_BARS)),
     cells: Object.fromEntries(Object.entries(cells).filter(([id]) => channels.has(id)).map(([id, values]) => {
       const steps = Object.entries(object(values, `cells for channel ${id}`)).flatMap(([index, value]) => {
@@ -204,6 +205,31 @@ function readPattern(value: unknown, ids: Set<string>, channels: Set<string>): P
       return [id, Object.fromEntries(steps)];
     })),
   };
+}
+
+/**
+ * The song timeline. Version 1 files hold a list of pattern ids played one after another; they become
+ * placements in the first lane. Placements that name no pattern, lie outside the timeline or overlap
+ * an earlier one in their lane are dropped.
+ */
+function readSong(value: unknown, patterns: Pattern[]): Placement[] {
+  const song: Placement[] = [];
+  const ids = new Set<string>();
+  let end = 0;
+  for (const entry of array(value === undefined ? [] : value, 'song')) {
+    const raw = typeof entry === 'string' ? { pattern: entry, lane: 0, bar: end } : object(entry, 'song entry');
+    const pattern = patterns.find((p) => p.id === raw.pattern);
+    if (!pattern) continue;
+    const lane = Math.round(number(raw.lane, 0, 0, SONG_LANES - 1));
+    const bar = Math.round(number(raw.bar, 0, 0, MAX_SONG_BARS - 1));
+    const bars = Math.min(Math.round(number(raw.bars, pattern.bars, 1, MAX_SONG_BARS)), MAX_SONG_BARS - bar);
+    if (song.some((p) => p.lane === lane && bar < p.bar + p.bars && p.bar < bar + bars)) continue;
+    const id = typeof raw.id === 'string' && raw.id !== '' && !ids.has(raw.id) ? raw.id : uid('s');
+    ids.add(id);
+    song.push({ id, pattern: pattern.id, lane, bar, bars });
+    if (lane === 0) end = Math.max(end, bar + bars);
+  }
+  return song;
 }
 
 export function parseProject(text: string): Project {
@@ -240,8 +266,7 @@ export function readProject(value: unknown, samples: Record<string, SampleData>)
     master: number(raw.master, 0, -48, 6),
     channels,
     patterns,
-    song: array(raw.song === undefined ? [] : raw.song, 'song')
-      .filter((id): id is string => typeof id === 'string' && patternIds.has(id)),
+    song: readSong(raw.song, patterns),
     samples,
   };
 }

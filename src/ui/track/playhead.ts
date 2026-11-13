@@ -3,13 +3,13 @@
 
 import { useEffect, useSyncExternalStore } from 'react';
 import { position } from '../../app/audio';
-import { locate } from '../../core/sequencer';
+import { heardAt } from '../../core/sequencer';
 import { playScope, useApp } from '../../state/store';
 
+/** The step of the block on screen that is being heard. */
 export interface Heard {
   patternId: string;
   step: number;
-  index: number; // position in the song (0 when a pattern loops)
 }
 
 let heard: Heard | null = null;
@@ -23,7 +23,7 @@ export function subscribeHeard(listener: () => void): () => void {
 }
 
 function publish(next: Heard | null): void {
-  if (next?.patternId === heard?.patternId && next?.step === heard?.step && next?.index === heard?.index) return;
+  if (next?.patternId === heard?.patternId && next?.step === heard?.step) return;
   heard = next;
   listeners.forEach((listener) => listener());
 }
@@ -41,8 +41,9 @@ export function usePlayhead(): void {
     let frame = requestAnimationFrame(function poll() {
       const pos = position();
       const state = useApp.getState();
-      const at = pos < 0 ? null : locate(state.project, playScope(state), Math.floor(pos));
-      publish(at && { patternId: at.pattern.id, step: at.step, index: at.index });
+      const at = pos < 0 ? undefined
+        : heardAt(state.project, playScope(state), Math.floor(pos)).find((h) => h.pattern.id === state.patternId);
+      publish(at ? { patternId: at.pattern.id, step: at.step } : null);
       frame = requestAnimationFrame(poll);
     });
     return () => {

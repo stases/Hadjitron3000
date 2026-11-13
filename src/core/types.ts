@@ -47,11 +47,31 @@ export interface Step {
   len: number; // length in steps, >= 1
 }
 
+/** A block: a few bars of steps for any of the project's sounds. The Track edits one, the Song arranges them. */
 export interface Pattern {
   id: string;
   name: string;
+  color: number; // index into the colour palette, 0..7
   bars: number; // 1..8, sixteen steps per bar
   cells: Record<string, Record<number, Step>>; // channel id -> step index -> step
+}
+
+/** A block placed on the song timeline. Blocks in different lanes play together. */
+export interface Placement {
+  id: string;
+  pattern: string; // pattern id
+  lane: number; // 0..SONG_LANES-1; placements in one lane never overlap
+  bar: number; // first bar, from 0
+  bars: number; // length on the timeline: a shorter block repeats, a longer one is cut off
+}
+
+/** A block on its own, outside a project: its steps together with the sounds that play them. */
+export interface Block {
+  name: string;
+  color: number;
+  bars: number;
+  tracks: { sound: Sound; steps: Record<number, Step> }[];
+  samples: Record<string, SampleData>; // the samples its sounds use
 }
 
 /** An imported audio file, kept as its original encoded bytes. */
@@ -67,11 +87,11 @@ export interface Project {
   master: number; // dB
   channels: Channel[];
   patterns: Pattern[];
-  song: string[]; // pattern ids in play order
+  song: Placement[];
   samples: Record<string, SampleData>; // keyed by sample id (content hash)
 }
 
-/** What the transport plays: one pattern on repeat, or the song chain on repeat. */
+/** What the transport plays: one block on repeat, or the song on repeat. */
 export type PlayScope = { kind: 'pattern'; patternId: string } | { kind: 'song' };
 
 /** A note with absolute timing, as produced by the sequencer and consumed by the engine. */

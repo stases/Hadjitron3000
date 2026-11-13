@@ -2,7 +2,7 @@
 // renderer both call this and hand the result to the engine.
 
 import { STEPS_PER_BAR } from './defaults';
-import type { NoteEvent, Pattern, PlayScope, Project } from './types';
+import type { NoteEvent, Pattern, Placement, PlayScope, Project } from './types';
 
 /** Length of one step (a sixteenth note) in seconds. */
 export function stepSeconds(bpm: number): number {
@@ -19,33 +19,41 @@ export function patternSteps(pattern: Pattern): number {
   return pattern.bars * STEPS_PER_BAR;
 }
 
-/** The patterns one pass of the scope plays, in order. */
-export function scopePatterns(project: Project, scope: PlayScope): Pattern[] {
-  const ids = scope.kind === 'song' ? project.song : [scope.patternId];
-  return ids.flatMap((id) => project.patterns.find((p) => p.id === id) ?? []);
+/** Length of the song in bars: the end of its last placement. */
+export function songBars(project: Project): number {
+  return project.song.reduce((end, p) => Math.max(end, p.bar + p.bars), 0);
 }
 
 /** Number of steps in one pass of the scope. */
 export function loopSteps(project: Project, scope: PlayScope): number {
-  return scopePatterns(project, scope).reduce((n, p) => n + patternSteps(p), 0);
+  if (scope.kind === 'song') return songBars(project) * STEPS_PER_BAR;
+  const pattern = project.patterns.find((p) => p.id === scope.patternId);
+  return pattern ? patternSteps(pattern) : 0;
+}
+
+/** A block being heard: which of its steps, and the placement that put it there (null when a block loops alone). */
+export interface Heard {
+  pattern: Pattern;
+  step: number;
+  placement: Placement | null;
 }
 
 /**
- * Where an absolute step falls. Absolute steps count from the start of playback and
- * run on past the end of the scope, which loops. `index` is the position in the
- * scope's pattern list. Null when the scope has nothing to play.
+ * The blocks heard at an absolute step. Absolute steps count from the start of playback and run on
+ * past the end of the scope, which loops. Empty when the scope has nothing to play there.
  */
-export function locate(project: Project, scope: PlayScope, step: number): { pattern: Pattern; index: number; step: number } | null {
-  const patterns = scopePatterns(project, scope);
-  const total = patterns.reduce((n, p) => n + patternSteps(p), 0);
-  if (total === 0) return null;
-  let rest = ((step % total) + total) % total;
-  for (let index = 0; index < patterns.length; index++) {
-    const n = patternSteps(patterns[index]);
-    if (rest < n) return { pattern: patterns[index], index, step: rest };
-    rest -= n;
-  }
-  return null;
+export function heardAt(project: Project, scope: PlayScope, step: number): Heard[] {
+  const total = loopSteps(project, scope);
+  if (total === 0) return [];
+  const at = ((step % total) + total) % total;
+  const find = (id: string) => project.patterns.find((p) => p.id === id);
+  if (scope.kind === 'pattern') return [{ pattern: find(scope.patternId)!, step: at, placement: null }];
+  return project.song.flatMap((placement) => {
+    const local = at - placement.bar * STEPS_PER_BAR;
+    const pattern = find(placement.pattern);
+    if (!pattern || local < 0 || local >= placement.bars * STEPS_PER_BAR) return [];
+    return [{ pattern, step: local % patternSteps(pattern), placement }];
+  });
 }
 
 /**
@@ -56,12 +64,12 @@ export function eventsBetween(project: Project, scope: PlayScope, from: number, 
   const events: NoteEvent[] = [];
   const s = stepSeconds(project.bpm);
   for (let abs = from; abs < to; abs++) {
-    const at = locate(project, scope, abs);
-    if (!at) break;
     const time = stepTime(abs, project.bpm, project.swing);
-    for (const channel of project.channels) {
-      const cell = at.pattern.cells[channel.id]?.[at.step];
-      if (cell) events.push({ channelId: channel.id, time, dur: cell.len * s, note: cell.note, vel: cell.vel });
+    for (const { pattern, step } of heardAt(project, scope, abs)) {
+      for (const channel of project.channels) {
+        const cell = pattern.cells[channel.id]?.[step];
+        if (cell) events.push({ channelId: channel.id, time, dur: cell.len * s, note: cell.note, vel: cell.vel });
+      }
     }
   }
   return events;

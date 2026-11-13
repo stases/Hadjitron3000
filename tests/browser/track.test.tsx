@@ -8,7 +8,7 @@ import { addSound, dropFiles } from '../../src/app/commands';
 import { OUT, paramSpec } from '../../src/core/modules';
 import type { FloatSpec } from '../../src/core/modules';
 import { fromNorm, toNorm } from '../../src/core/params';
-import { demoProject } from '../../src/presets/projects';
+import { loopProject as demoProject } from '../support/loopProject';
 import {
   openProject, selectStep, setPatternBars, setPlaying, setScope, undo, useApp,
 } from '../../src/state/store';
@@ -217,20 +217,6 @@ test('the pattern bar selects, adds, copies, clears and deletes patterns', async
   expect(state().project.patterns).toHaveLength(1);
   expect(button('Delete').disabled).toBe(true);
   expect(add.disabled).toBe(false);
-});
-
-test('the song strip appends the current pattern and removes a clicked entry', async () => {
-  const ids = state().project.patterns.map((p) => p.id);
-  const slots = () => [...host.querySelectorAll<HTMLButtonElement>('.h-track-slot button')];
-  expect(slots().map((b) => b.textContent)).toEqual(['A', 'A', 'B', 'A']);
-  await click(button('B'));
-  await click(plusButtons()[1]);
-  expect(state().project.song).toEqual([ids[0], ids[0], ids[1], ids[0], ids[1]]);
-  await click(slots()[1]);
-  expect(state().project.song).toEqual([ids[0], ids[1], ids[0], ids[1]]);
-  for (let i = 0; i < 4; i++) await click(slots()[0]);
-  expect(state().project.song).toEqual([]);
-  expect(host.querySelector('.h-track-song')!.textContent).toContain('+ adds pattern B');
 });
 
 test('the inspector edits the selected step', async () => {

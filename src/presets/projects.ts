@@ -59,6 +59,7 @@ export function demoProject(): Project {
     name: 'Welcome',
     bpm: 126,
     swing: 0.3,
+    master: -3,
     channels: chans,
     patterns: [a, b],
     song: [a.id, a.id, b.id, a.id],

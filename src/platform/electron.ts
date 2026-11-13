@@ -9,6 +9,7 @@ export function electronPlatform(bridge: Hadji): Platform {
     library: bridge.library,
     blocks: bridge.blocks,
     window: bridge.frame === 'native' ? null : bridge.window,
+    updates: bridge.updates,
     setDocument: bridge.setDocument,
     onCloseRequest: bridge.onCloseRequest,
     onOpenFile: bridge.onOpenFile,

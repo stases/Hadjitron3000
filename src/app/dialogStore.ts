@@ -9,7 +9,8 @@ export type DialogKind =
   | { kind: 'rename'; patternId: string }
   | { kind: 'export' }
   | { kind: 'about' }
-  | { kind: 'shortcuts' };
+  | { kind: 'shortcuts' }
+  | { kind: 'update' };
 
 export interface Message {
   id: number;

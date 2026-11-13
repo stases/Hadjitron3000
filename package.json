@@ -15,6 +15,7 @@
     "test": "vitest run --project unit",
     "test:browser": "vitest run --project browser",
     "test:e2e": "playwright test",
+    "app": "node scripts/install-app.mjs",
     "dist": "vite build && electron-builder --mac"
   },
   "devDependencies": {

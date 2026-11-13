@@ -26,33 +26,27 @@ Hadjitron 3000 is a small music machine for electronic and experimental music. Y
 +--------------------------------------------------------------------------+
 ```
 
-You need Node.js 22 or newer. If you use Homebrew:
+You need Node.js 22 or newer and the GitHub command line tool. If you use Homebrew:
 
 ```
-brew install node
+brew install node gh
+gh auth login
 ```
 
-Then fetch the program and start it:
+Answer yes when `gh auth login` asks whether to log in Git with your GitHub credentials; that is how the program later fetches its updates. Then fetch the program and put it in your Applications folder:
 
 ```
-git clone git@github.com:stases/Hadjitron3000.git
+gh repo clone stases/Hadjitron3000
 cd Hadjitron3000
 npm install
-npm start
+npm run app
 ```
 
-The first `npm install` downloads Electron and takes a minute or two. `npm start` builds the program and opens its window. A demo called Welcome is loaded the first time; press Space to hear it.
+The first `npm install` downloads Electron and takes a minute or two. `npm run app` builds Hadjitron 3000.app and copies it to Applications, from where it opens like any other program: from Launchpad, Spotlight or the Dock. A demo called Welcome is loaded the first time; press Space to hear it.
 
-To get a real application you can keep in the Applications folder:
+The application remembers the Hadjitron3000 folder it was built from, so leave that folder where it is. To update, choose Check for Updates in the Help menu. It asks GitHub what is new and lists the changes; Update and Restart fetches them into that folder, builds the new application, offers to save your project and opens the new version in place of the old one. Your sounds and blocks in Documents/Hadjitron 3000 and your saved projects are never touched. If something goes wrong on the way, the old version keeps working and the full story is in `update.log` in `~/Library/Application Support/Hadjitron 3000`.
 
-```
-npm run dist
-open release
-```
-
-This writes a disk image to the `release` folder. Open it and drag Hadjitron 3000 to Applications. The application is not signed by Apple. A copy you built yourself opens normally; a copy that was downloaded or sent to you has to be opened once with a right-click and Open.
-
-To update later, run `git pull` and `npm install`, then start it again.
+The application is not signed by Apple. A copy you built yourself opens normally; a copy that was downloaded or sent to you has to be opened once with a right-click and Open. `npm run dist` makes a disk image in the `release` folder for giving the program to someone else.
 
 ```
 +--------------------------------------------------------------------------+
@@ -139,14 +133,15 @@ The full list is under Help, Keyboard Shortcuts.
 
 | Command                | What it does                                              |
 | ---------------------- | --------------------------------------------------------- |
-| `npm start`            | Build and open the program                                |
+| `npm run app`          | Build the application and copy it to Applications         |
+| `npm start`            | Build and open the program from this folder               |
 | `npm run dev`          | Open the program with live reload                         |
 | `npm run web`          | Run it in a browser, without Electron                     |
 | `npm run typecheck`    | Check the types                                           |
 | `npm test`             | Unit tests                                                |
 | `npm run test:browser` | Interface and audio tests in headless Chromium            |
 | `npm run test:e2e`     | End-to-end tests of the whole program                     |
-| `npm run dist`         | Build the macOS application into `release`                |
+| `npm run dist`         | Build a disk image of the application into `release`      |
 
 The browser tests need `npx playwright install chromium` once. The macOS workflow under Actions runs all of the above on a Mac and attaches the disk image; start it by hand from the Actions tab.
 

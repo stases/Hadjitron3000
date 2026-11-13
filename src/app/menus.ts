@@ -9,8 +9,9 @@ import {
 import type { AppState } from '../state/store';
 import type { MenuItem } from '../ui/kit';
 import {
-  addBlock, addSound, exportAudio, exportSound, importAudio, newProject, openProject, replaceSound, saveBlockAs,
-  saveBlockToLibrary, saveProject, saveProjectAs, saveSoundAs, saveSoundToLibrary, showAbout, showShortcuts,
+  addBlock, addSound, checkForUpdates, exportAudio, exportSound, importAudio, newProject, openProject, replaceSound,
+  saveBlockAs, saveBlockToLibrary, saveProject, saveProjectAs, saveSoundAs, saveSoundToLibrary, showAbout,
+  showShortcuts,
 } from './commands';
 import { modKey } from './shortcuts';
 
@@ -95,6 +96,7 @@ export function buildMenus(state: AppState): { label: string; items: MenuItem[] 
       label: 'Help',
       items: [
         { label: 'Keyboard Shortcuts…', onSelect: showShortcuts },
+        ...(platform.updates ? [{ label: 'Check for Updates…', onSelect: checkForUpdates }] : []),
         { label: 'About Hadjitron 3000…', onSelect: showAbout },
       ],
     },

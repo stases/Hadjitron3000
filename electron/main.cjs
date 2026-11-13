@@ -2,6 +2,7 @@ const { app, BrowserWindow, dialog, ipcMain, Menu, protocol, shell } = require('
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { validateLibraryName, appFilePath, contentType } = require('./paths.cjs');
+const updates = require('./update.cjs');
 
 const dist = path.join(__dirname, '..', 'dist');
 const devURL = process.env.HADJITRON_DEV_URL;
@@ -15,6 +16,12 @@ let pendingClose = null;
 let unresponsive = false;
 let lastDirectory = null;
 const pendingFiles = [];
+// Updating needs an installed application (from `npm run app`) inside a .app bundle.
+const install = app.isPackaged ? updates.readInstall(__dirname) : null;
+const bundle = install && process.platform === 'darwin' ? updates.bundleOf(app.getPath('exe')) : null;
+let updating = false;
+let builtApp = null;
+let restartPending = false;
 let deliveringFiles = false;
 
 protocol.registerSchemesAsPrivileged([
@@ -175,10 +182,43 @@ function registerRequests() {
     if (pendingClose !== id) return;
     pendingClose = null;
     if (allowed) win.destroy();
+    else restartPending = false;
   });
+  if (bundle) registerUpdates();
   handle('open-register', 0, () => {
     openRegistered = true;
     void deliverFiles();
+  });
+}
+
+function registerUpdates() {
+  handle('update-check', 0, () => updates.check(install));
+  handle('update-build', 0, async () => {
+    assert(!updating, 'An update is already running');
+    try {
+      await fs.access(path.dirname(bundle), fs.constants.W_OK);
+    } catch {
+      throw new Error(`Cannot write to ${path.dirname(bundle)}.`);
+    }
+    updating = true;
+    const logFile = path.join(app.getPath('userData'), 'update.log');
+    const log = (text) => { void fs.appendFile(logFile, text + '\n').catch(() => {}); };
+    try {
+      await fs.writeFile(logFile, `Update started ${new Date().toISOString()}\n`);
+      builtApp = await updates.build(install, (step) => win?.webContents.send('update-progress', step), log);
+    } catch (error) {
+      throw new Error(`${error.message}\n\nThe full output is in ${logFile}.`);
+    } finally {
+      updating = false;
+    }
+  });
+  handle('update-restart', 0, () => {
+    assert(builtApp, 'Nothing to install');
+    restartPending = true;
+    win.close();
+  });
+  app.on('will-quit', () => {
+    if (restartPending && builtApp) updates.swapAfterExit(process.pid, builtApp, bundle);
   });
 }
 
@@ -222,7 +262,10 @@ function createWindow() {
       contextIsolation: true, sandbox: true, nodeIntegration: false,
       preload: path.join(__dirname, 'preload.cjs'),
       backgroundThrottling: false, autoplayPolicy: 'no-user-gesture-required', spellcheck: false,
-      additionalArguments: nativeFrame ? ['--hadjitron-native-frame'] : [],
+      additionalArguments: [
+        ...(nativeFrame ? ['--hadjitron-native-frame'] : []),
+        ...(bundle ? ['--hadjitron-updates'] : []),
+      ],
     },
   });
   win.once('ready-to-show', () => win.show());

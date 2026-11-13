@@ -7,3 +7,4 @@ playwright-report/
 artifacts/
 .DS_Store
 *.log
+electron/install.json

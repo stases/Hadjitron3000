@@ -27,6 +27,21 @@ export interface Library {
   reveal: (() => void) | null; // show the folder in Finder; null in the browser
 }
 
+export interface UpdateCheck {
+  current: string; // short commit the application was built from
+  latest: string; // short commit on GitHub
+  changes: string[]; // commit subjects between the two, newest first
+  blocked: string | null; // why the program folder cannot be updated, if it cannot
+}
+
+export interface Updates {
+  check(): Promise<UpdateCheck>;
+  /** Pull, install and build the new application; reports each step. */
+  build(onProgress: (step: string) => void): Promise<void>;
+  /** Close the window (offering to save) and restart into the new application. */
+  restart(): void;
+}
+
 export interface Platform {
   readonly kind: 'electron' | 'browser';
 
@@ -50,6 +65,9 @@ export interface Platform {
 
   /** Window controls for the custom title bar; null when the host draws its own frame. */
   window: { minimize(): void; toggleMaximize(): void; close(): void } | null;
+
+  /** Updating the installed application from GitHub; null when not running as an installed .app. */
+  updates: Updates | null;
 
   /** Tell the host the document name and whether it has unsaved changes. */
   setDocument(title: string, dirty: boolean): void;

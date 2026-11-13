@@ -66,6 +66,7 @@ export const browserPlatform: Platform = {
   library: createLibrary('hadjitron-library', 'sounds'),
   blocks: createLibrary('hadjitron-block-library', 'blocks'),
   window: null,
+  updates: null,
   setDocument: (title, dirty) => {
     document.title = `${title} - Hadjitron 3000`;
     if (dirty) window.addEventListener('beforeunload', beforeUnload);

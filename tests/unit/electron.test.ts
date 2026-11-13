@@ -22,7 +22,10 @@ afterEach(async () => {
   await rm(documents, { recursive: true, force: true });
 });
 
-async function shell(argv: string[] = [], platform = 'linux') {
+const EXE = '/Applications/Hadjitron 3000.app/Contents/MacOS/Hadjitron 3000';
+
+/** Load main.cjs and preload.cjs; `installed` is a folder holding install.json, as in a packaged .app. */
+async function shell(argv: string[] = [], platform = 'linux', installed: string | null = null) {
   type Handler = (event: unknown, ...args: unknown[]) => unknown;
   const handlers = new Map<string, Handler>();
   const renderer = new EventEmitter();
@@ -40,9 +43,10 @@ async function shell(argv: string[] = [], platform = 'linux') {
     focus: vi.fn(),
   });
   const app = Object.assign(new EventEmitter(), {
+    isPackaged: installed !== null,
     getPath: (name: string) => {
-      expect(name).toBe('documents');
-      return documents;
+      expect(['documents', 'exe']).toContain(name);
+      return name === 'exe' ? EXE : documents;
     },
     requestSingleInstanceLock: () => true,
     whenReady: async () => {},
@@ -57,9 +61,13 @@ async function shell(argv: string[] = [], platform = 'linux') {
       return handler(sender, ...args);
     });
   let bridge!: Hadji;
+  let windowOptions: unknown;
   const electron = {
     app,
-    BrowserWindow: function () { return win; },
+    BrowserWindow: function (options: unknown) {
+      windowOptions = options;
+      return win;
+    },
     dialog: {},
     ipcMain: { handle: (channel: string, handler: Handler) => handlers.set(channel, handler) },
     Menu: { setApplicationMenu: vi.fn(), buildFromTemplate: vi.fn() },
@@ -76,12 +84,12 @@ async function shell(argv: string[] = [], platform = 'linux') {
   for (const file of ['main.cjs', 'preload.cjs']) {
     runInNewContext(await readFile(path.join(electronDirectory, file), 'utf8'), {
       require: (id: string) => id === 'electron' ? electron : require(id),
-      __dirname: electronDirectory,
+      __dirname: file === 'main.cjs' && installed ? installed : electronDirectory,
       process: { argv: ['hadjitron', ...argv], env: {}, platform, cwd: () => documents },
       Uint8Array, URL, console,
     });
   }
-  return { app, bridge, invoke, event, openPath };
+  return { app, bridge, invoke, event, openPath, handlers, windowOptions: () => windowOptions };
 }
 
 test.each([
@@ -179,4 +187,28 @@ test('Electron queues open-file blocks until the renderer registers', async () =
   const opened = vi.fn();
   bridge.onOpenFile(opened);
   await vi.waitFor(() => expect(opened).toHaveBeenCalledExactlyOnceWith({ name: 'block.h3b', path: file, bytes }));
+});
+
+test('Electron offers updates only in an installed application on a Mac', async () => {
+  const flag = (options: unknown) =>
+    (options as { webPreferences: { additionalArguments: string[] } }).webPreferences.additionalArguments;
+  const plain = await shell([], 'darwin');
+  await vi.waitFor(() => expect(plain.windowOptions()).toBeDefined());
+  expect(flag(plain.windowOptions())).toEqual([]);
+  expect(plain.handlers.has('update-check')).toBe(false);
+  expect(plain.bridge.updates).toBeNull();
+
+  await writeFile(path.join(documents, 'install.json'), JSON.stringify({ source: documents, path: '', commit: 'abc' }));
+  const linux = await shell([], 'linux', documents);
+  await vi.waitFor(() => expect(linux.windowOptions()).toBeDefined());
+  expect(linux.handlers.has('update-check')).toBe(false);
+
+  const mac = await shell([], 'darwin', documents);
+  await vi.waitFor(() => expect(mac.windowOptions()).toBeDefined());
+  expect(flag(mac.windowOptions())).toEqual(['--hadjitron-updates']);
+  expect([...mac.handlers.keys()].filter((key) => key.startsWith('update-'))).toEqual([
+    'update-check', 'update-build', 'update-restart',
+  ]);
+  await expect(mac.invoke('update-restart')).rejects.toThrow('Nothing to install');
+  await expect(mac.invoke('update-build')).rejects.toThrow('Cannot write to /Applications.');
 });

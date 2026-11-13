@@ -14,7 +14,7 @@ Hadjitron 3000 is a web app (TypeScript, React, the Web Audio API) inside a thin
 | `src/ui/kit` | The retro widgets. `src/ui/theme` holds the tokens and fonts. |
 | `src/ui/factory`, `src/ui/track`, `src/ui/song` | The three views. |
 | `src/presets` | Factory sounds in the app's own file format, the demo project, and the factory blocks taken from it. |
-| `electron` | The main process and the preload script, plain CommonJS with no build step. |
+| `electron` | The main process, the preload script and the updater, plain CommonJS with no build step. |
 | `tests` | `unit` runs in Node, `browser` runs in headless Chromium (the engine needs real Web Audio), `e2e` drives the built app. |
 
 Dependencies point one way: `core` knows nothing else; `audio` and `state` use `core`; `app` and `ui` use everything. The views never talk to the engine directly; they read the store, call actions, and use the small audio controller in `src/app/audio.ts` to audition notes.
@@ -91,3 +91,8 @@ The Factory shows the new module with a generic panel built from its parameter l
 | `npm run test:e2e` | End-to-end tests of the built app. |
 | `npm run typecheck` | TypeScript. |
 | `npm run dist` | Package a macOS app into `release/`. |
+| `npm run app` | Build `Hadjitron 3000.app` and copy it to Applications. |
+
+## Updates
+
+`npm run app` (`scripts/install-app.mjs`) writes `electron/install.json` before packaging: the checkout's path, the shell's PATH and the commit being built. The file is packed into the application and removed from the checkout afterwards. Only a packaged application on macOS that carries this file offers Help, Check for Updates. `electron/update.cjs` compares the built commit with the checkout's upstream after a `git fetch`, and to update runs `git pull --ff-only`, `npm install` and `install-app.mjs --build-only` in the checkout. On restart a detached shell waits for the old process to exit, moves the new bundle over the old one and opens it. Nothing under Documents or Application Support is part of the application, so updates never touch the user's files.

@@ -309,6 +309,10 @@ export function showAbout(): void {
   openDialog({ kind: 'about' });
 }
 
+export function checkForUpdates(): void {
+  openDialog({ kind: 'update' });
+}
+
 export function showShortcuts(): void {
   openDialog({ kind: 'shortcuts' });
 }

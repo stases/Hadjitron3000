@@ -26,6 +26,20 @@ ipcRenderer.on('close-request', async (_event, id) => {
 });
 ipcRenderer.on('open-file', (_event, file) => openHandler?.(file));
 
+const updates = {
+  check: () => invoke('update-check'),
+  build: async (onProgress) => {
+    const listener = (_event, step) => onProgress(step);
+    ipcRenderer.on('update-progress', listener);
+    try {
+      await invoke('update-build');
+    } finally {
+      ipcRenderer.removeListener('update-progress', listener);
+    }
+  },
+  restart: () => notify('update-restart'),
+};
+
 contextBridge.exposeInMainWorld('hadji', {
   frame: process.argv.includes('--hadjitron-native-frame') ? 'native' : 'custom',
   openFile: (opts) => invoke('file-open', opts),
@@ -37,6 +51,7 @@ contextBridge.exposeInMainWorld('hadji', {
     toggleMaximize: () => notify('window-toggle-maximize'),
     close: () => notify('window-close'),
   },
+  updates: process.argv.includes('--hadjitron-updates') ? updates : null,
   setDocument: (title, dirty) => notify('document-set', title, dirty),
   onCloseRequest: (handler) => {
     if (typeof handler !== 'function') throw new TypeError('Expected a close handler');

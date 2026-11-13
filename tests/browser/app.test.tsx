@@ -63,6 +63,7 @@ afterEach(async () => {
   root?.host.remove();
   root = null;
   platform.window = null;
+  platform.updates = null;
   vi.restoreAllMocks();
   vi.clearAllMocks();
 });
@@ -174,6 +175,59 @@ test('the menus list their commands and follow the store', async () => {
   expect(state().view).toBe('song');
   expect($('.h-tab.is-selected').textContent).toBe('Song');
   expect(labels(await openMenu('Help'))).toEqual(['Keyboard Shortcuts…', 'About Hadjitron 3000…']);
+});
+
+test('Check for Updates lists the changes, builds with progress and then restarts', async () => {
+  let progress!: (step: string) => void;
+  let finish!: () => void;
+  const updates = {
+    check: vi.fn(async () => ({ current: 'aaaaaaa', latest: 'bbbbbbb', changes: ['Faster song', 'New pads'], blocked: null })),
+    build: vi.fn((onProgress: (step: string) => void) => {
+      progress = onProgress;
+      return new Promise<void>((resolve) => (finish = resolve));
+    }),
+    restart: vi.fn(),
+  };
+  platform.updates = updates;
+  renderApp();
+  const help = await openMenu('Help');
+  expect(labels(help)).toEqual(['Keyboard Shortcuts…', 'Check for Updates…', 'About Hadjitron 3000…']);
+  await userEvent.click(help[1]);
+  await expect.poll(() => $$('.h-app-update-changes li').map((li) => li.textContent)).toEqual(['Faster song', 'New pads']);
+  expect($('.h-app-update').textContent).toContain('2 changes are waiting on GitHub (aaaaaaa → bbbbbbb)');
+  await userEvent.click(button('Update and Restart'));
+  progress('Building the application');
+  await expect.poll(() => $('.h-app-update').textContent).toContain('Building the application…');
+  expect($$('.h-dialog .h-button')).toEqual([]);
+  expect(updates.restart).not.toHaveBeenCalled();
+  finish();
+  await expect.poll(() => updates.restart).toHaveBeenCalledOnce();
+  expect(useDialogs.getState().dialog).toBeNull();
+});
+
+test('Check for Updates says when there is nothing new, and why it cannot update or reach GitHub', async () => {
+  const updates = {
+    check: vi.fn(async () => ({
+      current: 'aaaaaaa', latest: 'aaaaaaa', changes: [] as string[], blocked: null as string | null,
+    })),
+    build: vi.fn(async () => {}),
+    restart: vi.fn(),
+  };
+  platform.updates = updates;
+  renderApp();
+  commands.checkForUpdates();
+  await expect.poll(() => $('.h-app-update').textContent).toBe('You have the latest version (aaaaaaa).');
+  await userEvent.click(button('OK'));
+  updates.check.mockResolvedValueOnce({ current: 'a', latest: 'b', changes: ['New'], blocked: 'The folder has changes.' });
+  commands.checkForUpdates();
+  await expect.poll(() => document.querySelector('.h-app-update-error')?.textContent).toContain('The folder has changes.');
+  expect(button('Update and Restart')).toBeUndefined();
+  await userEvent.click(button('OK'));
+  updates.check.mockRejectedValueOnce(new Error('offline'));
+  commands.checkForUpdates();
+  await expect.poll(() => document.querySelector('.h-app-update-error')?.textContent)
+    .toBe('Could not reach GitHub.\noffline');
+  expect(updates.build).not.toHaveBeenCalled();
 });
 
 test('the tempo follows dragging, the wheel and typing', async () => {

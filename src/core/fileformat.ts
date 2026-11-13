@@ -208,8 +208,12 @@ function readPattern(value: unknown, ids: Set<string>, channels: Set<string>): P
 
 export function parseProject(text: string): Project {
   const file = envelope(text, 'project');
-  const raw = object(file.project, 'project');
-  const samples = decodeSamples(file.samples);
+  return readProject(file.project, decodeSamples(file.samples));
+}
+
+/** Validate and normalize a project that is already in memory (a parsed file, or a stored session). */
+export function readProject(value: unknown, samples: Record<string, SampleData>): Project {
+  const raw = object(value, 'project');
   const channelIds = new Set<string>();
   const channels = array(raw.channels, 'channels').map((value) => {
     const channel = object(value, 'channel');

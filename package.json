@@ -7,7 +7,7 @@
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
-    "start": "vite build && electron .",
+    "start": "vite build && node scripts/start.mjs",
     "dev": "node scripts/dev.mjs",
     "web": "vite",
     "build": "vite build",

@@ -1,0 +1,22 @@
+appId: com.hadjitron.app
+productName: Hadjitron 3000
+directories:
+  output: release
+files:
+  - dist/**
+  - electron/**
+  - package.json
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.music
+  icon: build/icon.png
+  identity: '-'
+  hardenedRuntime: false
+  notarize: false
+  fileAssociations:
+    - ext: h3k
+      name: Hadjitron 3000 Project
+    - ext: h3s
+      name: Hadjitron 3000 Sound

@@ -14,6 +14,8 @@
 
 Hadjitron 3000 is a small music machine for electronic and experimental music. You build sounds in the Factory, write short blocks of steps with them on the Track, arrange the blocks into a song in the Song, press Space, and export what you made. It looks and behaves like a program from 1998 on purpose.
 
+![The Song](docs/img/song.png)
+
 ![The Track](docs/img/track.png)
 
 ![The Factory](docs/img/factory.png)

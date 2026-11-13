@@ -671,6 +671,12 @@
   text-overflow: ellipsis;
 }
 
+.h-list-detail {
+  flex: none;
+  margin-left: auto;
+  font: var(--font-small);
+}
+
 .h-list-row.is-selected {
   color: var(--sel-ink);
   background: var(--sel);

@@ -5,7 +5,9 @@ import { useHint } from './hint';
 import { ColorChip, Icon } from './Icon';
 import type { IconName } from './icons';
 
-export type ListItem = { id: string; label: string; color?: number; icon?: IconName } | { header: string };
+export type ListItem =
+  | { id: string; label: string; color?: number; icon?: IconName; detail?: string }
+  | { header: string };
 
 interface ListBoxProps {
   items: ListItem[];
@@ -64,6 +66,7 @@ export function ListBox({ items, value, onChange, onActivate, height, hint }: Li
               {item.color !== undefined && <ColorChip color={item.color} />}
               {item.icon && <Icon name={item.icon} />}
               <span className="h-list-label">{item.label}</span>
+              {item.detail && <span className="h-list-detail">{item.detail}</span>}
             </div>
           ),
         )}

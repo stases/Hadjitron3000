@@ -1,10 +1,15 @@
-import { CHANNEL_COLORS, MAX_BARS, MAX_SONG_BARS, SONG_LANES, TICKS_PER_STEP, newPattern, uid } from './defaults';
+import { MAX_LEVEL, MIN_LEVEL, fitFades } from './arrangement';
+import {
+  CHANNEL_COLORS, MAX_BARS, MAX_SONG_BARS, SONG_LANES, TICKS_PER_STEP, newLanes, newPattern, uid,
+} from './defaults';
 import { MAX_TICKS, readMeter } from './meter';
 import { AMP, FILTER, MODULES, OUT, PLAY, paramSpec } from './modules';
 import type { ModuleDef, ModuleKind } from './modules';
 import { MAX_NOTE, MIN_NOTE, cleanNotes, noteExtras } from './notes';
 import { coerce } from './params';
-import type { Block, ModInst, ModuleInst, Note, Params, Pattern, Placement, Project, SampleData, Sound } from './types';
+import type {
+  Block, Lane, ModInst, ModuleInst, Note, Params, Pattern, Placement, Project, SampleData, Sound,
+} from './types';
 
 export const SOUND_EXT = 'h3s';
 export const PROJECT_EXT = 'h3k';
@@ -49,11 +54,11 @@ export function serializeSound(sound: Sound, samples: Record<string, SampleData>
 }
 
 export function serializeProject(project: Project): string {
-  const { name, bpm, swing, meter, master, channels, patterns, song } = project;
+  const { name, bpm, swing, meter, master, channels, patterns, song, lanes } = project;
   return JSON.stringify({
     format: 'hadjitron3000/project',
     version: FORMAT_VERSION,
-    project: { name, bpm, swing, meter, master, channels, patterns, song },
+    project: { name, bpm, swing, meter, master, channels, patterns, song, lanes },
     samples: encodeSamples(channels.flatMap((c) => soundSampleIds(c.sound)), project.samples),
   }, null, 2);
 }
@@ -245,9 +250,10 @@ function readPattern(value: unknown, ids: Set<string>, channels: Set<string>): P
 /**
  * The song timeline. Version 1 files hold a list of pattern ids played one after another; they become
  * placements in the first lane. Placements are clamped to the timeline; those that name no pattern
- * or overlap an earlier one in their lane are dropped.
+ * or overlap an earlier one in their lane are dropped. Fades are fitted inside their placement, and mutes keep the
+ * channels that exist, in channel order.
  */
-function readSong(value: unknown, patterns: Pattern[]): Placement[] {
+function readSong(value: unknown, patterns: Pattern[], channels: string[]): Placement[] {
   const entries = array(value === undefined ? [] : value, 'song');
   const song: Placement[] = [];
   const ids = new Set<string>();
@@ -255,7 +261,8 @@ function readSong(value: unknown, patterns: Pattern[]): Placement[] {
     isObject(entry) && typeof entry.id === 'string' ? [entry.id] : []));
   let end = 0;
   for (const entry of entries) {
-    const raw = typeof entry === 'string' ? { pattern: entry, lane: 0, bar: end } : object(entry, 'song entry');
+    const raw: Record<string, unknown> = typeof entry === 'string'
+      ? { pattern: entry, lane: 0, bar: end } : object(entry, 'song entry');
     const pattern = patterns.find((p) => p.id === raw.pattern);
     if (!pattern) continue;
     const lane = Math.round(number(raw.lane, 0, 0, SONG_LANES - 1));
@@ -267,10 +274,27 @@ function readSong(value: unknown, patterns: Pattern[]): Placement[] {
       do { id = uid('s'); } while (ids.has(id) || reserved.has(id));
     }
     ids.add(id);
-    song.push({ id, pattern: pattern.id, lane, bar, bars });
+    const placement: Placement = {
+      id, pattern: pattern.id, lane, bar, bars,
+      ...fitFades(bars, number(raw.fadeIn, 0, 0, bars), number(raw.fadeOut, 0, 0, bars)),
+    };
+    const listed = Array.isArray(raw.mutes) ? raw.mutes : [];
+    const mutes = channels.filter((c) => listed.includes(c));
+    if (mutes.length > 0) placement.mutes = mutes;
+    song.push(placement);
     if (lane === 0) end = Math.max(end, bar + bars);
   }
   return song;
+}
+
+/** One entry per lane; a lane missing from the file is at 0 dB and plays. */
+function readLanes(value: unknown): Lane[] {
+  const entries = array(value === undefined ? [] : value, 'lanes');
+  return newLanes().map((lane, i) => {
+    if (entries[i] === undefined) return lane;
+    const raw = object(entries[i], 'lane');
+    return { level: number(raw.level, 0, MIN_LEVEL, MAX_LEVEL), mute: raw.mute === true };
+  });
 }
 
 export function parseProject(text: string): Project {
@@ -326,7 +350,8 @@ export function readProject(value: unknown, samples: Record<string, SampleData>)
     master: number(raw.master, 0, -48, 6),
     channels,
     patterns,
-    song: readSong(raw.song, patterns),
+    song: readSong(raw.song, patterns, [...channelIds]),
+    lanes: readLanes(raw.lanes),
     samples,
   };
 }

@@ -102,7 +102,7 @@
   left: 0;
   z-index: 2;
   flex: none;
-  width: 22px;
+  width: 56px;
 }
 
 .h-song-corner {
@@ -110,12 +110,22 @@
 }
 
 .h-song-head {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-content: center;
+  gap: 3px 0;
   height: 60px;
+  padding: 0 6px;
   background: var(--face);
   box-shadow: var(--bevel-raised);
+}
+
+.h-song-number {
+  align-self: center;
+}
+
+.h-song-head .h-slider {
+  grid-column: 1 / -1;
 }
 
 .h-song-ticks,
@@ -229,14 +239,23 @@
     inset -1px -1px color-mix(in srgb, var(--tile) 55%, var(--ink)), 0 0 0 1px var(--ink);
 }
 
+.h-song-fades {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+}
+
+/* The name sits on a strip of the block colour, so a fade drawn under it does not hide it. */
 .h-song-name {
   position: absolute;
   top: 3px;
-  right: 3px;
-  left: 4px;
+  left: 3px;
+  max-width: calc(100% - 8px);
+  padding: 0 1px;
   overflow: hidden;
   font: var(--font-small);
   white-space: nowrap;
+  background: var(--tile);
 }
 
 .h-song-tile.is-current .h-song-name {
@@ -262,6 +281,23 @@
   width: 5px;
   height: 100%;
   cursor: ew-resize;
+}
+
+.h-song-fade {
+  position: absolute;
+  top: 0;
+  width: 5px;
+  height: 5px;
+  background: var(--face-hi);
+  box-shadow: inset 0 0 0 1px var(--ink);
+  cursor: ew-resize;
+}
+
+/* A larger target than the handle shows. */
+.h-song-fade::before {
+  content: '';
+  position: absolute;
+  inset: -2px -2px -4px;
 }
 
 .h-song-tile.is-selected::after {
@@ -296,6 +332,17 @@
   margin-left: 6px;
 }
 
+.h-song-group {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+
+.h-song-bar .h-folds {
+  margin-left: auto;
+}
+
 .h-song-help {
   min-width: 0;
   margin-left: 10px;
@@ -303,4 +350,25 @@
   font: var(--font-small);
   text-overflow: ellipsis;
   color: var(--ink-soft);
+}
+
+/* The Sounds dialog */
+
+.h-song-sounds-text {
+  margin: 0 0 8px;
+}
+
+.h-song-sounds {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  background: var(--paper);
+  box-shadow: var(--bevel-sunken);
+}
+
+.h-song-sound {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }

@@ -1,7 +1,8 @@
 import { expect, test } from 'vitest';
+import { fadeGain } from '../../src/core/arrangement';
 import { emptyProject, newSound, TICKS_PER_STEP } from '../../src/core/defaults';
 import { eventsBetween, heardAt, loopSteps, plays, songBars, stepSeconds, tickTime } from '../../src/core/sequencer';
-import type { Note, Project } from '../../src/core/types';
+import type { Note, Placement, Project } from '../../src/core/types';
 import { notesOf, stepNote } from '../support/steps';
 
 const T = TICKS_PER_STEP;
@@ -315,4 +316,119 @@ test('a 7/8 bar is fourteen steps, in blocks and the song, and windows schedule 
     expect(whole.length).toBeGreaterThan(0);
     for (const size of [1, 7, T, 5 * T, 14 * T]) expect(windowed(p, scope, size, end)).toEqual(whole);
   }
+});
+
+/** A bar of 4/4, two seconds at 120 BPM. */
+const B = 16 * T;
+
+/** An eight-bar block with these notes on row k, placed once over eight bars of lane 1 with these extras. */
+function placed(notes: Note[], extra: Partial<Placement> = {}): Project {
+  const p = oneRow(notes);
+  p.patterns[0].bars = 8;
+  p.song = [{ id: 's', pattern: p.patterns[0].id, lane: 0, bar: 0, bars: 8, ...extra }];
+  return p;
+}
+
+test('notes of a faded placement carry the fades as a gain curve, before, in and across the fades', () => {
+  const p = placed([
+    { id: 'a', start: 0, len: T, note: 60, vel: 1 },
+    { id: 'b', start: 4 * B, len: T, note: 62, vel: 1 },
+    { id: 'c', start: 5 * B + 8 * T, len: B, note: 64, vel: 1 },
+    { id: 'd', start: 0, len: T, note: 48, vel: 1, hold: true },
+    { id: 'e', start: 2 * B + 8 * T, len: 2 * T, note: 66, vel: 1 },
+  ], { fadeIn: 2, fadeOut: 2 });
+  const events = eventsBetween(p, { kind: 'song' }, 0, 8 * B);
+  const event = (note: number) => events.find((e) => e.note === note)!;
+  // Sixteen seconds of song with a fade of four seconds at each end, no swing: the curve in seconds.
+  const expectOnFade = (note: number) => {
+    const { time, gain } = event(note);
+    for (const [at, value] of gain!) expect(value, `${note} at ${at}`).toBeCloseTo(fadeGain(time + at, 16, 4, 4), 12);
+    return gain!;
+  };
+
+  // In the fade-in: from silence, on to the end of the fade so the release keeps rising.
+  const a = expectOnFade(60);
+  expect(a).toHaveLength(17);
+  expect(a[0]).toEqual([0, 0]);
+  expect(a.at(-1)).toEqual([4, 1]);
+  expect(a.every(([, g], i) => i === 0 || g > a[i - 1][1])).toBe(true);
+  // Between the fades, and just after the fade-in: a single point at full gain.
+  expect(event(62).gain).toEqual([[0, 1]]);
+  expect(event(66).gain).toEqual([[0, 1]]);
+  // Across into the fade-out: full gain to the boundary, then falling to silence at the end of the placement.
+  const c = expectOnFade(64);
+  expect(c[0]).toEqual([0, 1]);
+  expect(c[1][0]).toBeCloseTo(1, 12);
+  expect(c[1][1]).toBe(1);
+  expect(c.at(-1)).toEqual([5, 0]);
+  expect(c).toHaveLength(18);
+  // A drone over the whole placement swells over the fade-in, holds, and dies away over the fade-out.
+  const d = expectOnFade(48);
+  expect(event(48).dur).toBe(16);
+  expect(d).toHaveLength(34);
+  expect(d[0]).toEqual([0, 0]);
+  expect(d[16]).toEqual([4, 1]);
+  expect(d[17]).toEqual([12, 1]);
+  expect(d.at(-1)).toEqual([16, 0]);
+});
+
+test('a note that sounds past the end of a placement with a fade-out is silent at the end', () => {
+  const p = placed([{ id: 'a', start: 7 * B + 8 * T, len: 2 * B, note: 60, vel: 1 }], { fadeOut: 1 });
+  const [event] = eventsBetween(p, { kind: 'song' }, 0, 8 * B);
+  expect(event.dur).toBe(4);
+  expect(event.gain![0][1]).toBeCloseTo(Math.SQRT1_2, 12);
+  expect(event.gain!.at(-1)).toEqual([4, 0]);
+  expect(event.gain!.find(([at]) => at === 1)![1]).toBe(0);
+});
+
+test('without fades in a lane at 0 dB notes carry no curve; the block on repeat ignores lanes, fades, mutes', () => {
+  const p = placed([stepNote(0), { ...stepNote(4), hold: true }]);
+  const song = eventsBetween(p, { kind: 'song' }, 0, 8 * B);
+  expect(song).toHaveLength(2);
+  expect(song.every((e) => !('gain' in e))).toBe(true);
+  p.song[0] = { ...p.song[0], fadeIn: 4, mutes: ['k'] };
+  p.lanes[0] = { level: -12, mute: true };
+  const block = eventsBetween(p, blockScope(p), 0, 8 * B);
+  expect(block).toHaveLength(2);
+  expect(block.every((e) => !('gain' in e))).toBe(true);
+});
+
+test('a lane plays at its level, multiplies the fades, and a muted lane or one at the bottom plays nothing', () => {
+  const p = placed([stepNote(0), { ...stepNote(4 * 16), hold: true }]);
+  p.channels.push({ id: 'h', sound: newSound(), color: 1, mute: false, solo: false });
+  p.patterns.push({ id: 'b', name: 'B', color: 1, bars: 1, notes: { h: [stepNote(0, 72)] } });
+  p.song.push({ id: 't', pattern: 'b', lane: 1, bar: 0, bars: 1 });
+  const lane = 10 ** (-12 / 20);
+  p.lanes[0].level = -12;
+  const events = eventsBetween(p, { kind: 'song' }, 0, 8 * B);
+  expect(events.filter((e) => e.channelId === 'k').map((e) => e.gain)).toEqual([[[0, lane]], [[0, lane]]]);
+  expect(events.find((e) => e.channelId === 'h')!.gain).toBeUndefined();
+
+  p.song[0].fadeOut = 2;
+  const held = eventsBetween(p, { kind: 'song' }, 0, 8 * B).find((e) => e.note === 60 && e.time === 8)!;
+  expect(held.gain![0]).toEqual([0, lane]);
+  expect(held.gain!.at(-1)).toEqual([8, 0]);
+  expect(Math.max(...held.gain!.map(([, g]) => g))).toBe(lane);
+
+  for (const muted of [{ level: 0, mute: true }, { level: -48, mute: false }]) {
+    p.lanes[0] = muted;
+    expect(eventsBetween(p, { kind: 'song' }, 0, 8 * B).map((e) => e.channelId)).toEqual(['h']);
+  }
+});
+
+test('a placement silences exactly the sounds it mutes; the same block elsewhere plays them', () => {
+  const p = oneRow([stepNote(0), stepNote(8)]);
+  p.channels.push({ id: 'h', sound: newSound(), color: 1, mute: false, solo: false });
+  p.channels.push({ id: 's', sound: newSound(), color: 2, mute: false, solo: false });
+  const a = p.patterns[0];
+  a.notes.h = [stepNote(2, 72), stepNote(6, 72)];
+  a.notes.s = [stepNote(4, 50)];
+  p.song = [
+    { id: 's1', pattern: a.id, lane: 0, bar: 0, bars: 1 },
+    { id: 's2', pattern: a.id, lane: 0, bar: 1, bars: 1, mutes: ['h'] },
+    { id: 's3', pattern: a.id, lane: 1, bar: 2, bars: 1, mutes: ['h', 's'] },
+  ];
+  const heard = eventsBetween(p, { kind: 'song' }, 0, 3 * B).map((e) => `${Math.floor(e.time / 2)}:${e.channelId}`);
+  expect(heard).toEqual(['0:k', '0:h', '0:s', '0:h', '0:k', '1:k', '1:s', '1:k', '2:k', '2:k']);
+  expect(eventsBetween(p, { kind: 'song' }, 0, 3 * B).every((e) => !('gain' in e))).toBe(true);
 });

@@ -1,6 +1,8 @@
 // Turns the notes of the blocks into timed notes. Pure: the transport and the offline
 // renderer both call this and hand the result to the engine.
 
+import { laneGain, noteCurve } from './arrangement';
+import type { Shape } from './arrangement';
 import { TICKS_PER_STEP } from './defaults';
 import { barOf } from './meter';
 import type { Bar } from './meter';
@@ -107,6 +109,9 @@ export function plays(note: Note, patternId: string, pass: number): boolean {
  * many times, evenly inside its length, each that long; repeats past the end of the block or the placement are
  * left out. A held note sounds from its start to the end of its placement, or of the block when it plays on
  * repeat, and only the placement's first repeat of the block starts it; with a ratchet the last repeat is held.
+ *
+ * In the song a muted lane plays nothing, and neither do the sounds a placement mutes. A placement with a fade, or
+ * in a lane that is not at 0 dB, gives each of its notes a gain curve (`noteCurve`); other notes carry none.
  */
 export function eventsBetween(project: Project, scope: PlayScope, from: number, to: number): NoteEvent[] {
   const total = loopSteps(project, scope) * TICKS_PER_STEP;
@@ -116,14 +121,21 @@ export function eventsBetween(project: Project, scope: PlayScope, from: number, 
   const { ticks } = barOf(project.meter);
   for (const { pattern, start, end, placement } of spans(project, scope)) {
     const length = pattern.bars * ticks;
+    const level = placement ? laneGain(project.lanes[placement.lane]) : 1;
+    if (level === 0) continue;
+    const { fadeIn = 0, fadeOut = 0, mutes = [] } = placement ?? {};
+    const shape: Shape | null = level !== 1 || fadeIn > 0 || fadeOut > 0
+      ? { length: end - start, fadeIn: fadeIn * ticks, fadeOut: fadeOut * ticks, level } : null;
     // Every pass of the scope that overlaps the window, then every repeat of the block inside its span.
     for (let pass = Math.floor(from / total) * total; pass < to; pass += total) {
-      const first = Math.max(0, Math.floor((from - pass - start) / length));
+      const origin = pass + start;
+      const first = Math.max(0, Math.floor((from - origin) / length));
       const stop = pass + end;
-      for (let repeat = first; pass + start + repeat * length < Math.min(to, stop); repeat++) {
-        const base = pass + start + repeat * length;
+      for (let repeat = first; origin + repeat * length < Math.min(to, stop); repeat++) {
+        const base = origin + repeat * length;
         const seed = placement ? placement.bar + repeat * pattern.bars : base / length;
         for (const channel of project.channels) {
+          if (mutes.includes(channel.id)) continue;
           for (const n of pattern.notes[channel.id] ?? []) {
             const begin = base + n.start;
             if (n.start >= length || begin >= to || begin + n.len <= from || (n.hold && repeat > 0)) continue;
@@ -139,6 +151,7 @@ export function eventsBetween(project: Project, scope: PlayScope, from: number, 
                 channelId: channel.id, time: at, dur: time(until) - at, note: n.note, vel: n.vel,
               };
               if (n.slide && r === 0) event.slide = true;
+              if (shape) event.gain = noteCurve(shape, tick - origin, until - origin, (t) => time(origin + t));
               found.push({ tick, event });
             }
           }

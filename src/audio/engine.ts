@@ -1,6 +1,6 @@
 // The engine: one graph per channel, a master bus with a soft clipper, and taps for meters and scopes.
 
-import type { Project } from '../core/types';
+import type { GainCurve, Project } from '../core/types';
 import { dbToGain, glide } from './automation';
 import { CHANNEL_TAP_SIZE, ChannelGraph, structureKey } from './channel';
 import { Bus } from './mix';
@@ -97,9 +97,14 @@ export class Engine {
     await Promise.all(Object.keys(this.project?.samples ?? {}).map((id) => this.decodes.get(id)));
   }
 
-  /** Play a note; with `slide` it glides out of the note sounding before it instead of starting again. */
-  play(channelId: string, note: number, vel: number, time: number, dur: number, slide = false): void {
-    this.channels.get(channelId)?.start(note, vel, Math.max(time, this.ctx.currentTime), dur, slide);
+  /**
+   * Play a note; with `slide` it glides out of the note sounding before it instead of starting again. A `gain`
+   * curve gives the note a level of its own over time, from the note's start.
+   */
+  play(
+    channelId: string, note: number, vel: number, time: number, dur: number, slide = false, gain?: GainCurve,
+  ): void {
+    this.channels.get(channelId)?.start(note, vel, Math.max(time, this.ctx.currentTime), dur, slide, gain);
   }
 
   noteOn(channelId: string, note: number, vel: number): void {

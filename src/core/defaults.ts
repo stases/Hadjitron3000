@@ -2,7 +2,7 @@
 
 import { AMP, FILTER, MODULES, OUT, PLAY } from './modules';
 import { defaultParams } from './params';
-import type { ModInst, ModuleInst, NoteInit, Pattern, Project, Sound } from './types';
+import type { Lane, ModInst, ModuleInst, NoteInit, Pattern, Project, Sound } from './types';
 
 /** 96 ticks to a quarter note: a 32nd is 12 ticks, a sixteenth triplet 16. */
 export const TICKS_PER_STEP = 24;
@@ -49,6 +49,11 @@ export function newPattern(name: string, color = 0): Pattern {
   return { id: uid('p'), name, color, bars: 1, notes: {} };
 }
 
+/** The lanes of a new song: each at 0 dB and playing. */
+export function newLanes(): Lane[] {
+  return Array.from({ length: SONG_LANES }, () => ({ level: 0, mute: false }));
+}
+
 export function emptyProject(): Project {
   const pattern = newPattern('A');
   return {
@@ -60,6 +65,7 @@ export function emptyProject(): Project {
     channels: [],
     patterns: [pattern],
     song: [],
+    lanes: newLanes(),
     samples: {},
   };
 }

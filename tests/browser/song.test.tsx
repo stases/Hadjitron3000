@@ -5,13 +5,18 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { position } from '../../src/app/audio';
 import { addBlock, dropFiles, saveBlockToLibrary } from '../../src/app/commands';
+import { closeDialog, useDialogs } from '../../src/app/dialogStore';
+import { setPrefs } from '../../src/app/prefs';
 import { PATTERN_NAMES } from '../../src/core/defaults';
 import type { Placement } from '../../src/core/types';
 import { demoProject } from '../../src/presets/projects';
 import {
-  addPlacement, openProject, resizePlacement, selectPlacement, setPlaying, setScope, setView, undo, useApp,
+  addPlacement, openProject, resizePlacement, selectPlacement, setPlacementFades, setPlacementMute, setPlaying,
+  setScope, setView, undo, useApp,
 } from '../../src/state/store';
+import { useFolds } from '../../src/ui/factory/levels';
 import { SongView } from '../../src/ui/song';
+import { SoundsDialog } from '../../src/ui/song/SoundsDialog';
 
 vi.mock('../../src/app/audio', () => ({ position: vi.fn(() => -1) }));
 vi.mock('../../src/app/commands', () => ({
@@ -27,6 +32,9 @@ beforeEach(async () => {
   await page.viewport(1400, 800);
   openProject(demoProject(), null);
   setView('song');
+  setPrefs({ beginner: true });
+  useFolds.setState({}, true);
+  closeDialog();
   vi.clearAllMocks();
   vi.mocked(position).mockReturnValue(-1);
   host = document.createElement('div');
@@ -158,7 +166,7 @@ test('tiles sit on their lane and bars, show their block, and mark its repeats',
   expect(pads.querySelectorAll('.h-song-notch')).toHaveLength(3);
 
   // The miniature of Pads has one row per pad sound: ink where the notes are, nothing in between.
-  const mini = pads.querySelector('canvas')!;
+  const mini = pads.querySelector<HTMLCanvasElement>('.h-song-mini')!;
   const pixels = mini.getContext('2d')!.getImageData(0, 0, mini.width, mini.height).data;
   const inked = (x: number) =>
     Array.from({ length: mini.height }, (_, y) => pixels[(y * mini.width + x) * 4 + 3] > 0).filter(Boolean).length;
@@ -251,7 +259,7 @@ test('the context menu of a tile edits, duplicates and removes it', async () => 
   await rightClick(tile(last));
   expect(state().placementId).toBe(last.id);
   const labels = [...document.querySelectorAll('.h-menu-item')].map((el) => el.textContent);
-  expect(labels).toEqual(['Edit in Track', 'Duplicate', 'Remove']);
+  expect(labels).toEqual(['Edit in Track', 'Sounds...', 'Duplicate', 'Remove']);
   const past = state().past.length;
   await click(menuItem('Duplicate'));
   const copy = find(state().placementId!);
@@ -397,4 +405,194 @@ test('an empty song says how to start, and files dropped on the view go to the s
   data.items.add(file);
   cell(2, 2).dispatchEvent(new DragEvent('drop', { dataTransfer: data, bubbles: true, cancelable: true }));
   expect(dropFiles).toHaveBeenCalledWith([file]);
+});
+
+/** The bar under the timeline: its steppers by label, and whether a control is on screen. */
+const bar = () => host.querySelector<HTMLElement>('.h-song-bar')!;
+const stepperAfter = (label: string) =>
+  [...bar().querySelectorAll('.h-song-label')].find((l) => l.textContent === label)?.nextElementSibling as HTMLElement;
+const spin = (label: string, dir: 'up' | 'down') => click(stepperAfter(label).querySelector(`.h-spin.is-${dir}`)!);
+const toggle = () => [...bar().querySelectorAll<HTMLButtonElement>('.h-folds button')].find((b) =>
+  b.textContent === 'Shaping');
+const handles = (placement: Placement) => tile(placement).querySelectorAll('.h-song-fade');
+
+test('each lane head mutes its lane and sets its level, each one undo step', async () => {
+  const head = lanes()[1].previousElementSibling as HTMLElement;
+  expect(head.querySelector('.h-song-number')!.textContent).toBe('2');
+  const mute = [...head.querySelectorAll('button')].find((b) => b.textContent === 'M')!;
+  await click(mute);
+  expect(state().project.lanes[1]).toEqual({ level: 0, mute: true });
+  expect(mute.getAttribute('aria-pressed')).toBe('true');
+  const slider = head.querySelector<HTMLElement>('[role="slider"]')!;
+  const r = rect(slider);
+  const y = Math.round(r.top + r.height / 2);
+  await drag({ x: Math.round(r.right) - 3, y }, { x: Math.round(r.left), y });
+  expect(state().project.lanes[1]).toEqual({ level: -48, mute: true });
+  const past = state().past.length;
+  undo();
+  expect(state().project.lanes[1]).toEqual({ level: 0, mute: true });
+  expect(state().past.length).toBe(past - 1);
+  flushSync(() => undo());
+  expect(state().project.lanes[1].mute).toBe(false);
+  expect(mute.getAttribute('aria-pressed')).toBe('false');
+  // The other lanes are untouched, and the lane heads keep their place when the timeline scrolls.
+  expect(state().project.lanes.filter((l) => l.level === 0 && !l.mute)).toHaveLength(4);
+  expect(getComputedStyle(head).position).toBe('sticky');
+});
+
+test('in pro mode the bar shows the fades, kept inside the tile, and the Sounds button', async () => {
+  flushSync(() => setPrefs({ beginner: false }));
+  expect(toggle()).toBeUndefined();
+  expect(stepperAfter('Fade in').getAttribute('aria-disabled')).toBe('true');
+  expect(button('Sounds...').disabled).toBe(true);
+  const pads = placed('Pads')[0];
+  flushSync(() => selectPlacement(pads.id));
+  await spin('Fade in', 'up');
+  await spin('Fade in', 'up');
+  await spin('Fade out', 'up');
+  expect(find(pads.id)).toMatchObject({ fadeIn: 2, fadeOut: 1 });
+  expect(stepperAfter('Fade in').getAttribute('aria-valuemax')).toBe('7');
+  expect(stepperAfter('Fade out').getAttribute('aria-valuemax')).toBe('6');
+  flushSync(() => setPlacementFades(pads.id, 2, 6));
+  await spin('Fade in', 'up');
+  expect(find(pads.id)).toMatchObject({ fadeIn: 2, fadeOut: 6 });
+  await spin('Fade out', 'down');
+  await spin('Fade in', 'down');
+  await spin('Fade in', 'down');
+  expect(find(pads.id)).toMatchObject({ fadeOut: 5 });
+  expect(find(pads.id)).not.toHaveProperty('fadeIn');
+  await click(button('Sounds...'));
+  expect(useDialogs.getState().dialog).toEqual({ kind: 'sounds', placementId: pads.id });
+  // Every tile carries its fade handles in pro mode.
+  for (const p of song()) expect(handles(p)).toHaveLength(2);
+});
+
+test('in beginner mode fades and Sounds wait behind Shaping, whose lamp lights for a fade or a mute', async () => {
+  const beat = placed('Beat')[1];
+  flushSync(() => selectPlacement(beat.id));
+  expect(stepperAfter('Fade in')).toBeUndefined();
+  expect(button('Sounds...')).toBeUndefined();
+  const lamp = () => toggle()!.querySelector('.h-led')!.classList.contains('is-on');
+  expect(lamp()).toBe(false);
+  // Without a fade the tiles have no handles until Shaping is open.
+  expect(host.querySelectorAll('.h-song-fade')).toHaveLength(0);
+  flushSync(() => setPlacementMute(beat.id, state().project.channels[2].id, true));
+  expect(lamp()).toBe(true);
+  flushSync(() => setPlacementMute(beat.id, state().project.channels[2].id, false));
+  flushSync(() => setPlacementFades(placed('Keys')[0].id, 0, 2));
+  expect(lamp()).toBe(false);
+  expect(handles(placed('Keys')[0])).toHaveLength(2);
+  expect(host.querySelectorAll('.h-song-fade')).toHaveLength(2);
+  flushSync(() => setPlacementFades(beat.id, 1, 0));
+  expect(lamp()).toBe(true);
+
+  await click(toggle()!);
+  expect(toggle()!.getAttribute('aria-pressed')).toBe('true');
+  expect(stepperAfter('Fade in').getAttribute('aria-valuenow')).toBe('1');
+  expect(button('Sounds...').disabled).toBe(false);
+  expect(host.querySelectorAll('.h-song-fade')).toHaveLength(2 * song().length);
+  await click(toggle()!);
+  expect(stepperAfter('Fade in')).toBeUndefined();
+});
+
+test('dragging the top corners pulls fades into a tile in whole bars, each drag one undo step', async () => {
+  flushSync(() => setPrefs({ beginner: false }));
+  const pads = placed('Pads')[0];
+  const corner = (side: 'in' | 'out') => centre(tile(find(pads.id)).querySelector(`.h-song-fade.is-${side}`)!);
+  expect(getComputedStyle(tile(pads).querySelector('.h-song-fade')!).cursor).toBe('ew-resize');
+  const past = state().past.length;
+  const start = corner('in');
+  await drag(start, { x: start.x + 40, y: start.y + 10 }, { x: start.x + 92, y: start.y + 20 });
+  expect(find(pads.id)).toMatchObject({ fadeIn: 3 });
+  expect(state().past.length).toBe(past + 1);
+  const end = corner('out');
+  await drag(end, { x: end.x - 200, y: end.y });
+  expect(find(pads.id)).toMatchObject({ fadeIn: 3, fadeOut: 5 });
+  // The fade-in stops where the fade-out begins, and back to the corner is no fade at all.
+  const now = corner('in');
+  await drag(now, { x: now.x + 150, y: now.y });
+  expect(find(pads.id).fadeIn).toBe(3);
+  await drag(corner('out'), { x: rect(tile(pads)).right + 40, y: end.y });
+  expect(find(pads.id)).not.toHaveProperty('fadeOut');
+  expect(state().placementId).toBe(pads.id);
+  undo();
+  expect(find(pads.id)).toMatchObject({ fadeIn: 3, fadeOut: 5 });
+  undo();
+  undo();
+  expect(find(pads.id)).not.toHaveProperty('fadeIn');
+});
+
+test('dragging the edge keeps the fades inside the tile and gives them back when it grows again', async () => {
+  flushSync(() => setPrefs({ beginner: false }));
+  const pads = placed('Pads')[0];
+  flushSync(() => setPlacementFades(pads.id, 3, 4));
+  const r = rect(tile(pads));
+  const y = Math.round(r.top + r.height / 2);
+  const x = Math.round(r.right) - 2;
+  await drag({ x, y }, { x: x - 150, y }, { x: x - 210, y }, { x, y });
+  expect(find(pads.id)).toMatchObject({ bars: 8, fadeIn: 3, fadeOut: 4 });
+  await drag({ x, y }, { x: x - 150, y });
+  expect(find(pads.id)).toMatchObject({ bars: 3, fadeIn: 3 });
+  expect(find(pads.id)).not.toHaveProperty('fadeOut');
+});
+
+test('a tile draws its fades as ramps and the sounds it mutes dimmed; its menu opens Sounds', async () => {
+  const pads = placed('Pads')[0];
+  const fades = () => tile(find(pads.id)).querySelector<HTMLCanvasElement>('.h-song-fades')!;
+  const inked = (canvas: HTMLCanvasElement, x: number) => {
+    const data = canvas.getContext('2d')!.getImageData(x, 0, 1, canvas.height).data;
+    return Array.from({ length: canvas.height }, (_, y) => data[y * 4 + 3] > 0);
+  };
+  expect(inked(fades(), 0).some(Boolean)).toBe(false);
+  flushSync(() => setPlacementFades(pads.id, 4, 2));
+  // Near the start of the fade-in the ink is dithered from the top almost to the bottom, then the line.
+  const first = inked(fades(), 1);
+  expect(first.filter(Boolean).length).toBeGreaterThan(20);
+  expect(first.slice(0, 20).filter(Boolean).length).toBe(10);
+  // Past the fade-in the colour is clear; at the end of the fade-out the curve is back at the bottom.
+  expect(inked(fades(), 4 * 30 + 10).some(Boolean)).toBe(false);
+  expect(inked(fades(), fades().width - 1).at(-1)).toBe(true);
+
+  const keys = placed('Keys')[0];
+  const mini = () => tile(find(keys.id)).querySelector<HTMLCanvasElement>('.h-song-mini')!;
+  const pixels = () => mini().getContext('2d')!.getImageData(0, 0, mini().width, mini().height).data;
+  const before = pixels().filter((_, i) => i % 4 === 3 && _ > 0).length;
+  const kalimba = state().project.channels.find((c) => state().project.patterns.find((p) => p.id === keys.pattern)!
+    .notes[c.id]?.length)!;
+  flushSync(() => setPlacementMute(keys.id, kalimba.id, true));
+  const after = pixels().filter((_, i) => i % 4 === 3 && _ > 0).length;
+  expect(after).toBeLessThan(before);
+  expect(after).toBeGreaterThan(0);
+
+  await rightClick(tile(placed('Pads')[1]));
+  await click(menuItem('Sounds...'));
+  expect(useDialogs.getState().dialog).toEqual({ kind: 'sounds', placementId: placed('Pads')[1].id });
+});
+
+test('the Sounds checklist lists the sounds of the block and silences one in this tile only', async () => {
+  const beat = placed('Beat')[1];
+  const dialogHost = document.createElement('div');
+  document.body.append(dialogHost);
+  const dialogRoot = createRoot(dialogHost);
+  flushSync(() => dialogRoot.render(<SoundsDialog placementId={beat.id} />));
+  const boxes = () => [...document.querySelectorAll<HTMLElement>('.h-song-sounds [role="checkbox"]')];
+  expect(boxes().map((b) => b.textContent)).toEqual(['Kick', 'Clap', 'Hat']);
+  expect(boxes().every((b) => b.getAttribute('aria-checked') === 'true')).toBe(true);
+  expect(document.querySelector('.h-song-sounds-text')!.textContent)
+    .toBe('Beat · bars 13 to 16. The ticked sounds play here.');
+  await click(boxes()[2]);
+  const hat = state().project.channels.find((c) => c.sound.name === 'Hat')!.id;
+  expect(find(beat.id).mutes).toEqual([hat]);
+  expect(placed('Beat')[0]).not.toHaveProperty('mutes');
+  expect(boxes()[2].getAttribute('aria-checked')).toBe('false');
+  await click(boxes()[2]);
+  expect(find(beat.id)).not.toHaveProperty('mutes');
+  undo();
+  expect(find(beat.id).mutes).toEqual([hat]);
+  flushSync(() => useDialogs.setState({ dialog: { kind: 'sounds', placementId: beat.id } }));
+  const ok = [...document.querySelectorAll<HTMLButtonElement>('.h-dialog button')].find((b) => b.textContent === 'OK');
+  await click(ok!);
+  expect(useDialogs.getState().dialog).toBeNull();
+  dialogRoot.unmount();
+  dialogHost.remove();
 });

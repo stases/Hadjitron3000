@@ -1,7 +1,7 @@
 // Offline rendering of a project or a single sound, and MP3 encoding.
 
 import { createMp3Encoder } from 'wasm-media-encoders';
-import { TICKS_PER_STEP } from '../core/defaults';
+import { TICKS_PER_STEP, newLanes } from '../core/defaults';
 import { eventsBetween, loopSteps, stepSeconds } from '../core/sequencer';
 import type { NoteEvent, Pcm, PlayScope, Project, SampleData, Sound } from '../core/types';
 import { Engine } from './engine';
@@ -114,6 +114,7 @@ export async function renderSound(
     channels: [{ id: 'sound', sound, color: 0, mute: false, solo: false }],
     patterns: [],
     song: [],
+    lanes: newLanes(),
     samples,
   };
   const buf = await render(project, [{ channelId: 'sound', time: 0, dur, note, vel }], dur + tail, sampleRate);

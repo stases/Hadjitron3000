@@ -2,8 +2,8 @@
 
 import { adsrOf, envelopeSegments, releaseSegments, type Adsr } from '../core/envelope';
 import { inVoice, moduleDef, paramSpec, perNote } from '../core/modules';
-import type { ModInst, ModuleInst, Sound } from '../core/types';
-import { cut, dbToGain, glide, schedule, type Plan } from './automation';
+import type { GainCurve, ModInst, ModuleInst, Sound } from '../core/types';
+import { cut, dbToGain, follow, glide, schedule, type Plan } from './automation';
 import { Bus, mix, type Slot } from './mix';
 import { EFFECT_BUILDERS, type Effect } from './modules/effects';
 import { modSource, type ModSource } from './modules/modulators';
@@ -45,6 +45,7 @@ interface Voice {
   filter: VoiceFilter | null;
   gain: GainNode;
   env: Plan; // starts filter.lag after the note
+  fader: GainNode | null; // follows the note's gain curve; only built for a note that has one
   adsr: Adsr;
   held: boolean; // a live note waiting for its note-off
   gateEnd: number; // when the key goes up, Infinity while held
@@ -249,14 +250,16 @@ export class ChannelGraph {
   /**
    * Start a note at `t`, held for `gate` seconds (Infinity for a live note). In Mono and Legato a new note takes
    * over from the one before; Legato ties it to a note still held instead of starting again. `slide` ties it to
-   * the latest note still sounding whatever the mode, gliding into it.
+   * the latest note still sounding whatever the mode, gliding into it. A `curve` sets the note's own gain over
+   * time; a voice it ties into follows it from then on, or goes back to full gain without one.
    */
-  start(note: number, vel: number, t: number, gate: number, slide = false): void {
+  start(note: number, vel: number, t: number, gate: number, slide = false, curve?: GainCurve): void {
     const mode = this.sound.play.mode as string;
     const glideTime = this.sound.play.glide as number;
     if (gate === Infinity) this.keys = [...this.keys.filter((k) => k.note !== note), { note, vel }];
     const last = this.voices.findLast((v) => !v.done && v.stopAt > t);
     if (last && (slide || (mode === 'legato' && last.gateEnd > t + OVERLAP))) {
+      if (last.fader) follow(last.fader.gain, curve ?? [[0, 1]], t + (last.filter?.lag ?? 0), true);
       this.tie(last, note, t, gate, slide && glideTime === 0 ? SLIDE : glideTime);
       return;
     }
@@ -278,13 +281,15 @@ export class ChannelGraph {
     const env: Plan = { t0: t + (filter?.lag ?? 0), scale: vel * vel, segs: envelopeSegments(adsr, length) };
     const gain = new GainNode(this.ctx, { gain: 0 });
     schedule(gain.gain, env);
+    const fader = curve ? new GainNode(this.ctx, { gain: 0 }) : null;
+    if (fader) follow(fader.gain, curve!, env.t0);
     const slot = this.voiceBus.take(t);
     let out = src.output;
     if (filter) {
       src.output.connect(filter.input);
       out = filter.output;
     }
-    out.connect(gain).connect(slot.input);
+    (fader ? out.connect(fader) : out).connect(gain).connect(slot.input);
     const targets = (module: string, param: string) =>
       (module === 'source' ? src.targets : filter?.targets)?.[param] ?? [];
     const links: [AudioNode, AudioParam][] = [];
@@ -311,8 +316,8 @@ export class ChannelGraph {
     });
     const held = length === Infinity;
     const voice: Voice = {
-      note, root: note, src, filter, gain, env, adsr, held, gateEnd: t + length, stopAt: Infinity, slot, links, mods,
-      bend: null, done: false,
+      note, root: note, src, filter, gain, env, fader, adsr, held, gateEnd: t + length, stopAt: Infinity, slot,
+      links, mods, bend: null, done: false,
     };
     if (glideTime > 0 && from !== null && from !== note) this.bend(voice, t, from, note, glideTime);
     if (!voice.held) this.scheduleStop(voice);

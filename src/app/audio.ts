@@ -2,6 +2,7 @@
 // Views call these functions; nothing else in the interface touches Web Audio.
 
 import { Engine, Transport, renderProject } from '../audio';
+import { newLanes } from '../core/defaults';
 import type { Block, Channel, Project, SampleData, Sound } from '../core/types';
 import { playScope, useApp } from '../state/store';
 
@@ -109,7 +110,7 @@ function blockProject(block: Block): Project {
   }));
   const notes = Object.fromEntries(block.tracks.map((track, i) => [`b${i}`, track.notes]));
   return {
-    name: block.name, bpm, swing, meter, master, channels, song: [], samples: block.samples,
+    name: block.name, bpm, swing, meter, master, channels, song: [], lanes: newLanes(), samples: block.samples,
     patterns: [{ id: 'block', name: block.name, color: block.color, bars: block.bars, notes }],
   };
 }

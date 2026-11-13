@@ -1,6 +1,7 @@
 // Writing envelope segments into AudioParams, and smooth parameter changes.
 
 import { valueAt, type Segment } from '../core/envelope';
+import type { GainCurve } from '../core/types';
 
 /** Segments (times relative to `t0`) as they are scheduled on a parameter, multiplied by `scale`. */
 export interface Plan {
@@ -42,4 +43,15 @@ export function cut(param: AudioParam, plan: Plan, time: number): number {
   if (inRamp) param.linearRampToValueAtTime(level * plan.scale, time);
   else param.setValueAtTime(level * plan.scale, time);
   return level;
+}
+
+/**
+ * Make a parameter follow a gain curve from `t`, in straight lines, holding its last value. `joined` takes over
+ * from a curve already running there: the first point is reached by a ramp from that curve's previous point.
+ */
+export function follow(param: AudioParam, curve: GainCurve, t: number, joined = false): void {
+  param.cancelScheduledValues(t);
+  if (joined) param.linearRampToValueAtTime(curve[0][1], t);
+  else param.setValueAtTime(curve[0][1], t);
+  for (const [at, gain] of curve.slice(1)) param.linearRampToValueAtTime(gain, t + at);
 }

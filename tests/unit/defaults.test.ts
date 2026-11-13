@@ -28,13 +28,15 @@ test('fresh documents have independent parameter objects', () => {
   expect(second.out.pan).toBe(0);
 });
 
-test('an empty project contains one pattern and an empty song', () => {
+test('an empty project contains one pattern, an empty song and four lanes at 0 dB', () => {
   const project = emptyProject();
   expect(project).toEqual({
     name: 'Untitled', bpm: 120, swing: 0, meter: [4, 4], master: 0, channels: [], samples: {},
     patterns: [{ id: expect.any(String), name: 'A', color: 0, bars: 1, notes: {} }],
     song: [],
+    lanes: Array(4).fill({ level: 0, mute: false }),
   });
+  expect(project.lanes[0]).not.toBe(project.lanes[1]);
 });
 
 test('module and modulator factories use their definitions', () => {

@@ -1342,3 +1342,132 @@ test('a new meter keeps every note at its tick, gives each block the bars that h
   app.undo();
   expect(project()).toEqual(before);
 });
+
+test('fades are whole bars inside their placement, merge while a stepper repeats, and undo', () => {
+  vi.useFakeTimers();
+  const p = state().patternId;
+  const id = app.addPlacement(p, 0, 0)!;
+  app.resizePlacement(id, 8);
+  const placement = () => project().song.find((s) => s.id === id)!;
+  const before = state().past.length;
+  app.setPlacementFades(id, 1, 0);
+  app.setPlacementFades(id, 2.4, 0);
+  app.setPlacementFades(id, 2, 3);
+  expect(placement()).toMatchObject({ fadeIn: 2, fadeOut: 3 });
+  expect(state().past.length).toBe(before + 1);
+  vi.advanceTimersByTime(1000);
+  app.setPlacementFades(id, 9, 9);
+  expect(placement()).toMatchObject({ fadeIn: 8 });
+  expect(placement()).not.toHaveProperty('fadeOut');
+  app.setPlacementFades(id, Number.NaN, 1);
+  expect(placement().fadeIn).toBe(8);
+  vi.advanceTimersByTime(1000);
+  app.setPlacementFades(id, 0, 0);
+  expect(Object.keys(placement())).toEqual(['id', 'pattern', 'lane', 'bar', 'bars']);
+  app.undo();
+  expect(placement()).toMatchObject({ fadeIn: 8 });
+  app.undo();
+  expect(placement()).toMatchObject({ fadeIn: 2, fadeOut: 3 });
+  app.undo();
+  expect(placement()).not.toHaveProperty('fadeIn');
+});
+
+test('shortening a placement shortens its fades, the fade-out first, and a longer one keeps them', () => {
+  const p = state().patternId;
+  const id = app.addPlacement(p, 0, 0)!;
+  app.resizePlacement(id, 8);
+  app.setPlacementFades(id, 3, 4);
+  const placement = () => project().song.find((s) => s.id === id)!;
+  app.resizePlacement(id, 12);
+  expect(placement()).toMatchObject({ bars: 12, fadeIn: 3, fadeOut: 4 });
+  app.resizePlacement(id, 5);
+  expect(placement()).toMatchObject({ bars: 5, fadeIn: 3, fadeOut: 2 });
+  app.resizePlacement(id, 2);
+  expect(placement()).toMatchObject({ bars: 2, fadeIn: 2 });
+  expect(placement()).not.toHaveProperty('fadeOut');
+});
+
+test('a resize drag gives the fades back as far as they fit, in one undo step', () => {
+  const p = state().patternId;
+  const id = app.addPlacement(p, 0, 0)!;
+  app.resizePlacement(id, 8);
+  app.setPlacementFades(id, 2, 4);
+  const placement = () => project().song.find((s) => s.id === id)!;
+  const before = project();
+  app.beginGesture();
+  for (const bars of [6, 3, 1, 4, 8]) {
+    app.resizePlacement(id, bars);
+    app.setPlacementFades(id, 2, 4);
+  }
+  app.commitGesture();
+  expect(placement()).toMatchObject({ bars: 8, fadeIn: 2, fadeOut: 4 });
+  expect(state().past.at(-1)).toBe(before);
+});
+
+test('a sound is muted in one placement only, the list keeps channel order, and undo brings it back', () => {
+  const [a, b, c] = [newSound(), newSound('fm'), newSound()].map((s) => app.addChannel(s));
+  const p = state().patternId;
+  const first = app.addPlacement(p, 0, 0)!;
+  const second = app.addPlacement(p, 0, 1)!;
+  const mutes = (id: string) => project().song.find((s) => s.id === id)!.mutes;
+  app.setPlacementMute(first, c, true);
+  app.setPlacementMute(first, a, true);
+  app.setPlacementMute(first, a, true);
+  app.setPlacementMute(first, 'missing', true);
+  app.setPlacementMute('missing', b, true);
+  expect(mutes(first)).toEqual([a, c]);
+  expect(mutes(second)).toBeUndefined();
+  const muted = project();
+  app.setPlacementMute(first, a, false);
+  app.setPlacementMute(first, c, false);
+  expect(project().song.find((s) => s.id === first)).not.toHaveProperty('mutes');
+  app.undo();
+  app.undo();
+  expect(project()).toBe(muted);
+  // Removing a sound takes it out of the mutes, and the list goes when it is empty.
+  app.removeChannel(a);
+  expect(mutes(first)).toEqual([c]);
+  app.removeChannel(c);
+  expect(project().song.find((s) => s.id === first)).not.toHaveProperty('mutes');
+});
+
+test('a duplicated placement copies its fades and mutes, fitted to the room it gets', () => {
+  const a = app.addChannel(newSound());
+  const p = state().patternId;
+  const id = app.addPlacement(p, 0, 0)!;
+  app.resizePlacement(id, 6);
+  app.setPlacementFades(id, 2, 3);
+  app.setPlacementMute(id, a, true);
+  const copy = app.duplicatePlacement(id)!;
+  expect(project().song.find((s) => s.id === copy)).toEqual({
+    id: copy, pattern: p, lane: 0, bar: 6, bars: 6, fadeIn: 2, fadeOut: 3, mutes: [a],
+  });
+  expect(project().song.find((s) => s.id === copy)!.mutes).not.toBe(project().song.find((s) => s.id === id)!.mutes);
+  app.addPlacement(p, 1, 16);
+  app.movePlacement(project().song.at(-1)!.id, 0, 16);
+  const short = app.duplicatePlacement(copy)!;
+  expect(project().song.find((s) => s.id === short)).toMatchObject({ bar: 12, bars: 4, fadeIn: 2, fadeOut: 2 });
+});
+
+test('lanes have a level in dB down to silence and a mute, a turned level is one undo step', () => {
+  vi.useFakeTimers();
+  expect(project().lanes).toEqual(Array(SONG_LANES).fill({ level: 0, mute: false }));
+  const before = state().past.length;
+  app.setLane(1, { level: -3 });
+  app.setLane(1, { level: -12.5 });
+  expect(state().past.length).toBe(before + 1);
+  app.setLane(2, { mute: true });
+  app.setLane(3, { level: 20 });
+  app.setLane(0, { level: -100 });
+  app.setLane(0, { level: Number.NaN });
+  app.setLane(SONG_LANES, { mute: true });
+  expect(project().lanes).toEqual([
+    { level: -48, mute: false }, { level: -12.5, mute: false }, { level: 0, mute: true }, { level: 6, mute: false },
+  ]);
+  expect(state().past.length).toBe(before + 4);
+  app.undo();
+  app.undo();
+  app.undo();
+  expect(project().lanes[1]).toEqual({ level: -12.5, mute: false });
+  expect(project().lanes[2].mute).toBe(false);
+});

@@ -2,6 +2,7 @@ import { Fragment, useState } from 'react';
 import { version } from '../../package.json';
 import { renamePattern, useApp } from '../state/store';
 import { Button, Dialog, DialogButtons, Emblem, MessageBox, TextField } from '../ui/kit';
+import { SoundsDialog } from '../ui/song/SoundsDialog';
 import { closeDialog, useDialogs } from './dialogStore';
 import { ExportDialog } from './ExportDialog';
 import { BlockLibraryDialog, SoundLibraryDialog } from './LibraryDialog';
@@ -100,6 +101,7 @@ export function Dialogs() {
       {dialog?.kind === 'library' && <SoundLibraryDialog replace={dialog.replace} />}
       {dialog?.kind === 'blocks' && <BlockLibraryDialog />}
       {dialog?.kind === 'rename' && <RenameBlockDialog patternId={dialog.patternId} />}
+      {dialog?.kind === 'sounds' && <SoundsDialog placementId={dialog.placementId} />}
       {dialog?.kind === 'export' && <ExportDialog />}
       {dialog?.kind === 'about' && <AboutDialog />}
       {dialog?.kind === 'shortcuts' && <ShortcutsDialog />}

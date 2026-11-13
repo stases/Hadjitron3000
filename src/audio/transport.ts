@@ -13,7 +13,7 @@ const START_DELAY = 0.05;
 
 /** Start one note of the sequencer at context time `time`; live playback and export both play notes here. */
 export function playEvent(engine: Engine, e: NoteEvent, time: number): void {
-  engine.play(e.channelId, e.note, e.vel, time, e.dur, e.slide);
+  engine.play(e.channelId, e.note, e.vel, time, e.dur, e.slide, e.gain);
 }
 
 export class Transport {

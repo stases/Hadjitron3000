@@ -1,15 +1,21 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { position } from '../../app/audio';
+import { openDialog } from '../../app/dialogStore';
+import { usePrefs } from '../../app/prefs';
 import { MAX_SONG_BARS, SONG_LANES } from '../../core/defaults';
 import { barOf } from '../../core/meter';
+import { OUT, paramSpec } from '../../core/modules';
+import type { FloatSpec } from '../../core/modules';
+import { formatValue, fromNorm, toNorm } from '../../core/params';
 import { songBars } from '../../core/sequencer';
-import type { Placement } from '../../core/types';
+import type { Lane, Placement } from '../../core/types';
 import {
   addPlacement, beginGesture, commitGesture, duplicatePlacement, movePlacement, removePlacement, resizePlacement,
-  selectPlacement, useApp,
+  selectPlacement, setLane, setPlacementFades, useApp,
 } from '../../state/store';
-import { Well, openMenu, setHint, useHint } from '../kit';
+import { useShown } from '../factory/levels';
+import { Button, Slider, Well, openMenu, setHint, useHint } from '../kit';
 import { SpriteImage } from '../kit/Icon';
 import { barWidth, openInTrack, placementText, room } from './song';
 import { Tile } from './Tile';
@@ -28,9 +34,14 @@ const LANES = Array.from({ length: SONG_LANES }, (_, i) => i);
 
 interface Gesture {
   id: string;
-  mode: 'move' | 'resize';
+  mode: 'move' | 'resize' | 'fadeIn' | 'fadeOut';
   grab: number;
+  /** The fades when the gesture began, which a resize gives back as far as they fit. */
+  fades: [number, number];
 }
+
+/** A lane's level has the range and taper of a sound's output level. */
+const LEVEL = paramSpec(OUT, 'level') as FloatSpec;
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
@@ -44,6 +55,7 @@ function tileMenu(placement: Placement) {
   const { song } = useApp.getState().project;
   return [
     { label: 'Edit in Track', onSelect: () => openInTrack(placement.pattern) },
+    { label: 'Sounds...', onSelect: () => openDialog({ kind: 'sounds', placementId: placement.id }) },
     {
       label: 'Duplicate',
       disabled: room(song, placement) === placement.bars,
@@ -61,8 +73,11 @@ export function Timeline() {
   const patternId = useApp((s) => s.patternId);
   const placementId = useApp((s) => s.placementId);
   const length = useApp((s) => songBars(s.project));
+  const lanes = useApp((s) => s.project.lanes);
   const following = useApp((s) => s.playing && s.scope === 'song');
   const bar = useApp((s) => barOf(s.project.meter));
+  const beginner = usePrefs((p) => p.beginner);
+  const shaping = useShown()('placement', 2);
   const w = barWidth(bar);
   const scroller = useRef<HTMLDivElement>(null);
   const gesture = useRef<Gesture | null>(null);
@@ -137,7 +152,10 @@ export function Timeline() {
     if (tile) {
       const placement = findPlacement(tile.dataset.id!)!;
       selectPlacement(placement.id);
-      g = { id: placement.id, mode: target.closest('.h-song-edge') ? 'resize' : 'move', grab: bar - placement.bar };
+      const mode = target.closest('.h-song-fade.is-in') ? 'fadeIn' : target.closest('.h-song-fade.is-out') ? 'fadeOut'
+        : target.closest('.h-song-edge') ? 'resize' : 'move';
+      const fades: [number, number] = [placement.fadeIn ?? 0, placement.fadeOut ?? 0];
+      g = { id: placement.id, mode, grab: bar - placement.bar, fades };
     } else {
       const id = addPlacement(patternId, lane, bar);
       if (!id) {
@@ -145,11 +163,11 @@ export function Timeline() {
         return;
       }
       added.current = { id, time: e.timeStamp };
-      g = { id, mode: 'move', grab: 0 };
+      g = { id, mode: 'move', grab: 0, fades: [0, 0] };
     }
     gesture.current = g;
     e.currentTarget.setPointerCapture(e.pointerId);
-    if (g.mode === 'resize') e.currentTarget.dataset.resizing = '';
+    if (g.mode !== 'move') e.currentTarget.dataset.resizing = '';
   };
 
   const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -167,9 +185,18 @@ export function Timeline() {
       if (to !== placement.bar || lane !== placement.lane) movePlacement(g.id, lane, to);
       const moved = findPlacement(g.id)!;
       setHint(`${placementText(name, moved)}, lane ${moved.lane + 1}`);
-    } else {
+    } else if (g.mode === 'resize') {
       resizePlacement(g.id, Math.max(1, Math.round(x / w) - placement.bar));
+      setPlacementFades(g.id, ...g.fades);
       setHint(`${name} · ${bars(findPlacement(g.id)!.bars)}`);
+    } else {
+      const { fadeIn = 0, fadeOut = 0 } = placement;
+      const at = Math.round(x / w);
+      if (g.mode === 'fadeIn') setPlacementFades(g.id, Math.min(at - placement.bar, placement.bars - fadeOut), fadeOut);
+      else setPlacementFades(g.id, fadeIn, Math.min(placement.bar + placement.bars - at, placement.bars - fadeIn));
+      const faded = findPlacement(g.id)!;
+      setHint(g.mode === 'fadeIn' ? `${name} · fade in over ${bars(faded.fadeIn ?? 0)}`
+        : `${name} · fade out over ${bars(faded.fadeOut ?? 0)}`);
     }
   };
 
@@ -179,9 +206,13 @@ export function Timeline() {
     if (placement) {
       const name = patternName(placement.pattern);
       setHint(
-        target.closest('.h-song-edge')
-          ? `Drag this edge sideways to make ${name} longer or shorter.`
-          : `${name}: drag it to move it, double-click to edit it in the Track, right-click for more.`,
+        target.closest('.h-song-fade.is-in')
+          ? `Drag this corner into the tile to fade ${name} in from silence, a bar at a time.`
+          : target.closest('.h-song-fade.is-out')
+            ? `Drag this corner into the tile to fade ${name} out to silence at its end, a bar at a time.`
+            : target.closest('.h-song-edge')
+              ? `Drag this edge sideways to make ${name} longer or shorter.`
+              : `${name}: drag it to move it, double-click to edit it in the Track, right-click for more.`,
       );
     } else if (target.closest('.h-song-lane')) {
       const name = patternName(useApp.getState().patternId);
@@ -257,7 +288,7 @@ export function Timeline() {
         <Ruler count={count} width={w} />
         {LANES.map((lane) => (
           <div key={lane} className="h-song-row">
-            <LaneLabel lane={lane} />
+            <LaneHead lane={lane} state={lanes[lane]} />
             <div className="h-song-lane">
               <div className="h-song-box" style={{ width: count * w - 2 }}>
                 <Cells count={count} />
@@ -272,6 +303,7 @@ export function Timeline() {
                       bar={bar}
                       selected={placement.id === placementId}
                       current={pattern.id === patternId}
+                      handles={!beginner || shaping || !!placement.fadeIn || !!placement.fadeOut}
                     />
                   );
                 })}
@@ -309,14 +341,37 @@ const Ruler = memo(function Ruler({ count, width }: { count: number; width: numb
   );
 });
 
-function LaneLabel({ lane }: { lane: number }) {
+/** The head of a lane: its number, a mute button and its level, for everything the lane plays. */
+const LaneHead = memo(function LaneHead({ lane, state }: { lane: number; state: Lane }) {
   const hint = useHint(`Lane ${lane + 1}. Blocks in different lanes play at the same time.`);
+  const level = formatValue(LEVEL, state.level);
   return (
-    <div className="h-song-head" {...hint.props}>
-      {lane + 1}
+    <div className="h-song-head">
+      <span className="h-song-number" {...hint.props}>
+        {lane + 1}
+      </span>
+      <Button
+        small
+        pressed={state.mute}
+        onClick={() => setLane(lane, { mute: !state.mute })}
+        hint={`Mute: silence everything in lane ${lane + 1}.`}
+      >
+        M
+      </Button>
+      <Slider
+        small
+        length={44}
+        value={toNorm(LEVEL, state.level)}
+        onChange={(t) => {
+          const db = fromNorm(LEVEL, t);
+          setLane(lane, { level: db });
+          setHint(`Lane ${lane + 1}: ${formatValue(LEVEL, db)}`);
+        }}
+        hint={`How loud lane ${lane + 1} is (${level}). Drag left for softer, right for louder; far left is silence.`}
+      />
     </div>
   );
-}
+});
 
 const Cells = memo(function Cells({ count }: { count: number }) {
   return Array.from({ length: count }, (_, i) => <i key={i} className="h-song-cell" />);

@@ -7,6 +7,7 @@ export type DialogKind =
   | { kind: 'library'; replace: string | null }
   | { kind: 'blocks' }
   | { kind: 'rename'; patternId: string }
+  | { kind: 'sounds'; placementId: string }
   | { kind: 'export' }
   | { kind: 'about' }
   | { kind: 'shortcuts' }

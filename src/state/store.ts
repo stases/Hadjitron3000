@@ -5,14 +5,15 @@ import {
   CHANNEL_COLORS, MAX_BARS, MAX_SONG_BARS, PATTERN_NAMES, SONG_LANES, TICKS_PER_STEP,
   emptyProject, newMod, newModule, newPattern, newSound, uid,
 } from '../core/defaults';
+import { MAX_LEVEL, MIN_LEVEL, fitFades } from '../core/arrangement';
 import { MAX_TICKS, barOf, barsToHold, meterText, readMeter } from '../core/meter';
 import { MODULES, moduleDef, paramSpec } from '../core/modules';
 import { MAX_NOTE, MIN_NOTE, cleanNotes, compareNotes, noteExtras } from '../core/notes';
 import type { NoteExtras } from '../core/notes';
 import { coerce, defaultParams } from '../core/params';
 import type {
-  Block, Channel, Meter, ModInst, ModTarget, Note, NoteInit, ParamValue, Params, PlayScope, Project, SampleData,
-  Sound,
+  Block, Channel, Lane, Meter, ModInst, ModTarget, Note, NoteInit, ParamValue, Params, Placement, PlayScope, Project,
+  SampleData, Sound,
 } from '../core/types';
 
 export type View = 'factory' | 'track' | 'song';
@@ -204,6 +205,7 @@ export function removeChannel(channelId: string): void {
   edit((p) => {
     p.channels.splice(index, 1);
     for (const pattern of p.patterns) delete pattern.notes[channelId];
+    for (const placement of p.song) setMutes(placement, (placement.mutes ?? []).filter((id) => id !== channelId));
   }, undefined, state.channelId === channelId ? { channelId: channel?.id ?? null } : {});
 }
 
@@ -617,7 +619,19 @@ export function addPlacement(patternId: string, lane: number, bar: number): stri
   return id;
 }
 
-/** Put a copy of a placement right after it in its lane, as long as it is or as fits. */
+/** Give a placement fades that fit inside it, the fade-in first. */
+function setFades(placement: Placement, fadeIn: number, fadeOut: number): void {
+  delete placement.fadeIn;
+  delete placement.fadeOut;
+  Object.assign(placement, fitFades(placement.bars, fadeIn, fadeOut));
+}
+
+function setMutes(placement: Placement, mutes: string[]): void {
+  if (mutes.length > 0) placement.mutes = mutes;
+  else delete placement.mutes;
+}
+
+/** Put a copy of a placement, its fades and mutes included, right after it in its lane, as long as it is or as fits. */
 export function duplicatePlacement(placementId: string): string | null {
   const project = useApp.getState().project;
   const source = project.song.find((p) => p.id === placementId);
@@ -628,7 +642,9 @@ export function duplicatePlacement(placementId: string): string | null {
   if (room === 0) return null;
   const id = uid('s');
   edit((p) => {
-    p.song.push({ id, pattern, lane, bar, bars: Math.min(source.bars, room) });
+    const copy: Placement = { ...structuredClone(source), id, bar, bars: Math.min(source.bars, room) };
+    setFades(copy, source.fadeIn ?? 0, source.fadeOut ?? 0);
+    p.song.push(copy);
   }, undefined, { placementId: id, patternId: pattern, step: null });
   return id;
 }
@@ -645,14 +661,52 @@ export function movePlacement(placementId: string, lane: number, bar: number): v
   }, JSON.stringify(['movePlacement', placementId]));
 }
 
+/** Make a placement longer or shorter; fades that no longer fit are shortened, the fade-out first. */
 export function resizePlacement(placementId: string, bars: number): void {
   if (!Number.isFinite(bars)) return;
   edit((p) => {
     const placement = p.song.find((s) => s.id === placementId);
     if (placement) {
       placement.bars = clamp(Math.round(bars), 1, placementRoom(p, placement.lane, placement.bar, placementId));
+      setFades(placement, placement.fadeIn ?? 0, placement.fadeOut ?? 0);
     }
   }, JSON.stringify(['resizePlacement', placementId]));
+}
+
+/**
+ * Set a placement's fade-in and fade-out in whole bars. They are kept inside it: the fade-in at most its length,
+ * the fade-out at most what the fade-in leaves.
+ */
+export function setPlacementFades(placementId: string, fadeIn: number, fadeOut: number): void {
+  if (!Number.isFinite(fadeIn) || !Number.isFinite(fadeOut)) return;
+  edit((p) => {
+    const placement = p.song.find((s) => s.id === placementId);
+    if (placement) setFades(placement, fadeIn, fadeOut);
+  }, JSON.stringify(['fades', placementId]));
+}
+
+/** Silence a sound in one placement, or let it play there again. */
+export function setPlacementMute(placementId: string, channelId: string, mute: boolean): void {
+  edit((p) => {
+    const placement = p.song.find((s) => s.id === placementId);
+    if (!placement || !p.channels.some((c) => c.id === channelId)) return;
+    const muted = new Set(placement.mutes);
+    if (mute) muted.add(channelId);
+    else muted.delete(channelId);
+    setMutes(placement, p.channels.flatMap((c) => (muted.has(c.id) ? [c.id] : [])));
+  });
+}
+
+/** Set the level (in dB, the bottom is silence) or the mute of a lane of the song. */
+export function setLane(lane: number, patch: Partial<Lane>): void {
+  edit((p) => {
+    const target = p.lanes[lane];
+    if (!target) return;
+    if (patch.level !== undefined && Number.isFinite(patch.level)) {
+      target.level = clamp(patch.level, MIN_LEVEL, MAX_LEVEL);
+    }
+    if (patch.mute !== undefined) target.mute = patch.mute;
+  }, patch.level !== undefined ? JSON.stringify(['laneLevel', lane]) : undefined);
 }
 
 export function removePlacement(placementId: string): void {

@@ -81,6 +81,16 @@ export interface Placement {
   lane: number; // 0..SONG_LANES-1; placements in one lane never overlap
   bar: number; // first bar, from 0
   bars: number; // length on the timeline: a shorter block repeats, a longer one is cut off
+  // Absent when they have their default value:
+  fadeIn?: number; // bars, 1..: the sound rises from silence over this many bars at the start
+  fadeOut?: number; // bars, 1..: and falls to silence over this many at the end; fadeIn + fadeOut <= bars
+  mutes?: string[]; // ids of the channels that are silent here, in channel order
+}
+
+/** One lane of the song: a level in dB (-48 is silence) and a mute, for everything its placements play. */
+export interface Lane {
+  level: number; // -48..6
+  mute: boolean;
 }
 
 /** A block on its own, outside a project: its notes together with the sounds that play them. */
@@ -110,6 +120,7 @@ export interface Project {
   channels: Channel[];
   patterns: Pattern[];
   song: Placement[];
+  lanes: Lane[]; // SONG_LANES entries
   samples: Record<string, SampleData>; // keyed by sample id (content hash)
 }
 
@@ -124,7 +135,14 @@ export interface NoteEvent {
   note: number;
   vel: number;
   slide?: boolean; // the pitch glides in from the previous note of the row
+  gain?: GainCurve; // the note's own level over time, from the fades of its placement and the level of its lane
 }
+
+/**
+ * Breakpoints of a gain in seconds from the start of a note, at least one, the first at 0; the gain goes in
+ * straight lines from one to the next and holds the last value from there on.
+ */
+export type GainCurve = [seconds: number, gain: number][];
 
 /** Rendered audio: one Float32Array per output channel (always two). */
 export interface Pcm {

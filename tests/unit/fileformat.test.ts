@@ -682,3 +682,69 @@ test('a block keeps the extras of its notes and carries no meter', () => {
   expect(JSON.parse(text).block.tracks[0].notes).toEqual(notes);
   expect(parseBlock(text).tracks[0].notes).toEqual(notes);
 });
+
+test('lanes are always written; fades and mutes only where they are set, and all of them read back', () => {
+  const plain = project();
+  const written = JSON.parse(serializeProject(plain)).project;
+  expect(written.lanes).toEqual(Array(SONG_LANES).fill({ level: 0, mute: false }));
+  expect(written.song).toEqual([
+    { id: 's1', pattern: 'a', lane: 0, bar: 0, bars: 1 },
+    { id: 's2', pattern: 'b', lane: 2, bar: 0, bars: 4 },
+  ]);
+  expect(parseProject(serializeProject(plain))).toStrictEqual(plain);
+
+  const mixed = project();
+  mixed.song[1] = { ...mixed.song[1], fadeIn: 1, fadeOut: 2, mutes: ['c1', 'c2'] };
+  mixed.lanes[2] = { level: -12.5, mute: true };
+  const text = serializeProject(mixed);
+  expect(JSON.parse(text).project.song[1]).toEqual({
+    id: 's2', pattern: 'b', lane: 2, bar: 0, bars: 4, fadeIn: 1, fadeOut: 2, mutes: ['c1', 'c2'],
+  });
+  expect(parseProject(text)).toStrictEqual(mixed);
+});
+
+test('a project from before lanes and fades opens with its lanes at 0 dB and nothing faded or muted', () => {
+  const old = { ...project(), lanes: undefined };
+  const parsed = parseProject(projectFile(old));
+  expect(parsed.lanes).toEqual(Array(SONG_LANES).fill({ level: 0, mute: false }));
+  expect(parsed.song.map((s) => Object.keys(s))).toEqual(Array(2).fill(['id', 'pattern', 'lane', 'bar', 'bars']));
+  const v1 = { name: 'Old', bpm: 120, channels: [], patterns: [{ id: 'a', name: 'A', bars: 2 }], song: ['a', 'a'] };
+  const first = parseProject(JSON.stringify({ format: 'hadjitron3000/project', version: 1, project: v1 }));
+  expect(first.lanes).toHaveLength(SONG_LANES);
+  expect(first.song.map((s) => Object.keys(s))).toEqual(Array(2).fill(['id', 'pattern', 'lane', 'bar', 'bars']));
+});
+
+test.each([
+  [{ fadeIn: 2, fadeOut: 3 }, { fadeIn: 2, fadeOut: 2 }],
+  [{ fadeIn: 9, fadeOut: 1 }, { fadeIn: 4 }],
+  [{ fadeIn: 1.6, fadeOut: -2 }, { fadeIn: 2 }],
+  [{ fadeIn: 0, fadeOut: '2' }, {}],
+  [{ mutes: ['c2', 'missing', 'c1', 'c2', 3] }, { mutes: ['c1', 'c2'] }],
+  [{ mutes: [] }, {}],
+  [{ mutes: 'c1' }, {}],
+])('placement fields %j read as %j', (extra, expected) => {
+  const file = project();
+  file.song[1] = { ...file.song[1], ...extra } as never;
+  expect(parseProject(projectFile(file)).song[1])
+    .toEqual({ id: 's2', pattern: 'b', lane: 2, bar: 0, bars: 4, ...expected });
+});
+
+test.each([
+  [[{ level: -6, mute: true }], [{ level: -6, mute: true }, ...Array(3).fill({ level: 0, mute: false })]],
+  [[{ level: 40 }, { level: -90, mute: 'yes' }, {}, { level: 'loud' }, { level: 3 }],
+    [{ level: 6, mute: false }, { level: -48, mute: false }, { level: 0, mute: false }, { level: 0, mute: false }]],
+  [[], Array(4).fill({ level: 0, mute: false })],
+])('lanes %j read as %j', (lanes, expected) => {
+  expect(parseProject(projectFile({ ...project(), lanes })).lanes).toEqual(expected);
+});
+
+test('lanes that are not a list are refused with a readable message', () => {
+  expect(() => parseProject(projectFile({ ...project(), lanes: { level: 0 } }))).toThrow(FormatError);
+  expect(() => parseProject(projectFile({ ...project(), lanes: [3] }))).toThrow('Invalid lane: expected an object.');
+});
+
+test('a block carries no lanes, fades or mutes', () => {
+  const block = { name: 'B', color: 1, bars: 2, tracks: [{ sound: newSound(), notes: [] }], samples: {} };
+  const text = serializeBlock(block);
+  expect(Object.keys(JSON.parse(text).block)).toEqual(['name', 'color', 'bars', 'tracks']);
+});

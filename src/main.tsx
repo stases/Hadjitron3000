@@ -2,13 +2,14 @@ import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
 import { initAudio } from './app/audio';
 import { confirmDiscard, openFile } from './app/commands';
+import { openDialog } from './app/dialogStore';
 import { installKeys } from './app/keys';
 import { restoreSession, watchSession } from './app/session';
 import { platform } from './platform';
 import './ui/theme/base.css';
 
 initAudio();
-await restoreSession();
+if (await restoreSession()) openDialog({ kind: 'welcome' });
 watchSession();
 installKeys();
 platform.onCloseRequest(confirmDiscard);

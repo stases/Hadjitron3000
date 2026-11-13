@@ -54,9 +54,11 @@ export async function confirmDiscard(): Promise<boolean> {
   return answer === 'discard';
 }
 
-/** Start a new project from the starter kit, after offering to save unsaved changes. */
-export async function newProject(): Promise<void> {
-  if (await confirmDiscard()) loadProject(starterProject(), null);
+/** Start a new project from the starter kit, after offering to save unsaved changes. False when cancelled. */
+export async function newProject(): Promise<boolean> {
+  if (!(await confirmDiscard())) return false;
+  loadProject(starterProject(), null);
+  return true;
 }
 
 /** Ask for a project file and open it, after offering to save unsaved changes. */

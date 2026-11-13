@@ -76,7 +76,7 @@ export function Piano({ channelId }: { channelId: string | null }) {
   });
 
   return (
-    <div className="h-factory-piano">
+    <div className="h-factory-piano" data-tour="keyboard">
       <div
         ref={root}
         className="h-factory-keys"

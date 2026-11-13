@@ -23,13 +23,18 @@ function Header({ channel }: { channel: Channel }) {
         value={channel.sound.name}
         onChange={(name) => renameSound(id, name)}
         width={240}
+        data-tour="sound-name"
         hint="The name of this sound, as the list and the Track show it."
       />
       <span className="h-factory-spacer" />
       <Button onClick={() => replaceSound(id)} hint="Swaps this sound for another one from the Sound Library.">
         Library...
       </Button>
-      <Button onClick={() => void saveSoundToLibrary(id)} hint="Keeps a copy of this sound in your Sound Library.">
+      <Button
+        onClick={() => void saveSoundToLibrary(id)}
+        hint="Keeps a copy of this sound in your Sound Library."
+        data-tour="save-sound"
+      >
         Save to Library
       </Button>
       <Button onClick={() => void exportSound(id)} hint="Saves one note of this sound as a WAV file.">
@@ -54,7 +59,7 @@ export function FactoryView() {
           onChange={selectChannel}
           hint="The sounds of this project; pick one to build it in the rack."
         />
-        <Button onClick={addSound} hint="Adds a new sound from the Sound Library.">
+        <Button onClick={addSound} hint="Adds a new sound from the Sound Library." data-tour="new-sound">
           New...
         </Button>
         <Button disabled={!channel} onClick={() => duplicateChannel(channel!.id)} hint="Adds a copy of this sound.">

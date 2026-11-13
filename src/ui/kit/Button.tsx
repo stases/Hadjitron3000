@@ -11,9 +11,12 @@ interface ButtonProps {
   small?: boolean;
   primary?: boolean;
   children: ReactNode;
+  'data-tour'?: string;
 }
 
-export function Button({ onClick, hint, pressed, disabled, square, small, primary, children }: ButtonProps) {
+export function Button({
+  onClick, hint, pressed, disabled, square, small, primary, children, 'data-tour': tour,
+}: ButtonProps) {
   const hover = useHint(hint);
   return (
     <button
@@ -27,6 +30,7 @@ export function Button({ onClick, hint, pressed, disabled, square, small, primar
       )}
       disabled={disabled}
       aria-pressed={pressed}
+      data-tour={tour}
       onClick={onClick}
       {...hover.props}
     >

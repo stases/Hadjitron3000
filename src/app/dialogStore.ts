@@ -10,7 +10,8 @@ export type DialogKind =
   | { kind: 'export' }
   | { kind: 'about' }
   | { kind: 'shortcuts' }
-  | { kind: 'update' };
+  | { kind: 'update' }
+  | { kind: 'welcome' };
 
 export interface Message {
   id: number;

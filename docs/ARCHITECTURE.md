@@ -10,7 +10,7 @@ Hadjitron 3000 is a web app (TypeScript, React, the Web Audio API) inside a thin
 | `src/audio` | The Web Audio engine, the transport, offline rendering and MP3 encoding. |
 | `src/state` | The app store and its actions, including undo. |
 | `src/platform` | Files, the sound and block library folders and the window, once for Electron and once for the browser. |
-| `src/app` | The window chrome, dialogs, keyboard shortcuts, the stored session, and the glue between store, engine and platform. |
+| `src/app` | The window chrome, dialogs, keyboard shortcuts, the stored session, the tutorials, and the glue between store, engine and platform. |
 | `src/ui/kit` | The retro widgets. `src/ui/theme` holds the tokens and fonts. |
 | `src/ui/factory`, `src/ui/track`, `src/ui/song` | The three views. |
 | `src/presets` | Factory sounds in the app's own file format, the demo project, and the factory blocks taken from it. |
@@ -70,6 +70,8 @@ The sequencer in `src/core/sequencer.ts` is a pure function from a project, a pl
 The Electron main process creates a frameless window (the retro title bar in the page is the real one), serves the built app from an `app://` origin, and answers a small set of requests from the page: open and save dialogs, the sound and block library folders (`Documents/Hadjitron 3000/Sounds` and `Blocks`), window controls. The page only sees the `Platform` interface in `src/platform/api.ts`; in a browser the same interface is backed by file pickers, downloads and IndexedDB.
 
 The open project and the view it was shown in are kept in IndexedDB a second after every change (`src/app/session.ts`) and restored on the next launch. The first launch opens the demo song in the Song view.
+
+The tutorials live in `src/app/tour`. `lessons.ts` holds both lessons as plain data: the words of each step, the control it points at (by the `data-tour` attribute the views put on their controls, which the kit's Button, TextField, RackUnit, Tabs and MenuBar pass through), the view it opens, and a predicate over the store that says when the user has done it. `tourStore.ts` keeps the running lesson, and `Tour.tsx` draws the coach window and the frame around the target, measuring the target on every animation frame so that both follow it. On the very first launch `restoreSession` reports that no session was ever stored, remembers that in the session store, and the app shows a welcome window once.
 
 A library block is auditioned by rendering it offline on its own, at the tempo of the open project, and playing the result once (`auditionBlock` in `src/app/audio.ts`); it never enters the live engine or the project.
 

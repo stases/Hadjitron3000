@@ -39,7 +39,7 @@ export function Blocks() {
   const pattern = patterns.find((p) => p.id === patternId)!;
   const full = patterns.length >= PATTERN_NAMES.length;
   return (
-    <div className="h-song-blocks">
+    <div className="h-song-blocks" data-tour="blocks">
       <span className="h-song-caption">Blocks</span>
       <Header key={pattern.id} pattern={pattern} />
       <ListBox

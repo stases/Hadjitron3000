@@ -193,7 +193,7 @@ function MenuPopup({ items, x, y, flipX, flipY, keyboard, onClose, onBack, onNav
   );
 }
 
-export function MenuBar({ menus }: { menus: { label: string; items: MenuItem[] }[] }) {
+export function MenuBar({ menus }: { menus: { label: string; tour?: string; items: MenuItem[] }[] }) {
   const bar = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState<{ index: number; keyboard: boolean } | null>(null);
   useOutsidePointer(!!open, () => setOpen(null), bar);
@@ -208,6 +208,7 @@ export function MenuBar({ menus }: { menus: { label: string; items: MenuItem[] }
           role="menuitem"
           aria-haspopup
           aria-expanded={open?.index === i}
+          data-tour={menu.tour}
           onPointerDown={(e) => {
             if (e.button !== 0) return;
             e.preventDefault();

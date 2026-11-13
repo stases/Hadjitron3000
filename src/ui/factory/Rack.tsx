@@ -27,7 +27,7 @@ function plateNames(modules: ModuleInst[]): string[] {
 function AddButton({ label, hint, items }: { label: string; hint: string; items: () => MenuItem[] }) {
   const ref = useRef<HTMLDivElement>(null);
   return (
-    <div className="h-factory-add" ref={ref}>
+    <div className="h-factory-add" ref={ref} data-tour={`add-${label.toLowerCase()}`}>
       <Button
         small
         hint={hint}
@@ -59,6 +59,7 @@ function ModUnit({ channelId, sound, mod, name }: { channelId: string; sound: So
   return (
     <RackUnit
       name={name}
+      data-tour="unit-mod"
       led={{ on: mod.on !== false, onToggle: () => setModuleOn(channelId, mod.id, mod.on === false) }}
       onRemove={() => removeModule(channelId, mod.id)}
     >
@@ -105,14 +106,14 @@ export function Rack({ channelId, sound }: { channelId: string; sound: Sound }) 
       {sound.source.type === 'sample' ? (
         <SamplerUnit channelId={channelId} source={sound.source} />
       ) : (
-        <RackUnit name="Source">
+        <RackUnit name="Source" data-tour="unit-source">
           <div className="h-factory-row">
             <SourceSelect channelId={channelId} type={sound.source.type} />
             <Params channelId={channelId} moduleId="source" type={sound.source.type} params={sound.source.params} />
           </div>
         </RackUnit>
       )}
-      <RackUnit name="Amp">
+      <RackUnit name="Amp" data-tour="unit-amp">
         <div className="h-factory-row">
           <div className="h-factory-cell is-display">
             <EnvelopeDisplay params={sound.amp} width={180} height={44} />
@@ -124,6 +125,7 @@ export function Rack({ channelId, sound }: { channelId: string; sound: Sound }) 
         <RackUnit
           key={m.id}
           name={effectNames[i]}
+          data-tour={`unit-${m.type}`}
           led={{ on: m.on !== false, onToggle: () => setModuleOn(channelId, m.id, m.on === false) }}
           onMoveUp={i > 0 ? () => moveEffect(channelId, m.id, i - 1) : null}
           onMoveDown={i < last ? () => moveEffect(channelId, m.id, i + 1) : null}

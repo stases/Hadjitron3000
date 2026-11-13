@@ -16,6 +16,7 @@ interface RackUnitProps {
   onMoveDown?: (() => void) | null;
   onRemove?: () => void;
   children?: ReactNode;
+  'data-tour'?: string;
 }
 
 /**
@@ -24,10 +25,10 @@ interface RackUnitProps {
  * The move buttons are drawn when either move handler is given (null draws it disabled); the remove button when
  * onRemove is given. The buttons sit at the right edge, so they line up from unit to unit.
  */
-export function RackUnit({ name, led, onMoveUp, onMoveDown, onRemove, children }: RackUnitProps) {
+export function RackUnit({ name, led, onMoveUp, onMoveDown, onRemove, children, 'data-tour': tour }: RackUnitProps) {
   const moves = onMoveUp !== undefined || onMoveDown !== undefined;
   return (
-    <div className="h-rack" role="group" aria-label={name}>
+    <div className="h-rack" role="group" aria-label={name} data-tour={tour}>
       <div className="h-rack-plate">{name}</div>
       <span className="h-rack-led">
         {led && <Led on={led.on} onClick={led.onToggle} hint={led.on ? 'Click to bypass.' : 'Click to switch on.'} />}

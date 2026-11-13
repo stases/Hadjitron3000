@@ -44,6 +44,8 @@ npm run app
 
 The first `npm install` downloads Electron and takes a minute or two. `npm run app` builds Hadjitron 3000.app and copies it to Applications, from where it opens like any other program: from Launchpad, Spotlight or the Dock. A demo called Welcome is loaded the first time; press Space to hear it.
 
+The first time, a small window also offers two tutorials, Make a Sound and Make a Song. Each one walks you through the program a step at a time: a little window points at the control it talks about, ticks the step off when you have done it, and waits for you to press Next. A tutorial starts on a fresh project after offering to save yours, you can close it whenever you like, and both stay in the Help menu.
+
 The application remembers the Hadjitron3000 folder it was built from, so leave that folder where it is. To update, choose Check for Updates in the Help menu. It asks GitHub what is new and lists the changes; Update and Restart fetches them into that folder, builds the new application, offers to save your project and opens the new version in place of the old one. Your sounds and blocks in Documents/Hadjitron 3000 and your saved projects are never touched. If something goes wrong on the way, the old version keeps working and the full story is in `update.log` in `~/Library/Application Support/Hadjitron 3000`.
 
 The application is not signed by Apple. A copy you built yourself opens normally; a copy that was downloaded or sent to you has to be opened once with a right-click and Open. `npm run dist` makes a disk image in the `release` folder for giving the program to someone else.

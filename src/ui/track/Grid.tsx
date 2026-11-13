@@ -234,6 +234,7 @@ export function Grid() {
       <div
         ref={scroller}
         className="h-track-scroll"
+        data-tour="grid"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={finish}
@@ -319,7 +320,7 @@ const Row = memo(function Row({ channel, index, cells, columns, active, selected
   const keys = Object.keys(shown).map(Number).filter((i) => i < columns);
   const span = (i: number) => spanWidth(i, Math.min(shown[i].len, columns - i));
   return (
-    <div className="h-track-row">
+    <div className="h-track-row" data-tour={`row-${channel.sound.name}`}>
       <Header channel={channel} index={index} active={active} />
       <div className="h-track-lane" data-channel={channel.id}>
         <div

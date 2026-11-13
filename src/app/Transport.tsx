@@ -165,7 +165,13 @@ export function Transport() {
 
   return (
     <Toolbar className="h-app-transport">
-      <Button square pressed={playing} onClick={() => setPlaying(true)} hint="Play from the start (Space).">
+      <Button
+        square
+        pressed={playing}
+        onClick={() => setPlaying(true)}
+        hint="Play from the start (Space)."
+        data-tour="play"
+      >
         <Icon name="play" />
       </Button>
       <Button square onClick={() => setPlaying(false)} hint="Stop playing (Space).">

@@ -29,6 +29,8 @@ async function menu(page: Page, menuLabel: string, item: string): Promise<void> 
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
+  const welcome = page.getByRole('dialog', { name: 'Welcome to Hadjitron 3000' });
+  await welcome.getByRole('button', { name: 'Listen to the Demo' }).click();
   await expect(title(page)).toHaveText('Welcome - Hadjitron 3000');
 });
 
@@ -131,6 +133,7 @@ test('reloading the page restores the project and the view', async ({ page }) =>
   page.on('dialog', (dialog) => void dialog.accept());
   await page.reload();
   await expect(bpm(page)).toHaveText('128.0');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(title(page)).toHaveText('Welcome* - Hadjitron 3000');
   await expect(tab(page)).toHaveText('Factory');
 });

@@ -11,6 +11,7 @@ import type { FileRef, View } from '../state/store';
 const store = createStore('hadjitron-session', 'session');
 const DOC = 'doc';
 const SAMPLE = 'sample:';
+const WELCOMED = 'welcomed';
 const DELAY_MS = 1000;
 
 interface StoredDoc {
@@ -47,9 +48,10 @@ async function write(): Promise<void> {
 
 /**
  * Open the stored project in the view it was left in, or the demo in the Song view on the first launch or when
- * the stored project cannot be read.
+ * the stored project cannot be read. True on the very first launch, which is remembered so that it happens once.
  */
-export async function restoreSession(): Promise<void> {
+export async function restoreSession(): Promise<boolean> {
+  let first = false;
   try {
     stored = new Set((await keys<string>(store)).filter((k) => k.startsWith(SAMPLE)).map((k) => k.slice(SAMPLE.length)));
     const doc = await get<StoredDoc>(DOC, store);
@@ -62,8 +64,10 @@ export async function restoreSession(): Promise<void> {
       openProject(readProject(doc.project, samples), doc.file);
       useApp.setState({ dirty: doc.dirty });
       if (doc.view) setView(doc.view);
-      return;
+      return false;
     }
+    first = !(await get(WELCOMED, store));
+    if (first) await set(WELCOMED, true, store);
   } catch (error) {
     console.error('The stored session could not be restored:', error);
     stored = new Set();
@@ -71,6 +75,7 @@ export async function restoreSession(): Promise<void> {
   }
   openProject(demoProject(), null);
   setView('song');
+  return first;
 }
 
 /** Save the project about a second after every change. Returns the function that stops it. */

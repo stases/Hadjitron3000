@@ -6,6 +6,7 @@ import { closeDialog, useDialogs } from './dialogStore';
 import { ExportDialog } from './ExportDialog';
 import { BlockLibraryDialog, SoundLibraryDialog } from './LibraryDialog';
 import { SHORTCUT_GROUPS } from './shortcuts';
+import { WelcomeDialog } from './tour/Welcome';
 import { UpdateDialog } from './UpdateDialog';
 
 function AboutDialog() {
@@ -103,6 +104,7 @@ export function Dialogs() {
       {dialog?.kind === 'about' && <AboutDialog />}
       {dialog?.kind === 'shortcuts' && <ShortcutsDialog />}
       {dialog?.kind === 'update' && <UpdateDialog />}
+      {dialog?.kind === 'welcome' && <WelcomeDialog />}
       {message && (
         <MessageBox
           key={message.id}

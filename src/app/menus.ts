@@ -14,8 +14,9 @@ import {
   showShortcuts,
 } from './commands';
 import { modKey } from './shortcuts';
+import { startLesson } from './tour/tourStore';
 
-export function buildMenus(state: AppState): { label: string; items: MenuItem[] }[] {
+export function buildMenus(state: AppState): { label: string; tour?: string; items: MenuItem[] }[] {
   const channel = state.channelId;
   const onChannel = (run: (id: string) => unknown) => ({
     disabled: !channel,
@@ -29,6 +30,7 @@ export function buildMenus(state: AppState): { label: string; items: MenuItem[] 
   return [
     {
       label: 'File',
+      tour: 'menu-file',
       items: [
         { label: 'New Project', shortcut: modKey('N'), onSelect: () => void newProject() },
         { label: 'Open Project…', shortcut: modKey('O'), onSelect: () => void openProject() },
@@ -95,6 +97,9 @@ export function buildMenus(state: AppState): { label: string; items: MenuItem[] 
     {
       label: 'Help',
       items: [
+        { label: 'Tutorial: Make a Sound', onSelect: () => void startLesson('sound') },
+        { label: 'Tutorial: Make a Song', onSelect: () => void startLesson('song') },
+        'separator',
         { label: 'Keyboard Shortcuts…', onSelect: showShortcuts },
         ...(platform.updates ? [{ label: 'Check for Updates…', onSelect: checkForUpdates }] : []),
         { label: 'About Hadjitron 3000…', onSelect: showAbout },

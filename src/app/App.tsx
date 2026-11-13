@@ -12,13 +12,14 @@ import { position, sampleRate } from './audio';
 import { documentName, dropFiles } from './commands';
 import { Dialogs } from './Dialogs';
 import { buildMenus } from './menus';
+import { Tour } from './tour/Tour';
 import { Transport } from './Transport';
 import './app.css';
 
 const TABS = [
   { id: 'factory', label: 'Factory' },
   { id: 'track', label: 'Track' },
-  { id: 'song', label: 'Song' },
+  { id: 'song', label: 'Song', tour: 'tab-song' },
 ];
 
 function Menus() {
@@ -167,6 +168,7 @@ export function App() {
         )}
       </div>
       <Status />
+      <Tour />
       <Dialogs />
     </Window>
   );

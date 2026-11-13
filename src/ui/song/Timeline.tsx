@@ -220,6 +220,7 @@ export function Timeline() {
       <div
         ref={scroller}
         className="h-song-scroll"
+        data-tour="timeline"
         tabIndex={0}
         onKeyDown={onKeyDown}
         onPointerDown={onPointerDown}

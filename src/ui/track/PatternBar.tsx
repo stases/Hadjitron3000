@@ -44,6 +44,7 @@ export function PatternBar() {
       <Button
         onClick={() => duplicatePattern(patternId)}
         disabled={full}
+        data-tour="copy-block"
         hint="Make a copy of this block to start a variation from."
       >
         Copy

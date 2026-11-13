@@ -2,7 +2,7 @@ import type { KeyboardEvent, ReactNode } from 'react';
 import { cx } from './cx';
 
 interface TabsProps {
-  tabs: { id: string; label: string }[];
+  tabs: { id: string; label: string; tour?: string }[];
   value: string;
   onChange: (id: string) => void;
 }
@@ -25,6 +25,7 @@ export function Tabs({ tabs, value, onChange }: TabsProps) {
           type="button"
           role="tab"
           data-tab={t.id}
+          data-tour={t.tour}
           aria-selected={t.id === value}
           tabIndex={t.id === value ? 0 : -1}
           className={cx('h-tab', t.id === value && 'is-selected')}

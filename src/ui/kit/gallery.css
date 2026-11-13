@@ -1,0 +1,226 @@
+.g-desk {
+  padding: 16px;
+}
+
+.g-window {
+  width: 1232px;
+}
+
+.g-sections {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px 12px;
+  padding: 8px 10px 10px;
+}
+
+.g-wide {
+  flex-basis: 100%;
+}
+
+.g-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 23px;
+}
+
+.g-row + .g-row {
+  margin-top: 8px;
+}
+
+.g-row-label {
+  width: 64px;
+  font: var(--font-small);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.g-cols {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.g-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.g-stack > .g-row + .g-row {
+  margin-top: 0;
+}
+
+.g-pad {
+  padding: 10px;
+}
+
+.g-focused {
+  display: contents;
+}
+
+.g-joined {
+  display: flex;
+}
+
+.g-pair {
+  display: flex;
+  gap: 3px;
+}
+
+.g-open-select {
+  display: flex;
+  flex-direction: column;
+}
+
+.g-menu-demo {
+  position: relative;
+  width: 420px;
+  height: 250px;
+}
+
+.g-rack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.g-form {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: start;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+/* The step grid mock-up. */
+
+.g-grid {
+  display: grid;
+  grid-template-columns: 168px auto;
+  justify-content: start;
+  align-items: center;
+  gap: 2px 0;
+  padding: 6px 6px 6px 4px;
+}
+
+.g-ruler,
+.g-cells {
+  display: flex;
+  gap: 2px;
+  padding: 0 4px;
+}
+
+.g-ruler {
+  height: 12px;
+  font: var(--font-small);
+  color: var(--ink-soft);
+}
+
+.g-ruler span {
+  width: 24px;
+  text-align: center;
+}
+
+.g-ruler span:nth-child(4n) {
+  margin-right: 4px;
+}
+
+.g-ruler span.is-now {
+  color: var(--amber);
+  background: var(--ink);
+}
+
+.g-cells {
+  padding-top: 2px;
+  padding-bottom: 2px;
+  background: color-mix(in srgb, var(--face-lo) 70%, var(--lo));
+}
+
+.g-cell {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 22px;
+  font: var(--font-small);
+  background: var(--face);
+  box-shadow: var(--bevel-well);
+}
+
+.g-cell.is-beat {
+  background: var(--face-lo);
+}
+
+.g-cell.is-now {
+  background: var(--face-hi);
+}
+
+.g-cell.is-group-end {
+  margin-right: 4px;
+}
+
+.g-cell.is-on {
+  background: var(--cell);
+  box-shadow: inset 1px 1px color-mix(in srgb, var(--cell) 50%, var(--hi)),
+    inset -1px -1px color-mix(in srgb, var(--cell) 55%, var(--ink)), 0 0 0 1px var(--ink);
+}
+
+.g-track-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 5px 0 6px;
+  background: var(--face);
+  box-shadow: var(--bevel-raised);
+}
+
+.g-track-name {
+  flex: 1;
+}
+
+/* Icons */
+
+.g-icons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.g-icon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  width: 80px;
+  height: 52px;
+  padding-bottom: 2px;
+}
+
+.g-icon-name {
+  font: var(--font-small);
+  color: var(--ink-soft);
+}
+
+.g-emblems {
+  display: flex;
+  align-items: flex-end;
+  gap: 24px;
+  margin-top: 12px;
+}
+
+.g-emblem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.g-emblem-title {
+  padding: 2px;
+  background: linear-gradient(90deg, var(--title-a), var(--title-b));
+}

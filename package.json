@@ -17,14 +17,6 @@
     "test:e2e": "playwright test",
     "dist": "vite build && electron-builder --mac"
   },
-  "dependencies": {
-    "idb-keyval": "^6.3.0",
-    "immer": "^11.2.10",
-    "react": "^19.3.1",
-    "react-dom": "^19.3.1",
-    "wasm-media-encoders": "^0.7.0",
-    "zustand": "^5.1.0"
-  },
   "devDependencies": {
     "@playwright/test": "^1.65.0",
     "@types/react": "^19.3.0",
@@ -33,9 +25,15 @@
     "@vitest/browser-playwright": "^5.1.0",
     "electron": "^45.3.1",
     "electron-builder": "^26.18.0",
+    "idb-keyval": "^6.3.0",
+    "immer": "^11.2.10",
     "playwright": "^1.65.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.0",
+    "wasm-media-encoders": "^0.7.0",
+    "zustand": "^5.1.0"
   }
 }

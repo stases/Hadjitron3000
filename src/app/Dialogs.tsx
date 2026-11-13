@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
 import { version } from '../../package.json';
 import { Button, Dialog, DialogButtons, Emblem, MessageBox } from '../ui/kit';
-import { closeDialog, useDialogs } from './dialogs';
+import { closeDialog, useDialogs } from './dialogStore';
 import { ExportDialog } from './ExportDialog';
 import { LibraryDialog } from './LibraryDialog';
 import { SHORTCUT_GROUPS } from './shortcuts';

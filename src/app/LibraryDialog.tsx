@@ -10,7 +10,7 @@ import { Button, Dialog, ListBox } from '../ui/kit';
 import type { IconName, ListItem } from '../ui/kit';
 import { audition, endAudition } from './audio';
 import { fileProblem, importAudio, loadSample } from './commands';
-import { ask, closeDialog, fail, reason } from './dialogs';
+import { ask, closeDialog, fail, reason } from './dialogStore';
 
 const SOURCE_ICONS: Record<string, IconName> = {
   osc: 'wave-sawtooth', fm: 'wave-sine', noise: 'noise', sample: 'sample',

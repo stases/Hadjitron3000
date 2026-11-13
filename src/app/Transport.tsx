@@ -5,7 +5,7 @@ import { formatValue, fromNorm, toNorm } from '../core/params';
 import { setBpm, setMaster, setPlaying, setScope, setSwing, useApp } from '../state/store';
 import { Button, Icon, Knob, Lcd, Meter, Scope, Separator, Toolbar, setHint } from '../ui/kit';
 import { levels, scope } from './audio';
-import { fail } from './dialogs';
+import { fail } from './dialogStore';
 
 const SWING: FloatSpec = { kind: 'float', id: 'swing', label: 'Swing', min: 0, max: 1, def: 0, unit: '%' };
 const MASTER: FloatSpec = {

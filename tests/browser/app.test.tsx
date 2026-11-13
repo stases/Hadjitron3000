@@ -7,7 +7,7 @@ import { userEvent } from 'vitest/browser';
 import { App } from '../../src/app/App';
 import * as audio from '../../src/app/audio';
 import * as commands from '../../src/app/commands';
-import { useDialogs } from '../../src/app/dialogs';
+import { useDialogs } from '../../src/app/dialogStore';
 import { installKeys } from '../../src/app/keys';
 import { restoreSession, saveSession } from '../../src/app/session';
 import { emptyProject, newSound } from '../../src/core/defaults';

@@ -6,7 +6,7 @@ import { encodeWav } from '../core/wav';
 import { useApp } from '../state/store';
 import { Button, Checkbox, Dialog, DialogButtons, GroupBox, ProgressBar, Select, Stepper } from '../ui/kit';
 import { documentName, writeFile } from './commands';
-import { closeDialog, fail, reason } from './dialogs';
+import { closeDialog, fail, reason } from './dialogStore';
 
 const FORMATS = [
   { value: 'wav', label: 'WAV, 16-bit' },

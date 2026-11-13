@@ -14,7 +14,7 @@ import {
   addChannel, addSampleChannel, markSaved, openProject as loadProject, setSample, setSourceType, useApp,
 } from '../state/store';
 import type { AppState } from '../state/store';
-import { ask, fail, openDialog, reason } from './dialogs';
+import { ask, fail, openDialog, reason } from './dialogStore';
 
 const AUDIO_EXTS = ['wav', 'mp3', 'aiff', 'aif', 'flac', 'ogg', 'm4a'];
 const AUDIO_FILTER: FileFilter = { name: 'Audio files', extensions: AUDIO_EXTS };

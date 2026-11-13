@@ -1,0 +1,286 @@
+/* The Track view. Cell sizes and gaps must match src/ui/track/steps.ts. */
+
+.h-track {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.h-track-bar,
+.h-track-inspector {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 26px;
+  white-space: nowrap;
+}
+
+.h-track-label {
+  flex: none;
+}
+
+.h-track-bar .h-track-label {
+  margin-left: 4px;
+}
+
+.h-track-bar .h-track-label:first-child {
+  margin-left: 0;
+}
+
+.h-track-joined {
+  display: flex;
+}
+
+.h-track-song {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.h-track-slot.is-now .h-button {
+  color: var(--amber);
+  text-shadow: var(--amber-glow);
+  background: var(--ink);
+  box-shadow: var(--bevel-pressed);
+}
+
+/* The grid */
+
+.h-track-grid {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.h-track-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
+
+.h-track-row,
+.h-track-ruler {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+}
+
+.h-track-row {
+  margin-bottom: 2px;
+}
+
+.h-track-ruler {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  height: 16px;
+  margin-bottom: 2px;
+  background: var(--face);
+}
+
+.h-track-corner,
+.h-track-head,
+.h-track-add {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  flex: none;
+  width: 196px;
+}
+
+.h-track-corner {
+  background: var(--face);
+}
+
+.h-track-ticks,
+.h-track-lane {
+  flex: none;
+  padding: 0 4px;
+}
+
+.h-track-lane {
+  padding-top: 2px;
+  padding-bottom: 2px;
+  background: color-mix(in srgb, var(--face-lo) 70%, var(--lo));
+}
+
+.h-track-box {
+  position: relative;
+  display: flex;
+  gap: 2px;
+}
+
+.h-track-cell,
+.h-track-tick {
+  flex: none;
+  width: 24px;
+}
+
+.h-track-cell:nth-child(4n),
+.h-track-tick:nth-child(4n) {
+  margin-right: 4px;
+}
+
+.h-track-cell:nth-child(16n),
+.h-track-tick:nth-child(16n) {
+  margin-right: 10px;
+}
+
+.h-track-cell {
+  height: 22px;
+  background: var(--face);
+  box-shadow: var(--bevel-well);
+}
+
+.h-track-cell:nth-child(4n + 1) {
+  background: var(--face-lo);
+}
+
+.h-track-tick {
+  position: relative;
+  height: 16px;
+  padding-top: 1px;
+  font: var(--font-small);
+  text-align: center;
+  color: var(--ink-soft);
+}
+
+.h-track-tick:not(:nth-child(16n + 1))::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 12px;
+  width: 1px;
+  height: 1px;
+  background: var(--lo);
+}
+
+.h-track-tick:nth-child(4n + 1):not(:nth-child(16n + 1))::after {
+  height: 4px;
+  background: var(--ink-soft);
+}
+
+.h-track-now,
+.h-track-marker {
+  position: absolute;
+  top: 0;
+  left: var(--h-track-now);
+  display: none;
+  width: 24px;
+}
+
+.h-track-scroll[data-now] .h-track-now,
+.h-track-scroll[data-now] .h-track-marker {
+  display: block;
+}
+
+.h-track-now {
+  height: 22px;
+  background: var(--hi);
+  box-shadow: var(--bevel-well);
+}
+
+.h-track-marker {
+  height: 14px;
+  padding: 5px 0 0 10px;
+  background: var(--ink);
+}
+
+.h-track-step {
+  --tint: color-mix(in srgb, var(--cell) 35%, var(--face));
+  position: absolute;
+  top: 0;
+  height: 22px;
+  overflow: hidden;
+  font: var(--font-small);
+  line-height: 22px;
+  text-align: center;
+  white-space: nowrap;
+  color: var(--ink);
+  background: linear-gradient(to top, var(--cell) var(--lit), var(--tint) var(--lit));
+  box-shadow: inset 1px 1px color-mix(in srgb, var(--cell) 50%, var(--hi)),
+    inset -1px -1px color-mix(in srgb, var(--cell) 55%, var(--ink)), 0 0 0 1px var(--ink);
+}
+
+.h-track-step.is-long {
+  padding-left: 4px;
+  text-align: left;
+}
+
+.h-track-sel {
+  position: absolute;
+  top: 0;
+  height: 22px;
+  box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 3px var(--hi);
+}
+
+/* Channel headers */
+
+.h-track-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 4px 0 7px;
+  background: var(--face);
+  box-shadow: var(--bevel-raised);
+}
+
+.h-track-name {
+  flex: 1;
+  min-width: 0;
+  margin-left: 2px;
+  padding: 0 3px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.h-track-head.is-active .h-track-name {
+  color: var(--sel-ink);
+  background: var(--sel);
+}
+
+.h-track-add {
+  padding: 4px 0 2px;
+  background: var(--face);
+}
+
+.h-track-empty {
+  align-self: center;
+  padding: 4px 0 0 12px;
+  color: var(--ink-soft);
+}
+
+/* Step inspector */
+
+.h-track-which {
+  flex: none;
+  width: 150px;
+  overflow: hidden;
+}
+
+.h-track-inspector .h-track-label {
+  margin-left: 6px;
+}
+
+.h-track-value {
+  flex: none;
+  width: 36px;
+  font: var(--font-mono);
+}
+
+.h-track-help {
+  min-width: 0;
+  margin-left: 10px;
+  font: var(--font-small);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink-soft);
+}

@@ -9,6 +9,8 @@ interface SliderProps {
   value: number;
   onChange: (value: number) => void;
   vertical?: boolean;
+  /** A short horizontal trackbar with a small thumb and no ticks, for tight rows. */
+  small?: boolean;
   length?: number;
   label?: string;
   display?: string;
@@ -45,19 +47,24 @@ const THUMB_VERTICAL: Sprite = {
   rows: [...THUMB_ROWS[0]].map((_, x) => THUMB_ROWS.map((row) => row[x]).join('')),
   colors: COLORS,
 };
-const THUMB_W = 11;
+const SMALL_THUMB: Sprite = {
+  rows: ['hhhhhhk', 'hFFFFlk', ...Array<string>(11).fill('hFffflk'), 'hlllllk', 'kkkkkkk'],
+  colors: COLORS,
+};
 const TICKS = 11;
 const KEY_STEP = 0.02;
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 /** The Windows 98 trackbar: a groove, a pointed thumb and tick marks. Value 0..1, up and right are more. */
-export function Slider({ value, onChange, vertical, length = 120, label, display, hint, disabled }: SliderProps) {
+export function Slider(props: SliderProps) {
+  const { value, onChange, vertical, small, length = 120, label, display, hint, disabled } = props;
   const track = useRef<HTMLDivElement>(null);
   const grab = useRef<number | null>(null);
   const hover = useHint(hint);
   const [dragging, setDragging] = useState(false);
-  const travel = length - THUMB_W;
+  const thumbW = small ? 7 : 11;
+  const travel = length - thumbW;
   const offset = Math.round(clamp01(value) * travel);
   const caption = label ? `${label}: ${display ?? ''}` : (display ?? '');
 
@@ -80,8 +87,8 @@ export function Slider({ value, onChange, vertical, length = 120, label, display
     e.currentTarget.focus({ preventScroll: true });
     e.currentTarget.setPointerCapture(e.pointerId);
     const p = along(e);
-    const onThumb = p >= offset && p < offset + THUMB_W;
-    grab.current = onThumb ? p - offset : Math.floor(THUMB_W / 2);
+    const onThumb = p >= offset && p < offset + thumbW;
+    grab.current = onThumb ? p - offset : Math.floor(thumbW / 2);
     if (!onThumb) moveTo(p - grab.current);
     setDragging(true);
   };
@@ -104,9 +111,11 @@ export function Slider({ value, onChange, vertical, length = 120, label, display
     if (v !== value) onChange(v);
   };
 
-  const ticks = Array.from({ length: TICKS }, (_, i) => Math.floor(THUMB_W / 2) + Math.round((i * travel) / (TICKS - 1)));
+  const ticks = small
+    ? []
+    : Array.from({ length: TICKS }, (_, i) => Math.floor(thumbW / 2) + Math.round((i * travel) / (TICKS - 1)));
   return (
-    <div className={cx('h-slider', vertical && 'is-vertical', disabled && 'is-disabled')}>
+    <div className={cx('h-slider', vertical && 'is-vertical', small && 'is-small', disabled && 'is-disabled')}>
       {(label || display) && !vertical && (
         <div className="h-slider-caption">
           <span className={cx('h-slider-label', disabled && 'h-engraved')}>{label}</span>
@@ -141,7 +150,7 @@ export function Slider({ value, onChange, vertical, length = 120, label, display
           <i key={t} className="h-slider-tick" style={vertical ? { bottom: t } : { left: t }} />
         ))}
         <span className="h-slider-thumb" style={vertical ? { bottom: offset } : { left: offset }}>
-          <SpriteImage sprite={vertical ? THUMB_VERTICAL : THUMB} />
+          <SpriteImage sprite={small ? SMALL_THUMB : vertical ? THUMB_VERTICAL : THUMB} />
         </span>
       </div>
       {(label || display) && vertical && (

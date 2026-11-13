@@ -315,6 +315,14 @@
   height: auto;
 }
 
+.h-slider.is-small .h-slider-track {
+  height: 15px;
+}
+
+.h-slider.is-small .h-slider-groove {
+  top: 5px;
+}
+
 .h-slider-tick {
   position: absolute;
   top: 23px;

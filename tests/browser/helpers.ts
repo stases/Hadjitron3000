@@ -3,8 +3,10 @@
 import { Engine } from '../../src/audio';
 import { AMP, MODULES } from '../../src/core/modules';
 import { defaultParams } from '../../src/core/params';
-import { emptyProject, newSound } from '../../src/core/defaults';
+import { emptyProject, newChannel, newSound } from '../../src/core/defaults';
 import type { Channel, ModInst, ModTarget, ModuleInst, Params, Project, Sound } from '../../src/core/types';
+import { preset } from '../../src/presets';
+import { demoProject } from '../../src/presets/projects';
 import { rowsOf } from '../support/steps';
 import type { StepSpec } from '../support/steps';
 
@@ -142,7 +144,7 @@ export function project(
   extra: Partial<Project> = {},
 ): Project {
   const p = emptyProject();
-  p.channels = channels.map((c) => ({ color: 0, mute: false, solo: false, ...c }));
+  p.channels = channels.map((c) => ({ ...newChannel(c.id, c.sound, 0), ...c }));
   p.patterns[0].notes = rowsOf(steps);
   return { ...p, master: 0, ...extra };
 }
@@ -172,4 +174,10 @@ export async function notes(
     return ctx.resume();
   });
   return (await ctx.startRendering()).getChannelData(0);
+}
+
+/** The demo song as it was before the mixer: the factory sounds as they are, sending nothing. */
+export function oldDemo(): Project {
+  const p = demoProject();
+  return { ...p, channels: p.channels.map((c) => ({ ...c, sound: preset(c.sound.name), sends: [0, 0] })) };
 }

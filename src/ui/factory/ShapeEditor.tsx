@@ -4,6 +4,7 @@ import {
   SHAPE_POINTS, STOCK_SHAPES, decodeShape, encodeShape, smoothShape, strokeShape,
 } from '../../core/shape';
 import { beginGesture, commitGesture, setParam } from '../../state/store';
+import type { Owner } from '../../state/store';
 import { Button, Display, tokenColor, useHint } from '../kit';
 import { PARAM_HINTS } from './hints';
 
@@ -45,12 +46,12 @@ interface Stroke {
  * moves, Shift draws a straight line from where the stroke began. Buttons start it again from a stock wave or soften
  * it.
  */
-export function ShapeEditor({ channelId, id, value }: { channelId: string; id: string; value: string }) {
+export function ShapeEditor({ owner, id, value }: { owner: Owner; id: string; value: string }) {
   const [draft, setDraft] = useState<number[] | null>(null);
   const stroke = useRef<Stroke | null>(null);
   const points = draft ?? decodeShape(value)!;
   const hover = useHint(PARAM_HINTS.osc[id]);
-  const store = (p: readonly number[]) => setParam(channelId, 'source', id, encodeShape(p));
+  const store = (p: readonly number[]) => setParam(owner, 'source', id, encodeShape(p));
 
   const at = (e: PointerEvent<HTMLDivElement>): [number, number] => {
     const r = e.currentTarget.querySelector('canvas')!.getBoundingClientRect();

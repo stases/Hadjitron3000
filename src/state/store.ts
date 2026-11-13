@@ -3,20 +3,23 @@ import { create } from 'zustand';
 import type { StoreApi, UseBoundStore } from 'zustand';
 import {
   CHANNEL_COLORS, MAX_BARS, MAX_SONG_BARS, PATTERN_NAMES, SONG_LANES, TICKS_PER_STEP,
-  emptyProject, newMod, newModule, newPattern, newSound, uid,
+  emptyProject, newBusModule, newChannel, newMod, newModule, newPattern, newSound, uid,
 } from '../core/defaults';
 import { MAX_LEVEL, MIN_LEVEL, fitFades } from '../core/arrangement';
 import { MAX_TICKS, barOf, barsToHold, meterText, readMeter } from '../core/meter';
+import { BUS_LEVEL, DUCK_AMOUNT, DUCK_RELEASE, MAX_BUS_NAME, rackChain } from '../core/mixer';
+import type { Owner } from '../core/mixer';
 import { MODULES, moduleDef, paramSpec } from '../core/modules';
 import { MAX_NOTE, MIN_NOTE, cleanNotes, compareNotes, noteExtras } from '../core/notes';
 import type { NoteExtras } from '../core/notes';
 import { coerce, defaultParams } from '../core/params';
 import type {
-  Block, Channel, Lane, Meter, ModInst, ModTarget, Note, NoteInit, ParamValue, Params, Placement, PlayScope, Project,
-  SampleData, Sound,
+  Block, Channel, Duck, Lane, Meter, ModInst, ModTarget, ModuleInst, Note, NoteInit, ParamValue, Params, Placement,
+  PlayScope, Project, SampleData, SendBus, Sound,
 } from '../core/types';
 
-export type View = 'factory' | 'track' | 'song';
+export type View = 'factory' | 'track' | 'song' | 'mixer';
+export type { Owner } from '../core/mixer';
 /** A cell of the Track grid: a row and a step. */
 export interface StepRef { channelId: string; index: number }
 export interface FileRef { name: string; path: string | null }
@@ -129,6 +132,16 @@ function editSound(channelId: string, recipe: (sound: Sound) => void, key?: stri
   }, key);
 }
 
+/** Change an effect chain: a sound's (the recipe also gets the sound) or a rack of the mixer's. */
+function editChain(owner: Owner, recipe: (chain: ModuleInst[], sound?: Sound) => void, key?: string): void {
+  if (typeof owner === 'string') editSound(owner, (sound) => recipe(sound.chain, sound), key);
+  else edit((p) => recipe(rackChain(p.mixer, owner.rack)), key);
+}
+
+function hasOwner(owner: Owner): boolean {
+  return typeof owner !== 'string' || useApp.getState().project.channels.some((c) => c.id === owner);
+}
+
 function nextColor(items: { color: number }[]): number {
   const counts = Array<number>(CHANNEL_COLORS).fill(0);
   for (const item of items) counts[item.color]++;
@@ -185,7 +198,7 @@ function mergeSamples(target: Record<string, SampleData>, samples?: Record<strin
 export function addChannel(sound: Sound, samples?: Record<string, SampleData>): string {
   const id = uid('c');
   edit((p) => {
-    p.channels.push({ id, sound, color: nextColor(p.channels), mute: false, solo: false });
+    p.channels.push(newChannel(id, sound, nextColor(p.channels)));
     mergeSamples(p.samples, samples);
   }, undefined, { channelId: id });
   return id;
@@ -206,6 +219,7 @@ export function removeChannel(channelId: string): void {
     p.channels.splice(index, 1);
     for (const pattern of p.patterns) delete pattern.notes[channelId];
     for (const placement of p.song) setMutes(placement, (placement.mutes ?? []).filter((id) => id !== channelId));
+    for (const c of p.channels) if (c.duck.source === channelId) c.duck.source = null;
   }, undefined, state.channelId === channelId ? { channelId: channel?.id ?? null } : {});
 }
 
@@ -233,6 +247,47 @@ export function setChannel(channelId: string, patch: Partial<Pick<Channel, 'mute
     if (patch.solo !== undefined) channel.solo = patch.solo;
     if (patch.color !== undefined) channel.color = clamp(Math.round(patch.color), 0, CHANNEL_COLORS - 1);
   });
+}
+
+/** How much of a channel goes to send bus 0 or 1. */
+export function setSend(channelId: string, index: number, amount: number): void {
+  if ((index !== 0 && index !== 1) || !Number.isFinite(amount)) return;
+  edit((p) => {
+    const channel = p.channels.find((c) => c.id === channelId);
+    if (channel) channel.sends[index] = clamp(amount, 0, 1);
+  }, JSON.stringify(['send', channelId, index]));
+}
+
+/** Change a channel's ducking. A source that is the channel itself or not in the project is no source. */
+export function setDuck(channelId: string, patch: Partial<Duck>): void {
+  edit((p) => {
+    const channel = p.channels.find((c) => c.id === channelId);
+    if (!channel) return;
+    const { source, amount, release } = patch;
+    if (source !== undefined) {
+      channel.duck.source = source !== channelId && p.channels.some((c) => c.id === source) ? source : null;
+    }
+    if (amount !== undefined && Number.isFinite(amount)) {
+      channel.duck.amount = clamp(amount, DUCK_AMOUNT.min, DUCK_AMOUNT.max);
+    }
+    if (release !== undefined && Number.isFinite(release)) {
+      channel.duck.release = clamp(release, DUCK_RELEASE.min, DUCK_RELEASE.max);
+    }
+  }, JSON.stringify(['duck', channelId, Object.keys(patch).sort()]));
+}
+
+/** Rename, set the level of, or mute send bus 0 or 1. */
+export function setBus(index: number, patch: Partial<Pick<SendBus, 'name' | 'level' | 'mute'>>): void {
+  if (index !== 0 && index !== 1) return;
+  edit((p) => {
+    const bus = p.mixer.buses[index];
+    const name = patch.name?.trim().slice(0, MAX_BUS_NAME).trimEnd();
+    if (name) bus.name = name;
+    if (patch.level !== undefined && Number.isFinite(patch.level)) {
+      bus.level = clamp(patch.level, BUS_LEVEL.min, BUS_LEVEL.max);
+    }
+    if (patch.mute !== undefined) bus.mute = patch.mute;
+  }, JSON.stringify(['bus', index, Object.keys(patch).sort()]));
 }
 
 export function replaceSound(channelId: string, sound: Sound, samples?: Record<string, SampleData>): void {
@@ -272,8 +327,17 @@ export function setSourceType(channelId: string, type: string): void {
   });
 }
 
-export function setParam(channelId: string, moduleId: string, paramId: string, value: ParamValue): void {
-  editSound(channelId, (sound) => {
+export function setParam(owner: Owner, moduleId: string, paramId: string, value: ParamValue): void {
+  const key = JSON.stringify(['param', owner, moduleId, paramId]);
+  if (typeof owner !== 'string') {
+    editChain(owner, (chain) => {
+      const module = chain.find((m) => m.id === moduleId);
+      const spec = module && paramSpec(MODULES[module.type], paramId);
+      if (module && spec) module.params[paramId] = coerce(spec, value);
+    }, key);
+    return;
+  }
+  editSound(owner, (sound) => {
     const def = moduleDef(sound, moduleId);
     const spec = def && paramSpec(def, paramId);
     if (!spec) return;
@@ -283,7 +347,7 @@ export function setParam(channelId: string, moduleId: string, paramId: string, v
     const params = Object.hasOwn(fixed, moduleId) ? fixed[moduleId]
       : (sound.chain.find((m) => m.id === moduleId) ?? sound.mods.find((m) => m.id === moduleId))?.params;
     if (params) params[paramId] = coerce(spec, value);
-  }, JSON.stringify(['param', channelId, moduleId, paramId]));
+  }, key);
 }
 
 export function setSample(channelId: string, id: string, sample: SampleData): void {
@@ -295,20 +359,19 @@ export function setSample(channelId: string, id: string, sample: SampleData): vo
   });
 }
 
-export function addEffect(channelId: string, type: string, index?: number): string | null {
-  if (MODULES[type]?.kind !== 'effect' || !useApp.getState().project.channels.some((c) => c.id === channelId)) {
-    return null;
-  }
-  const module = newModule(type);
-  editSound(channelId, (sound) => {
-    const at = index === undefined ? sound.chain.length : clamp(Math.round(index), 0, sound.chain.length);
-    sound.chain.splice(at, 0, module);
+/** Add an effect to a chain. On a send bus an effect with a Mix starts fully wet. */
+export function addEffect(owner: Owner, type: string, index?: number): string | null {
+  if (MODULES[type]?.kind !== 'effect' || !hasOwner(owner)) return null;
+  const module = typeof owner !== 'string' && owner.rack !== 'master' ? newBusModule(type) : newModule(type);
+  editChain(owner, (chain) => {
+    const at = index === undefined ? chain.length : clamp(Math.round(index), 0, chain.length);
+    chain.splice(at, 0, module);
   });
   return module.id;
 }
 
-export function moveEffect(channelId: string, moduleId: string, toIndex: number): void {
-  editSound(channelId, (sound) => { move(sound.chain, sound.chain.findIndex((m) => m.id === moduleId), toIndex); });
+export function moveEffect(owner: Owner, moduleId: string, toIndex: number): void {
+  editChain(owner, (chain) => { move(chain, chain.findIndex((m) => m.id === moduleId), toIndex); });
 }
 
 export function addMod(channelId: string, type: string): string | null {
@@ -320,22 +383,23 @@ export function addMod(channelId: string, type: string): string | null {
   return mod.id;
 }
 
-export function removeModule(channelId: string, moduleId: string): void {
-  editSound(channelId, (sound) => {
-    const index = sound.chain.findIndex((m) => m.id === moduleId);
+/** Remove an effect, or a modulator of a sound. Modulators that moved the effect are left without a target. */
+export function removeModule(owner: Owner, moduleId: string): void {
+  editChain(owner, (chain, sound) => {
+    const index = chain.findIndex((m) => m.id === moduleId);
     if (index >= 0) {
-      sound.chain.splice(index, 1);
-      for (const mod of sound.mods) if (mod.target?.module === moduleId) mod.target = null;
-    } else {
+      chain.splice(index, 1);
+      for (const mod of sound?.mods ?? []) if (mod.target?.module === moduleId) mod.target = null;
+    } else if (sound) {
       const modIndex = sound.mods.findIndex((m) => m.id === moduleId);
       if (modIndex >= 0) sound.mods.splice(modIndex, 1);
     }
   });
 }
 
-export function setModuleOn(channelId: string, moduleId: string, on: boolean): void {
-  editSound(channelId, (sound) => {
-    const module = sound.chain.find((m) => m.id === moduleId) ?? sound.mods.find((m) => m.id === moduleId);
+export function setModuleOn(owner: Owner, moduleId: string, on: boolean): void {
+  editChain(owner, (chain, sound) => {
+    const module = chain.find((m) => m.id === moduleId) ?? sound?.mods.find((m) => m.id === moduleId);
     if (module) module.on = on;
   });
 }
@@ -558,7 +622,7 @@ export function insertBlock(block: Block): string | null {
     for (const track of copy.tracks) {
       let channel = p.channels.find((c) => !used.has(c.id) && equal(c.sound, track.sound));
       if (!channel) {
-        channel = { id: uid('c'), sound: track.sound, color: nextColor(p.channels), mute: false, solo: false };
+        channel = newChannel(uid('c'), track.sound, nextColor(p.channels));
         p.channels.push(channel);
       }
       used.add(channel.id);

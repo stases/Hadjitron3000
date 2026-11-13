@@ -1,7 +1,10 @@
-// The engine: one graph per channel, a master bus with a soft clipper, and taps for meters and scopes.
+// The engine: one graph and one strip per channel, two send buses, a master rack and level with a soft clipper, and
+// taps for meters and scopes.
 
+import type { Owner } from '../core/mixer';
 import type { GainCurve, Project } from '../core/types';
 import { dbToGain, glide } from './automation';
+import { EffectRack, SendBusGraph, Strip } from './buses';
 import { CHANNEL_TAP_SIZE, ChannelGraph, structureKey } from './channel';
 import { Bus } from './mix';
 import { decodeSample } from './samples';
@@ -30,14 +33,21 @@ function clipperCurve(): Float32Array<ArrayBuffer> {
 
 export class Engine {
   readonly ctx: BaseAudioContext;
+  /** Everything heard, ahead of the master rack. */
+  private readonly sum: GainNode;
   private readonly master: GainNode;
   private readonly bus: Bus;
+  private readonly sends: SendBusGraph[];
+  private rack: EffectRack | null = null;
   private readonly clipIn: GainNode;
   private readonly clipper: WaveShaperNode;
   private readonly taps: AnalyserNode[];
   private readonly tapData = new Float32Array(TAP_SIZE);
   private readonly channelData = new Float32Array(CHANNEL_TAP_SIZE);
   private readonly channels = new Map<string, ChannelGraph>();
+  private readonly strips = new Map<string, Strip>();
+  /** The strips that each channel's notes duck, by the source's id. */
+  private ducked = new Map<string, Strip[]>();
   private readonly decodes = new Map<string, Promise<unknown>>();
   private project: Project | undefined;
   private voiceCount = 0;
@@ -45,8 +55,10 @@ export class Engine {
 
   constructor(ctx: BaseAudioContext) {
     this.ctx = ctx;
+    this.sum = new GainNode(ctx);
     this.master = new GainNode(ctx);
-    this.bus = new Bus(ctx, this.master);
+    this.bus = new Bus(ctx, this.sum);
+    this.sends = [0, 1].map(() => new SendBusGraph(ctx, this.bus));
     this.clipIn = new GainNode(ctx, { gain: 1 / HEADROOM });
     this.clipper = new WaveShaperNode(ctx, { curve: clipperCurve() });
     this.master.connect(this.clipIn).connect(this.clipper).connect(ctx.destination);
@@ -66,6 +78,9 @@ export class Engine {
     const t = this.ctx.currentTime;
     if (!old) this.master.gain.value = dbToGain(project.master);
     else if (project.master !== old.master) glide(this.master.gain, dbToGain(project.master), t);
+    const { mixer } = project;
+    if (this.rack) this.rack.set(mixer.master.chain, project.bpm);
+    else this.rack = new EffectRack(this.ctx, this.sum, this.master, mixer.master.chain, project.bpm);
 
     const solo = project.channels.some((c) => c.solo);
     const ids = new Set(project.channels.map((c) => c.id));
@@ -73,8 +88,16 @@ export class Engine {
       if (ids.has(id)) continue;
       graph.dispose();
       this.channels.delete(id);
+      this.strips.get(id)!.dispose();
+      this.strips.delete(id);
     }
+    this.ducked = new Map();
     for (const ch of project.channels) {
+      let strip = this.strips.get(ch.id);
+      if (strip) strip.update(ch);
+      else this.strips.set(ch.id, (strip = new Strip(this.ctx, ch, this.bus, this.sends.map((s) => s.inputs))));
+      const { source } = ch.duck;
+      if (source !== null && source !== ch.id) this.ducked.set(source, [...(this.ducked.get(source) ?? []), strip]);
       const audible = solo ? ch.solo : !ch.mute;
       const graph = this.channels.get(ch.id);
       const prev = old?.channels.find((c) => c.id === ch.id);
@@ -84,9 +107,10 @@ export class Engine {
         continue;
       }
       graph?.dispose();
-      const fresh = new ChannelGraph(this.ctx, ch.sound, project.bpm, audible, !!graph, this.bus.take(t), this.serial);
-      this.channels.set(ch.id, fresh);
+      const slot = strip.inputs.take(t);
+      this.channels.set(ch.id, new ChannelGraph(this.ctx, ch.sound, project.bpm, audible, !!graph, slot, this.serial));
     }
+    mixer.buses.forEach((bus, i) => this.sends[i].set(bus, project.bpm, project.channels.some((c) => c.sends[i] > 0)));
 
     for (const [id, sample] of Object.entries(project.samples)) {
       if (!this.decodes.has(id)) this.decodes.set(id, decodeSample(id, sample.bytes).catch(() => undefined));
@@ -104,11 +128,20 @@ export class Engine {
   play(
     channelId: string, note: number, vel: number, time: number, dur: number, slide = false, gain?: GainCurve,
   ): void {
-    this.channels.get(channelId)?.start(note, vel, Math.max(time, this.ctx.currentTime), dur, slide, gain);
+    const t = Math.max(time, this.ctx.currentTime);
+    this.channels.get(channelId)?.start(note, vel, t, dur, slide, gain);
+    this.duck(channelId, t);
   }
 
   noteOn(channelId: string, note: number, vel: number): void {
     this.channels.get(channelId)?.start(note, vel, this.ctx.currentTime, Infinity);
+    this.duck(channelId, this.ctx.currentTime);
+  }
+
+  /** A note of a channel starts at `t`: the channels that duck to it dip. */
+  private duck(channelId: string, t: number): void {
+    if (!this.channels.has(channelId)) return;
+    for (const strip of this.ducked.get(channelId) ?? []) strip.dip(t);
   }
 
   noteOff(channelId: string, note: number): void {
@@ -136,6 +169,16 @@ export class Engine {
     out.set(this.tapData.subarray(TAP_SIZE - n), out.length - n);
   }
 
+  /** Peak levels of one channel as the mixer hears it, after level, pan, mute, solo and ducking. */
+  channelLevels(channelId: string): [number, number] {
+    return this.strips.get(channelId)?.levels() ?? [0, 0];
+  }
+
+  /** Peak levels of what a send bus adds to the master. */
+  busLevels(index: number): [number, number] {
+    return this.sends[index].levels();
+  }
+
   /** The latest output of one channel, mono and before mute and solo, for the Factory's scope. */
   channelScope(channelId: string, out: Float32Array): void {
     const tap = this.channels.get(channelId)?.tap();
@@ -151,9 +194,11 @@ export class Engine {
     return this.channels.get(channelId)?.sounding(this.ctx.currentTime) ?? null;
   }
 
-  /** The gain reduction of a compressor in a channel's chain, in dB, or 0. */
-  effectReduction(channelId: string, moduleId: string): number {
-    return this.channels.get(channelId)?.effect(moduleId)?.reduction?.() ?? 0;
+  /** The gain reduction of a compressor in a sound's chain or a mixer rack, in dB, or 0. */
+  effectReduction(owner: Owner, moduleId: string): number {
+    const effect = typeof owner === 'string' ? this.channels.get(owner)?.effect(moduleId)
+      : owner.rack === 'master' ? this.rack?.effect(moduleId) : this.sends[owner.rack].effect(moduleId);
+    return effect?.reduction?.() ?? 0;
   }
 
   dispose(): void {

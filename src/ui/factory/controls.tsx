@@ -1,11 +1,14 @@
 import { usePrefs } from '../../app/prefs';
 import { levelOf } from '../../core/levels';
+import { SEND } from '../../core/mixer';
 import { MODULES, SOURCES, paramSpec } from '../../core/modules';
 import type { ParamSpec } from '../../core/modules';
+import { formatValue, fromNorm, toNorm } from '../../core/params';
 import type { Params } from '../../core/types';
-import { setParam, setSourceType } from '../../state/store';
-import { ParamControl, Select } from '../kit';
-import { PARAM_HINTS } from './hints';
+import { setParam, setSend, setSourceType, useApp } from '../../state/store';
+import type { Owner } from '../../state/store';
+import { Knob, ParamControl, Select } from '../kit';
+import { MIXER_HINTS, PARAM_HINTS } from './hints';
 import { sourceItems, useShown } from './levels';
 import type { Cell } from './levels';
 import { ShapeEditor } from './ShapeEditor';
@@ -31,7 +34,7 @@ const GROUPS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
 const DRAWN: Readonly<Record<string, string>> = { shape: 'wave', shape2: 'wave2' };
 
 interface ControlProps {
-  channelId: string;
+  owner: Owner;
   moduleId: string;
   type: string;
   spec: ParamSpec;
@@ -43,7 +46,7 @@ interface ControlProps {
  * The control of one parameter, wired to the store. A choice offers the options whose level is on screen, and the
  * one it is set to.
  */
-export function Control({ channelId, moduleId, type, spec, params, disabled }: ControlProps) {
+export function Control({ owner, moduleId, type, spec, params, disabled }: ControlProps) {
   const shown = useShown();
   const label = LABELS[type]?.[spec.id];
   const offered: ParamSpec =
@@ -54,7 +57,7 @@ export function Control({ channelId, moduleId, type, spec, params, disabled }: C
     <ParamControl
       spec={label ? { ...offered, label } : offered}
       value={params[spec.id]}
-      onChange={(v) => setParam(channelId, moduleId, spec.id, v)}
+      onChange={(v) => setParam(owner, moduleId, spec.id, v)}
       hint={PARAM_HINTS[type][spec.id]}
       disabled={disabled || !!IDLE[type]?.[spec.id]?.(params)}
     />
@@ -72,11 +75,11 @@ export function Param(props: ControlProps) {
 
 /** A cell for a parameter of a module, as the module table describes it. A drawing goes with its wave. */
 export function paramCell(props: ControlProps): Cell {
-  const { channelId, moduleId, type, spec, params } = props;
+  const { owner, moduleId, type, spec, params } = props;
   if (spec.kind === 'shape') {
     const wave = paramSpec(MODULES[type], DRAWN[spec.id])!;
     return {
-      node: <ShapeEditor key={spec.id} channelId={channelId} id={spec.id} value={params[spec.id] as string} />,
+      node: <ShapeEditor key={spec.id} owner={owner} id={spec.id} value={params[spec.id] as string} />,
       level: levelOf(wave),
       changed: params[spec.id] !== spec.def,
       group: GROUPS[type]?.[wave.id],
@@ -95,7 +98,7 @@ export function paramCell(props: ControlProps): Cell {
  * out some of them. The voice filter's `on` is its lamp, not a control, and a drawing shows while its wave is Draw.
  */
 export function paramCells(
-  channelId: string,
+  owner: Owner,
   moduleId: string,
   type: string,
   params: Params,
@@ -104,7 +107,7 @@ export function paramCells(
   return MODULES[type].params
     .filter((spec) => spec.kind !== 'sample' && !(spec.kind === 'bool' && spec.id === 'on'))
     .filter((spec) => spec.kind !== 'shape' || params[DRAWN[spec.id]] === 'draw')
-    .map((spec) => paramCell({ channelId, moduleId, type, spec, params, disabled: disabled?.(spec.id) }));
+    .map((spec) => paramCell({ owner, moduleId, type, spec, params, disabled: disabled?.(spec.id) }));
 }
 
 export function SourceSelect({ channelId, type }: { channelId: string; type: string }) {
@@ -123,5 +126,26 @@ export function SourceSelect({ channelId, type }: { channelId: string; type: str
         />
       </div>
     </div>
+  );
+}
+
+/** How much of a channel goes to a send bus; the knob is named after the bus. */
+export function SendKnob({ channelId, index, value, small }: {
+  channelId: string;
+  index: number;
+  value: number;
+  small?: boolean;
+}) {
+  const name = useApp((s) => s.project.mixer.buses[index].name);
+  return (
+    <Knob
+      small={small}
+      value={toNorm(SEND, value)}
+      onChange={(t) => setSend(channelId, index, fromNorm(SEND, t))}
+      defaultValue={toNorm(SEND, SEND.def)}
+      label={name}
+      display={formatValue(SEND, value)}
+      hint={MIXER_HINTS.send(name)}
+    />
   );
 }

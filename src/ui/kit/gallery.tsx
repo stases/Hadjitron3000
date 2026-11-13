@@ -571,6 +571,7 @@ function DisplaysSection() {
         <Lcd>C3 · 1/16</Lcd>
         <Scope read={fakeSignal} width={150} height={30} />
         <Meter read={fakeLevels} />
+        <Meter read={fakeLevels} vertical width={14} height={52} />
         <Display width={170} height={52} draw={drawEnvelope} />
       </Row>
       <Row label="Bench scope">

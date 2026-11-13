@@ -1,5 +1,7 @@
 import { expect, test } from 'vitest';
-import { emptyProject, newMod, newModule, newNote, newPattern, newSound, uid } from '../../src/core/defaults';
+import {
+  emptyProject, newChannel, newMod, newModule, newNote, newPattern, newSound, uid,
+} from '../../src/core/defaults';
 import { AMP, EFFECTS, FILTER, MODS, OUT, PLAY, SOURCES } from '../../src/core/modules';
 import { defaultParams } from '../../src/core/params';
 
@@ -32,11 +34,32 @@ test('an empty project contains one pattern, an empty song and four lanes at 0 d
   const project = emptyProject();
   expect(project).toEqual({
     name: 'Untitled', bpm: 120, swing: 0, meter: [4, 4], master: 0, channels: [], samples: {},
+    mixer: expect.any(Object),
     patterns: [{ id: expect.any(String), name: 'A', color: 0, bars: 1, notes: {} }],
     song: [],
     lanes: Array(4).fill({ level: 0, mute: false }),
   });
   expect(project.lanes[0]).not.toBe(project.lanes[1]);
+});
+
+test('a new project has a room on bus A and an echo on bus B, both fully wet, and an empty master rack', () => {
+  const { buses, master } = emptyProject().mixer;
+  expect(buses.map((b) => [b.name, b.level, b.mute, b.chain.map((m) => m.type)])).toEqual([
+    ['Room', 0, false, ['reverb']],
+    ['Echo', 0, false, ['delay']],
+  ]);
+  expect(buses.map((b) => b.chain[0].params.mix)).toEqual([1, 1]);
+  expect(master.chain).toEqual([]);
+  // Each project gets its own modules.
+  expect(emptyProject().mixer.buses[0].chain[0].id).not.toBe(buses[0].chain[0].id);
+});
+
+test('a new channel sends nothing and does not duck', () => {
+  const sound = newSound();
+  expect(newChannel('c1', sound, 3)).toEqual({
+    id: 'c1', sound, color: 3, mute: false, solo: false, sends: [0, 0],
+    duck: { source: null, amount: 0.5, release: 0.25 },
+  });
 });
 
 test('module and modulator factories use their definitions', () => {

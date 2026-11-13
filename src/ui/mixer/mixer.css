@@ -1,0 +1,183 @@
+/* The Mixer: a strip per sound, the two buses and the master, all on one grid of rows, and the chosen rack below. */
+
+.h-mixer {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+}
+
+.h-mixer-well {
+  display: flex;
+  flex: none;
+  min-width: 0;
+  padding: 2px;
+  box-shadow: var(--bevel-sunken);
+}
+
+.h-mixer-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  background: var(--face-lo);
+}
+
+/* The strips share their rows, so the knobs, faders and buttons of every strip line up. */
+.h-mixer-strips {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  grid-template-rows: repeat(6, auto);
+  column-gap: 2px;
+  width: max-content;
+  padding: 2px 2px 2px 0;
+}
+
+.h-mixer-strip,
+.h-mixer-legend {
+  display: grid;
+  grid-row: 1 / -1;
+  grid-template-rows: subgrid;
+  row-gap: 4px;
+}
+
+.h-mixer-strip {
+  justify-items: center;
+  width: 104px;
+  padding: 4px 4px 6px;
+  background: var(--face);
+  box-shadow: var(--bevel-raised);
+}
+
+.h-mixer-strip:not(.is-bus) + .is-bus,
+.h-mixer-strip.is-master {
+  margin-left: 8px;
+}
+
+/* The captions stay at the left while the strips scroll under them. */
+.h-mixer-legend {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  justify-items: end;
+  padding: 4px 8px 6px 6px;
+  background: var(--face-lo);
+  box-shadow: inset -1px 0 var(--hi), inset -2px 0 var(--lo);
+}
+
+.h-mixer-caption {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  font: var(--font-small);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.h-mixer-caption.is-fader {
+  justify-content: flex-start;
+  padding-top: 44px;
+}
+
+.h-mixer-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  height: 18px;
+  padding: 0 3px;
+}
+
+.h-mixer-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.h-mixer-strip.is-active .h-mixer-head {
+  color: var(--sel-ink);
+  background: var(--sel);
+}
+
+.h-mixer-letter {
+  flex: none;
+  padding: 0 3px;
+  font: var(--font-small);
+  color: var(--hi);
+  background: var(--ink);
+}
+
+.h-mixer-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 52px;
+}
+
+.h-mixer-cell.is-duck {
+  flex-direction: column;
+  min-height: 0;
+}
+
+.h-mixer-pair {
+  display: flex;
+  gap: 4px;
+}
+
+.h-mixer-fader {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.h-mixer-meter {
+  display: flex;
+}
+
+.h-mixer-buttons {
+  display: flex;
+  gap: 2px;
+  min-height: 19px;
+}
+
+/* The rack of a bus or the master, built from the Factory's units. */
+
+.h-mixer-rack {
+  flex: 1;
+  min-height: 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.h-mixer-rack .h-factory-well {
+  flex: 1;
+}
+
+.h-mixer-rack-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 23px;
+}
+
+.h-mixer-rack-title {
+  padding-left: 2px;
+  font: var(--font-small);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.h-mixer-rack-note {
+  color: var(--ink-soft);
+}

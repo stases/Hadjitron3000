@@ -155,3 +155,24 @@ export const MOD_HINTS = {
   sound: 'One modulator for the whole sound, shared by all its notes.',
   fixed: 'This target belongs to the whole sound, so the modulator works on the whole sound.',
 };
+
+/** The status bar for the mixer's controls, in the Mixer and for the sends in the Factory's Output unit. */
+export const MIXER_HINTS = {
+  send: (bus: string) => `How much of this sound goes to ${bus}, the shared effects that every sound can send to.`,
+  level: (name: string) => `How loud ${name} plays in the mix. Drag up for louder, down for softer.`,
+  mute: 'Mute: silence this sound, and what it sends to the buses.',
+  solo: 'Solo: hear only this sound, and any others that are soloed too.',
+  name: 'Click to pick this sound; double-click to open it in the Factory.',
+  duck: 'Which sound pushes this one down: every note it plays makes this one dip, even while it is muted.',
+  duckAmount: 'How far this sound dips when the other one plays: at 100 % it falls silent for a moment.',
+  duckRelease: 'How long this sound takes to swell back after each dip: short pumps, long breathes.',
+  busLevel: (bus: string) => `How loud ${bus} comes back into the mix. Drag up for louder, down for softer.`,
+  busMute: (bus: string) => `Mute: silence ${bus}. The sounds sent to it still play dry.`,
+  busRack: (bus: string) => `Shows the effects of ${bus} below, to change, add or take them away.`,
+  busName: 'The name of this bus, as its strip and the send knobs show it.',
+  bus: (letter: string, bus: string) => `Bus ${letter}, ${bus}: shared effects that every sound can send to.`,
+  masterStrip: 'The master: everything you hear and export, after the buses.',
+  master: 'Volume of everything you hear and export.',
+  masterRack: 'Shows the effects on the master below. They work on everything you hear and export.',
+  meter: 'How loud this is right now; the red lamps at the top mean it is too loud.',
+};

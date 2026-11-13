@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { effectReduction } from '../../app/audio';
+import type { Owner } from '../../core/mixer';
 import { Display, tokenColor, useHint } from '../kit';
 
 const WIDTH = 116;
@@ -13,7 +14,7 @@ const MAJOR = 3;
  * A compressor's gain reduction: a row of amber segments that light from the left, 2 dB each, over a scale, with
  * the value in dB below it like the value under a knob.
  */
-export function ReductionMeter({ channelId, moduleId }: { channelId: string; moduleId: string }) {
+export function ReductionMeter({ owner, moduleId }: { owner: Owner; moduleId: string }) {
   const readout = useRef<HTMLSpanElement>(null);
   const hover = useHint('How far the compressor turns the sound down right now; each segment is 2 dB.');
   return (
@@ -23,7 +24,7 @@ export function ReductionMeter({ channelId, moduleId }: { channelId: string; mod
         height={HEIGHT}
         live
         draw={(g, w) => {
-          const reduction = Math.max(0, -effectReduction(channelId, moduleId));
+          const reduction = Math.max(0, -effectReduction(owner, moduleId));
           const lit = Math.min(SEGMENTS, Math.round(reduction / DB_PER_SEGMENT));
           const pitch = Math.floor((w - 2) / SEGMENTS);
           const left = Math.floor((w - pitch * SEGMENTS + 2) / 2);

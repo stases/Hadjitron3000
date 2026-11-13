@@ -39,6 +39,13 @@ export interface Sound {
   out: Params; // parameters of the OUT module definition
 }
 
+/** Sidechain ducking: every note of the source channel dips this channel's level, which then recovers. */
+export interface Duck {
+  source: string | null; // channel id, never the channel's own
+  amount: number; // 0..1: how far the level dips, as a share of full level
+  release: number; // seconds to recover
+}
+
 /** A row of the Track grid: one sound plus its mixer state. */
 export interface Channel {
   id: string;
@@ -46,6 +53,23 @@ export interface Channel {
   color: number; // index into the channel colour palette, 0..7
   mute: boolean;
   solo: boolean;
+  /** 0..1 of the channel sent to bus A and bus B, after its level, pan, mute, solo and ducking. */
+  sends: [number, number];
+  duck: Duck;
+}
+
+/** A send bus: a shared effect chain that channels send to, with its own level, summed into the master. */
+export interface SendBus {
+  name: string;
+  chain: ModuleInst[];
+  level: number; // dB, the bottom of the range is silence
+  mute: boolean;
+}
+
+/** The shared part of the mix: two send buses, and the master's effect chain ahead of the master level. */
+export interface Mixer {
+  buses: [SendBus, SendBus];
+  master: { chain: ModuleInst[] };
 }
 
 /** A note of a row. Times are in ticks, TICKS_PER_STEP to a step. */
@@ -117,6 +141,7 @@ export interface Project {
   swing: number; // 0..1, off-beat sixteenths are delayed by swing * half a step
   meter: Meter; // the same for every bar of every block
   master: number; // dB
+  mixer: Mixer;
   channels: Channel[];
   patterns: Pattern[];
   song: Placement[];

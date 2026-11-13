@@ -2,7 +2,8 @@
 // Views call these functions; nothing else in the interface touches Web Audio.
 
 import { Engine, Transport, renderProject } from '../audio';
-import { newLanes } from '../core/defaults';
+import { newChannel, newLanes } from '../core/defaults';
+import type { Owner } from '../core/mixer';
 import type { Block, Channel, Project, SampleData, Sound } from '../core/types';
 import { playScope, useApp } from '../state/store';
 
@@ -96,21 +97,22 @@ export function tap(channelId: string, note: number, vel = 0.8, dur = 0.25): voi
 /** Audition a sound that is not in the project (browsing the library). */
 export async function audition(sound: Sound, samples: Record<string, SampleData> = {}, note = 60): Promise<void> {
   const e = boot();
-  preview = { channel: { id: PREVIEW_ID, sound, color: 0, mute: false, solo: false }, samples };
+  preview = { channel: newChannel(PREVIEW_ID, sound, 0), samples };
   e.setProject(heard());
   await e.ready();
   if (preview?.channel.sound === sound) e.play(PREVIEW_ID, note, 0.8, e.ctx.currentTime + 0.005, 0.5);
 }
 
-/** The project a block plays in on its own: one channel per track, at the open project's tempo, swing and meter. */
+/**
+ * The project a block plays in on its own: one channel per track, at the open project's tempo, swing and meter and
+ * through its master. Its sounds send nothing to the buses.
+ */
 function blockProject(block: Block): Project {
-  const { bpm, swing, meter, master } = useApp.getState().project;
-  const channels = block.tracks.map((track, i) => ({
-    id: `b${i}`, sound: track.sound, color: 0, mute: false, solo: false,
-  }));
+  const { bpm, swing, meter, master, mixer } = useApp.getState().project;
+  const channels = block.tracks.map((track, i) => newChannel(`b${i}`, track.sound, 0));
   const notes = Object.fromEntries(block.tracks.map((track, i) => [`b${i}`, track.notes]));
   return {
-    name: block.name, bpm, swing, meter, master, channels, song: [], lanes: newLanes(), samples: block.samples,
+    name: block.name, bpm, swing, meter, master, mixer, channels, song: [], lanes: newLanes(), samples: block.samples,
     patterns: [{ id: 'block', name: block.name, color: block.color, bars: block.bars, notes }],
   };
 }
@@ -155,6 +157,16 @@ export function levels(): [number, number] {
   return engine?.levels() ?? [0, 0];
 }
 
+/** Peak levels of one channel in the mix, after its level, pan, mute, solo and ducking. */
+export function channelLevels(channelId: string): [number, number] {
+  return engine?.channelLevels(channelId) ?? [0, 0];
+}
+
+/** Peak levels of what a send bus adds to the master. */
+export function busLevels(index: number): [number, number] {
+  return engine?.busLevels(index) ?? [0, 0];
+}
+
 /** The latest master output for the oscilloscope. */
 export function scope(out: Float32Array): void {
   if (engine) engine.scope(out);
@@ -172,9 +184,9 @@ export function soundingNote(channelId: string): number | null {
   return engine?.soundingNote(channelId) ?? null;
 }
 
-/** How far a compressor in a channel's chain turns the sound down now, in dB (0 or below). */
-export function effectReduction(channelId: string, moduleId: string): number {
-  return engine?.effectReduction(channelId, moduleId) ?? 0;
+/** How far a compressor in a sound's chain or a mixer rack turns the sound down now, in dB (0 or below). */
+export function effectReduction(owner: Owner, moduleId: string): number {
+  return engine?.effectReduction(owner, moduleId) ?? 0;
 }
 
 export function sampleRate(): number {

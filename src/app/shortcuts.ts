@@ -21,7 +21,7 @@ export const SHORTCUT_GROUPS: { label: string; keys: [string, string][] }[] = [
       [modKey('E'), 'Export audio'],
       [modKey('Z'), 'Undo'],
       [`${modKey('Z', true)}, ${modKey('Y')}`, 'Redo'],
-      [`${modKey('1')}, ${modKey('2')}, ${modKey('3')}`, 'Factory, Track, Song'],
+      [`${modKey('1')}, ${modKey('2')}, ${modKey('3')}, ${modKey('4')}`, 'Factory, Track, Song, Mixer'],
     ],
   },
   {

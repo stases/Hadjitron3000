@@ -1,14 +1,17 @@
 import { MAX_LEVEL, MIN_LEVEL, fitFades } from './arrangement';
 import {
-  CHANNEL_COLORS, MAX_BARS, MAX_SONG_BARS, SONG_LANES, TICKS_PER_STEP, newLanes, newPattern, uid,
+  CHANNEL_COLORS, MAX_BARS, MAX_SONG_BARS, SONG_LANES, TICKS_PER_STEP, defaultMixer, newDuck, newLanes, newPattern,
+  uid,
 } from './defaults';
 import { MAX_TICKS, readMeter } from './meter';
+import { BUS_LEVEL, DUCK_AMOUNT, DUCK_RELEASE, MAX_BUS_NAME } from './mixer';
 import { AMP, FILTER, MODULES, OUT, PLAY, paramSpec } from './modules';
 import type { ModuleDef, ModuleKind } from './modules';
 import { MAX_NOTE, MIN_NOTE, cleanNotes, noteExtras } from './notes';
 import { coerce } from './params';
 import type {
-  Block, Lane, ModInst, ModuleInst, Note, Params, Pattern, Placement, Project, SampleData, Sound,
+  Block, Channel, Duck, Lane, Mixer, ModInst, ModuleInst, Note, Params, Pattern, Placement, Project, SampleData,
+  SendBus, Sound,
 } from './types';
 
 export const SOUND_EXT = 'h3s';
@@ -54,11 +57,11 @@ export function serializeSound(sound: Sound, samples: Record<string, SampleData>
 }
 
 export function serializeProject(project: Project): string {
-  const { name, bpm, swing, meter, master, channels, patterns, song, lanes } = project;
+  const { name, bpm, swing, meter, master, mixer, channels, patterns, song, lanes } = project;
   return JSON.stringify({
     format: 'hadjitron3000/project',
     version: FORMAT_VERSION,
-    project: { name, bpm, swing, meter, master, channels, patterns, song, lanes },
+    project: { name, bpm, swing, meter, master, mixer, channels, patterns, song, lanes },
     samples: encodeSamples(channels.flatMap((c) => soundSampleIds(c.sound)), project.samples),
   }, null, 2);
 }
@@ -145,12 +148,17 @@ function module(value: unknown, kind: ModuleKind, ids: Set<string>, reserved: Se
   return { id, type: def.type, params: params(entry.params, def), on: entry.on !== false };
 }
 
+/** The ids that modules in these lists ask for, so that a module whose id has to be replaced gets a free one. */
+function wantedIds(modules: unknown[]): Set<string> {
+  return new Set(modules.flatMap((m) => isObject(m) && typeof m.id === 'string' ? [m.id] : []));
+}
+
 function readSound(value: unknown, samples: Record<string, SampleData>): Sound {
   const raw = object(value, 'sound');
   const chain = array(raw.chain, 'sound chain');
   const mods = array(raw.mods, 'sound modulators');
   const ids = new Set(['source', 'play', 'filter', 'amp', 'out']);
-  const reserved = new Set([...chain, ...mods].flatMap((m) => isObject(m) && typeof m.id === 'string' ? [m.id] : []));
+  const reserved = wantedIds([...chain, ...mods]);
   const sound: Sound = {
     name: typeof raw.name === 'string' ? raw.name : 'New Sound',
     source: module(raw.source, 'source', ids, reserved),
@@ -320,18 +328,63 @@ export function parseBlock(text: string): Block {
   };
 }
 
+function readChain(value: unknown, label: string): ModuleInst[] {
+  const chain = array(value === undefined ? [] : value, label);
+  const ids = new Set<string>();
+  const reserved = wantedIds(chain);
+  return chain.map((m) => module(m, 'effect', ids, reserved));
+}
+
+/** A file without the mixer, from before it existed, gets the default buses; no channel sends to them. */
+function readMixer(value: unknown): Mixer {
+  const mixer = defaultMixer();
+  if (value === undefined) return mixer;
+  const raw = object(value, 'mixer');
+  const buses = array(raw.buses === undefined ? [] : raw.buses, 'mixer buses');
+  mixer.buses = mixer.buses.map((fallback, i): SendBus => {
+    if (buses[i] === undefined) return fallback;
+    const bus = object(buses[i], 'bus');
+    return {
+      name: typeof bus.name === 'string' ? bus.name.slice(0, MAX_BUS_NAME) : fallback.name,
+      chain: bus.chain === undefined ? fallback.chain : readChain(bus.chain, 'bus chain'),
+      level: number(bus.level, BUS_LEVEL.def, BUS_LEVEL.min, BUS_LEVEL.max),
+      mute: bus.mute === true,
+    };
+  }) as Mixer['buses'];
+  const master = object(raw.master === undefined ? {} : raw.master, 'master');
+  mixer.master = { chain: readChain(master.chain, 'master chain') };
+  return mixer;
+}
+
+/** Ducking; a source that is not another channel of the project is dropped. */
+function readDuck(value: unknown, id: string, ids: Set<string>): Duck {
+  if (!isObject(value)) return newDuck();
+  const { source } = value;
+  return {
+    source: typeof source === 'string' && source !== id && ids.has(source) ? source : null,
+    amount: number(value.amount, DUCK_AMOUNT.def, DUCK_AMOUNT.min, DUCK_AMOUNT.max),
+    release: number(value.release, DUCK_RELEASE.def, DUCK_RELEASE.min, DUCK_RELEASE.max),
+  };
+}
+
 /** Validate and normalize a project that is already in memory (a parsed file, or a stored session). */
 export function readProject(value: unknown, samples: Record<string, SampleData>): Project {
   const raw = object(value, 'project');
   const channelIds = new Set<string>();
-  const channels = array(raw.channels, 'channels').map((value) => {
+  const entries = array(raw.channels, 'channels').map((value) => {
     const channel = object(value, 'channel');
+    return { channel, id: uniqueId(channel.id, channelIds, 'channel') };
+  });
+  const channels = entries.map(({ channel, id }): Channel => {
+    const sends = Array.isArray(channel.sends) ? channel.sends : [];
     return {
-      id: uniqueId(channel.id, channelIds, 'channel'),
+      id,
       sound: readSound(channel.sound, samples),
       color: Math.round(number(channel.color, 0, 0, CHANNEL_COLORS - 1)),
       mute: channel.mute === true,
       solo: channel.solo === true,
+      sends: [number(sends[0], 0, 0, 1), number(sends[1], 0, 0, 1)],
+      duck: readDuck(channel.duck, id, channelIds),
     };
   });
   const patternIds = new Set<string>();
@@ -348,6 +401,7 @@ export function readProject(value: unknown, samples: Record<string, SampleData>)
     swing: number(raw.swing, 0, 0, 1),
     meter: readMeter(raw.meter) ?? [4, 4],
     master: number(raw.master, 0, -48, 6),
+    mixer: readMixer(raw.mixer),
     channels,
     patterns,
     song: readSong(raw.song, patterns, [...channelIds]),

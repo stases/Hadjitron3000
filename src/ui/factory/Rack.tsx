@@ -7,13 +7,14 @@ import {
 } from '../../core/modules';
 import type { ChoiceSpec, FloatSpec } from '../../core/modules';
 import { formatAmount } from '../../core/params';
-import type { ModInst, ModuleInst, Sound } from '../../core/types';
+import type { Channel, ModInst, ModuleInst, Sound } from '../../core/types';
 import {
   addEffect, addMod, moveEffect, removeModule, setModAmount, setModPer, setModTarget, setModuleOn, setParam,
 } from '../../state/store';
+import type { Owner } from '../../state/store';
 import { Button, Icon, Knob, ParamControl, RackUnit, openMenu } from '../kit';
 import type { MenuItem } from '../kit';
-import { SourceSelect, paramCell, paramCells } from './controls';
+import { SendKnob, SourceSelect, paramCell, paramCells } from './controls';
 import { EnvelopeDisplay } from './EnvelopeDisplay';
 import { MOD_HINTS } from './hints';
 import { addMenu, useLevels, useShown } from './levels';
@@ -98,7 +99,7 @@ function ModUnit({ channelId, sound, mod, name }: { channelId: string; sound: So
     const pinned = spec.id === 'retrigger' && per === 'note';
     const params = pinned ? { ...mod.params, retrigger: true } : mod.params;
     const disabled = pinned || (spec.id === 'vel' && per === 'sound');
-    const cell = paramCell({ channelId, moduleId: mod.id, type: mod.type, spec, params, disabled });
+    const cell = paramCell({ owner: channelId, moduleId: mod.id, type: mod.type, spec, params, disabled });
     return pinned ? { ...cell, changed: false } : cell;
   });
   const perCell: Cell = {
@@ -171,11 +172,50 @@ function ModUnit({ channelId, sound, mod, name }: { channelId: string; sound: So
   );
 }
 
-export function Rack({ channelId, sound }: { channelId: string; sound: Sound }) {
+/** The effects of a sound's chain or a mixer rack, as units in signal order, and the button that adds one. */
+export function EffectChain({ owner, chain }: { owner: Owner; chain: ModuleInst[] }) {
   const beginner = usePrefs((p) => p.beginner);
-  const effectNames = plateNames(sound.chain);
+  const names = plateNames(chain);
+  const last = chain.length - 1;
+  return (
+    <>
+      {chain.map((m, i) => (
+        <LevelUnit
+          key={m.id}
+          name={names[i]}
+          data-tour={`effect-${m.type}`}
+          led={{ on: m.on !== false, onToggle: () => setModuleOn(owner, m.id, m.on === false) }}
+          onMoveUp={i > 0 ? () => moveEffect(owner, m.id, i - 1) : null}
+          onMoveDown={i < last ? () => moveEffect(owner, m.id, i + 1) : null}
+          onRemove={() => removeModule(owner, m.id)}
+          type={m.type}
+          cells={paramCells(owner, m.id, m.type, m.params)}
+          tail={m.type === 'compressor' && <ReductionMeter owner={owner} moduleId={m.id} />}
+        />
+      ))}
+      <AddButton
+        label="Effect"
+        hint="Adds an effect to the end of the chain."
+        items={() => addMenu(beginner, EFFECTS, (type) => addEffect(owner, type))}
+      />
+    </>
+  );
+}
+
+export function Rack({ channel }: { channel: Channel }) {
+  const { id: channelId, sound } = channel;
+  const beginner = usePrefs((p) => p.beginner);
   const modNames = plateNames(sound.mods);
-  const last = sound.chain.length - 1;
+  const sends = channel.sends.map((value, index): Cell => ({
+    node: (
+      <div key={`send${index}`} className="h-factory-cell">
+        <SendKnob channelId={channelId} index={index} value={value} />
+      </div>
+    ),
+    level: 1,
+    changed: value !== 0,
+    group: 'Sends',
+  }));
   const play = paramCells(channelId, 'play', PLAY.type, sound.play);
   return (
     <div className="h-factory-rack">
@@ -208,25 +248,7 @@ export function Rack({ channelId, sound }: { channelId: string; sound: Sound }) 
           </div>
         }
       />
-      {sound.chain.map((m, i) => (
-        <LevelUnit
-          key={m.id}
-          name={effectNames[i]}
-          data-tour={`effect-${m.type}`}
-          led={{ on: m.on !== false, onToggle: () => setModuleOn(channelId, m.id, m.on === false) }}
-          onMoveUp={i > 0 ? () => moveEffect(channelId, m.id, i - 1) : null}
-          onMoveDown={i < last ? () => moveEffect(channelId, m.id, i + 1) : null}
-          onRemove={() => removeModule(channelId, m.id)}
-          type={m.type}
-          cells={paramCells(channelId, m.id, m.type, m.params)}
-          tail={m.type === 'compressor' && <ReductionMeter channelId={channelId} moduleId={m.id} />}
-        />
-      ))}
-      <AddButton
-        label="Effect"
-        hint="Adds an effect to the end of the chain."
-        items={() => addMenu(beginner, EFFECTS, (type) => addEffect(channelId, type))}
-      />
+      <EffectChain owner={channelId} chain={sound.chain} />
       {sound.mods.map((m, i) => (
         <ModUnit key={m.id} channelId={channelId} sound={sound} mod={m} name={modNames[i]} />
       ))}
@@ -238,7 +260,7 @@ export function Rack({ channelId, sound }: { channelId: string; sound: Sound }) 
       <LevelUnit
         name="Output"
         type={OUT.type}
-        cells={paramCells(channelId, 'out', OUT.type, sound.out)}
+        cells={[...paramCells(channelId, 'out', OUT.type, sound.out), ...sends]}
       />
     </div>
   );

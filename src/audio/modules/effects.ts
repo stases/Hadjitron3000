@@ -18,25 +18,33 @@ export interface Effect {
   reduction?(): number;
 }
 
-export type EffectBuilder = (ctx: BaseAudioContext, p: Params, bpm: number) => Effect;
+/**
+ * `shared` is set for an effect on a bus or the master, where Mix has to reach the wet sound alone: the delay and the
+ * reverb then crossfade from dry to wet like the other effects instead of adding the wet on top of the dry.
+ */
+export type EffectBuilder = (ctx: BaseAudioContext, p: Params, bpm: number, shared?: boolean) => Effect;
 
 const num = (p: Params, id: string) => p[id] as number;
 
 /**
- * A Mix knob: the dry input and the processed `wet` signal summed into one output. The dry path waits `latency`
- * samples, so that it stays in time with a wet path that is late by that much.
+ * A Mix knob: the dry input and the processed `wet` signal summed into one output, crossfaded so that 100 % is the
+ * wet signal alone. The dry path waits `latency` samples, so that it stays in time with a wet path that is late by that
+ * much. With `add` all of the dry passes, untouched, and Mix sets only the wet level on top of it, as the delay and the
+ * reverb do inside a sound.
  */
-function blend(ctx: BaseAudioContext, input: AudioNode, wet: AudioNode, amount: number, latency = 0) {
+function blend(ctx: BaseAudioContext, input: AudioNode, wet: AudioNode, amount: number, latency = 0, add = false) {
   const output = new GainNode(ctx);
-  const dry = new GainNode(ctx, { gain: 1 - amount });
+  const dry = add ? null : new GainNode(ctx, { gain: 1 - amount });
   const wetGain = new GainNode(ctx, { gain: amount });
   const early = latency ? input.connect(new DelayNode(ctx, { delayTime: latency / ctx.sampleRate })) : input;
-  early.connect(dry).connect(output);
+  if (dry) early.connect(dry).connect(output);
+  else early.connect(output);
   wet.connect(wetGain).connect(output);
   return {
     output,
+    wet: wetGain.gain,
     set(amount: number, t: number) {
-      glide(dry.gain, 1 - amount, t);
+      if (dry) glide(dry.gain, 1 - amount, t);
       glide(wetGain.gain, amount, t);
     },
   };
@@ -175,12 +183,10 @@ export const delayTime = (p: Params, bpm: number) =>
  * mono sum enters the left line and each line feeds the other, so the repeats alternate.
  * The low cut sits in the feedback only, so the first repeat is whole and every later one thinner.
  */
-const delay: EffectBuilder = (ctx, p, bpm) => {
+const delay: EffectBuilder = (ctx, p, bpm, shared) => {
   const input = new GainNode(ctx, { channelCount: 2, channelCountMode: 'explicit', channelInterpretation: 'speakers' });
-  const output = new GainNode(ctx);
   const split = new ChannelSplitterNode(ctx, { numberOfOutputs: 2 });
   const merge = new ChannelMergerNode(ctx, { numberOfInputs: 2 });
-  const wet = new GainNode(ctx, { gain: num(p, 'mix') });
   const time = delayTime(p, bpm);
   const lines = [0, 1].map(() => new DelayNode(ctx, { maxDelayTime: MAX_DELAY + 0.1, delayTime: time }));
   const tones = lines.map((line) => {
@@ -191,7 +197,7 @@ const delay: EffectBuilder = (ctx, p, bpm) => {
   const cuts = tones.map((tone) => lowCut(ctx, tone, num(p, 'lowcut')));
   const gains = routing(p).map((gain) => new GainNode(ctx, { gain }));
   const [inL, inRL, inR, fbL, fbR, fbLR, fbRL] = gains;
-  input.connect(output);
+  const out = blend(ctx, input, merge, num(p, 'mix'), 0, !shared);
   input.connect(split);
   split.connect(inL, 0);
   split.connect(inRL, 1);
@@ -204,17 +210,16 @@ const delay: EffectBuilder = (ctx, p, bpm) => {
   mix(ctx, [inR, fbR, fbLR]).connect(lines[1]);
   tones[0].connect(merge, 0, 0);
   tones[1].connect(merge, 0, 1);
-  merge.connect(wet).connect(output);
   return {
     input,
-    output,
-    targets: { time: lines.map((l) => l.delayTime), mix: [wet.gain] },
+    output: out.output,
+    targets: { time: lines.map((l) => l.delayTime), mix: [out.wet] },
     update(p, bpm) {
       const t = ctx.currentTime;
       for (const line of lines) glide(line.delayTime, delayTime(p, bpm), t, DELAY_GLIDE);
       for (const tone of tones) glide(tone.frequency, num(p, 'tone'), t);
       for (const cut of cuts) cut.set(num(p, 'lowcut'), t);
-      glide(wet.gain, num(p, 'mix'), t);
+      out.set(num(p, 'mix'), t);
       routing(p).forEach((v, i) => glide(gains[i].gain, v, t));
     },
     dispose() {},
@@ -248,12 +253,11 @@ function impulse(ctx: BaseAudioContext, size: number, tone: number): AudioBuffer
   return buf;
 }
 
-const reverb: EffectBuilder = (ctx, p) => {
+const reverb: EffectBuilder = (ctx, p, _bpm, shared) => {
   const input = new GainNode(ctx);
-  const output = new GainNode(ctx);
-  const wet = new GainNode(ctx, { gain: num(p, 'mix') });
-  input.connect(output);
-  wet.connect(output);
+  // The convolvers' sum: one convolver, or two while a new impulse fades in.
+  const wet = new GainNode(ctx);
+  const out = blend(ctx, input, wet, num(p, 'mix'), 0, !shared);
   let size = num(p, 'size');
   let tone = num(p, 'tone');
   const convolver = (gain: number) => {
@@ -278,10 +282,10 @@ const reverb: EffectBuilder = (ctx, p) => {
   };
   return {
     input,
-    output,
-    targets: { mix: [wet.gain] },
+    output: out.output,
+    targets: { mix: [out.wet] },
     update(p) {
-      glide(wet.gain, num(p, 'mix'), ctx.currentTime);
+      out.set(num(p, 'mix'), ctx.currentTime);
       if (num(p, 'size') === size && num(p, 'tone') === tone) return;
       size = num(p, 'size');
       tone = num(p, 'tone');

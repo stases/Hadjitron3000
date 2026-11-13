@@ -1,8 +1,9 @@
 import { expect, test, vi } from 'vitest';
 import {
-  CHANNEL_COLORS, emptyProject, MAX_BARS, MAX_SONG_BARS, newMod, newModule, newPattern, newSound,
+  CHANNEL_COLORS, emptyProject, MAX_BARS, MAX_SONG_BARS, newChannel, newMod, newModule, newPattern, newSound,
   SONG_LANES, TICKS_PER_STEP,
 } from '../../src/core/defaults';
+import { extractBlock } from '../../src/core/block';
 import { MAX_TICKS } from '../../src/core/meter';
 import {
   BLOCK_EXT, FORMAT_VERSION, FormatError, parseBlock, parseProject, parseSound, PROJECT_EXT, readProject, sampleId,
@@ -39,9 +40,10 @@ function project(): Project {
   result.swing = 0.3;
   result.master = -3;
   result.channels = [
-    { id: 'c1', sound: sound(), color: 2, mute: true, solo: false },
-    { id: 'c2', sound: { ...newSound('fm'), source: { ...newSound('fm').source, on: true } },
-      color: 5, mute: false, solo: true },
+    {
+      ...newChannel('c1', sound(), 2), mute: true, sends: [0.25, 0], duck: { source: 'c2', amount: 0.7, release: 0.4 },
+    },
+    { ...newChannel('c2', { ...newSound('fm'), source: { ...newSound('fm').source, on: true } }, 5), solo: true },
   ];
   result.patterns = [
     { id: 'a', name: 'A', color: 3, bars: 1, notes: { c1: [{ id: 'n1', start: 0, len: 24, note: 60, vel: 0.7 }] } },
@@ -56,6 +58,8 @@ function project(): Project {
     { id: 's2', pattern: 'b', lane: 2, bar: 0, bars: 4 },
   ];
   result.samples = { kick: { name: 'kick.wav', bytes: new Uint8Array([0, 127, 128, 255]) } };
+  result.mixer.buses[1] = { ...result.mixer.buses[1], name: 'Tape', level: -4.5, mute: true };
+  result.mixer.master.chain = [{ ...newModule('drive'), id: 'warm', on: false }];
   return result;
 }
 
@@ -747,4 +751,53 @@ test('a block carries no lanes, fades or mutes', () => {
   const block = { name: 'B', color: 1, bars: 2, tracks: [{ sound: newSound(), notes: [] }], samples: {} };
   const text = serializeBlock(block);
   expect(Object.keys(JSON.parse(text).block)).toEqual(['name', 'color', 'bars', 'tracks']);
+});
+
+test('a project from before the mixer gets the default buses, sends nothing and ducks nothing', () => {
+  const { mixer: _, ...old } = project();
+  const channels = old.channels.map(({ sends: _s, duck: _d, ...c }) => c);
+  const parsed = parseProject(projectFile({ ...old, channels }));
+  expect(parsed.channels.map((c) => [c.sends, c.duck])).toEqual([
+    [[0, 0], { source: null, amount: 0.5, release: 0.25 }],
+    [[0, 0], { source: null, amount: 0.5, release: 0.25 }],
+  ]);
+  const { buses, master } = parsed.mixer;
+  expect(buses.map((b) => [b.name, b.level, b.mute, b.chain.map((m) => [m.type, m.params.mix])])).toEqual([
+    ['Room', 0, false, [['reverb', 1]]],
+    ['Echo', 0, false, [['delay', 1]]],
+  ]);
+  expect(master.chain).toEqual([]);
+});
+
+test('the mixer and the channels\' sends and ducking are kept in range', () => {
+  const original = project();
+  const channels = [
+    { ...original.channels[0], sends: [2, -1], duck: { source: 'c1', amount: 3, release: 0 } },
+    { ...original.channels[1], sends: 'loud', duck: { source: 'gone', amount: 'x', release: 99 } },
+  ];
+  const mixer = {
+    buses: [{ name: 'A very long bus name', chain: [{ type: 'delay', params: { mix: 5 } }], level: 40, mute: 'yes' }],
+    master: { chain: [{ id: 'x', type: 'reverb' }, { id: 'x', type: 'filter' }] },
+  };
+  const parsed = parseProject(projectFile({ ...original, channels, mixer }));
+  expect(parsed.channels.map((c) => [c.sends, c.duck])).toEqual([
+    [[1, 0], { source: null, amount: 1, release: 0.02 }],
+    [[0, 0], { source: null, amount: 0.5, release: 4 }],
+  ]);
+  const [a, b] = parsed.mixer.buses;
+  expect([a.name, a.level, a.mute, a.chain[0].params.mix]).toEqual(['A very long ', 6, false, 1]);
+  expect(a.chain[0].id).toMatch(/^m_/);
+  expect(b.name).toBe('Echo');
+  const ids = parsed.mixer.master.chain.map((m) => m.id);
+  expect(ids[0]).toBe('x');
+  expect(new Set(ids).size).toBe(2);
+  expect(() => parseProject(projectFile({ ...original, mixer: { master: { chain: [{ type: 'lfo' }] } } })))
+    .toThrow('Unknown effect module: lfo.');
+});
+
+test('blocks and sounds carry no sends or ducking', () => {
+  const original = project();
+  const block = JSON.parse(serializeBlock(extractBlock(original, 'a')!)).block;
+  expect(Object.keys(block.tracks[0])).toEqual(['sound', 'notes']);
+  expect(JSON.parse(serializeSound(original.channels[0].sound, {})).sound).not.toHaveProperty('sends');
 });

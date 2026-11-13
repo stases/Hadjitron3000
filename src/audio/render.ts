@@ -1,9 +1,9 @@
 // Offline rendering of a project or a single sound, and MP3 encoding.
 
 import { createMp3Encoder } from 'wasm-media-encoders';
-import { TICKS_PER_STEP, newLanes } from '../core/defaults';
+import { TICKS_PER_STEP, defaultMixer, newChannel, newLanes } from '../core/defaults';
 import { eventsBetween, loopSteps, stepSeconds } from '../core/sequencer';
-import type { NoteEvent, Pcm, PlayScope, Project, SampleData, Sound } from '../core/types';
+import type { ModuleInst, NoteEvent, Pcm, PlayScope, Project, SampleData, Sound } from '../core/types';
 import { Engine } from './engine';
 import { playEvent } from './transport';
 import { SHORT_TAILS, delayTime } from './modules/effects';
@@ -54,12 +54,12 @@ async function render(
 }
 
 /**
- * How long a sound can go on after its last note ends: its release, then each effect in turn, a reverb for its size,
- * a delay until its echoes have fallen by 80 dB, and the short tails of the chorus, compressor and phaser.
+ * How long a chain of effects rings after its input stops: a reverb for its size, a delay until its echoes have
+ * fallen by 80 dB, and the short tails of the chorus, compressor and phaser.
  */
-function ringTime(sound: Sound, bpm: number): number {
-  let t = 1.25 * (sound.amp.release as number);
-  for (const m of sound.chain) {
+function chainTime(chain: ModuleInst[], bpm: number): number {
+  let t = 0;
+  for (const m of chain) {
     if (m.on === false) continue;
     t += SHORT_TAILS[m.type] ?? 0;
     if (m.type === 'reverb') t += m.params.size as number;
@@ -71,9 +71,19 @@ function ringTime(sound: Sound, bpm: number): number {
   return t;
 }
 
-/** The tail a render of these sounds needs to let them ring out. */
-export function ringOut(sounds: Sound[], bpm: number): number {
-  return Math.min(MAX_TAIL, Math.max(MIN_TAIL, ...sounds.map((s) => ringTime(s, bpm))));
+/** How long a sound can go on after its last note ends: its release, then its effects. */
+const ringTime = (sound: Sound, bpm: number) => 1.25 * (sound.amp.release as number) + chainTime(sound.chain, bpm);
+
+/** How long the shared effects add to that: the longest of the buses that are sent to, then the master rack. */
+function mixerTime(project: Project): number {
+  const buses = project.mixer.buses.filter((bus, i) => !bus.mute && project.channels.some((c) => c.sends[i] > 0));
+  const longest = Math.max(0, ...buses.map((bus) => chainTime(bus.chain, project.bpm)));
+  return longest + chainTime(project.mixer.master.chain, project.bpm);
+}
+
+/** The tail a render of these sounds needs to let them ring out, `shared` seconds of the mixer's effects included. */
+export function ringOut(sounds: Sound[], bpm: number, shared = 0): number {
+  return Math.min(MAX_TAIL, Math.max(MIN_TAIL, ...sounds.map((s) => ringTime(s, bpm) + shared)));
 }
 
 /** The channels cut after the last sample above -80 dB (plus a short pad), but never shorter than `min` frames. */
@@ -92,7 +102,7 @@ export async function renderProject(
   opts: { loops?: number; tail?: number; sampleRate?: number; onProgress?: (fraction: number) => void } = {},
 ): Promise<Pcm> {
   const { loops = 1, sampleRate = 44100, onProgress } = opts;
-  const tail = opts.tail ?? ringOut(project.channels.map((c) => c.sound), project.bpm);
+  const tail = opts.tail ?? ringOut(project.channels.map((c) => c.sound), project.bpm, mixerTime(project));
   const steps = loopSteps(project, scope) * loops;
   const loopSeconds = steps * stepSeconds(project.bpm);
   const events = eventsBetween(project, scope, 0, steps * TICKS_PER_STEP);
@@ -112,7 +122,8 @@ export async function renderSound(
     swing: 0,
     meter: [4, 4],
     master: 0,
-    channels: [{ id: 'sound', sound, color: 0, mute: false, solo: false }],
+    mixer: defaultMixer(),
+    channels: [newChannel('sound', sound, 0)],
     patterns: [],
     song: [],
     lanes: newLanes(),

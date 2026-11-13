@@ -159,7 +159,7 @@ function Waveform({ channelId, source }: { channelId: string; source: ModuleInst
 /** The sampler's Source unit; `play` are the cells of the play controls, which follow its own. */
 export function SamplerUnit({ channelId, source, play }: { channelId: string; source: ModuleInst; play: Cell[] }) {
   const props = (pid: string) => ({
-    channelId,
+    owner: channelId,
     moduleId: 'source',
     type: 'sample',
     spec: paramSpec(MODULES.sample, pid)!,

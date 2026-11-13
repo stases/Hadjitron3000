@@ -59,7 +59,10 @@ test('adding channels preserves supplied sounds, merges samples and balances col
   const original = newSound();
   const first = app.addChannel(original, { kick: sample });
   expect(first).toMatch(/^c_/);
-  expect(project().channels[0]).toEqual({ id: first, sound: original, color: 0, mute: false, solo: false });
+  expect(project().channels[0]).toEqual({
+    id: first, sound: original, color: 0, mute: false, solo: false, sends: [0, 0],
+    duck: { source: null, amount: 0.5, release: 0.25 },
+  });
   expect(sound(first)).toBe(original);
   expect(project().samples.kick).toBe(sample);
   for (let i = 1; i < CHANNEL_COLORS + 2; i++) app.addChannel(newSound());
@@ -1470,4 +1473,77 @@ test('lanes have a level in dB down to silence and a mute, a turned level is one
   app.undo();
   expect(project().lanes[1]).toEqual({ level: -12.5, mute: false });
   expect(project().lanes[2].mute).toBe(false);
+});
+
+test('sends, ducking and the bus faders keep their ranges, and a knob turned is one undo step', () => {
+  vi.useFakeTimers();
+  const a = app.addChannel(newSound());
+  const b = app.addChannel(newSound());
+  const steps = state().past.length;
+  app.setSend(a, 0, 0.2);
+  app.setSend(a, 0, 0.4);
+  app.setSend(a, 1, 7);
+  app.setSend(a, 2, 0.5);
+  app.setSend(a, 0, NaN);
+  expect(project().channels[0].sends).toEqual([0.4, 1]);
+  expect(state().past.length).toBe(steps + 2);
+  app.setDuck(a, { source: b, amount: 2, release: 0 });
+  expect(project().channels[0].duck).toEqual({ source: b, amount: 1, release: 0.02 });
+  app.setDuck(a, { source: a });
+  app.setDuck(b, { source: 'missing', release: 99 });
+  expect(project().channels.map((c) => c.duck)).toEqual([
+    { source: null, amount: 1, release: 0.02 },
+    { source: null, amount: 0.5, release: 4 },
+  ]);
+  app.setDuck(b, { source: a });
+  app.setBus(0, { name: '  Hall with a long name ', level: 20, mute: true });
+  app.setBus(1, { name: '   ', level: -100 });
+  app.setBus(2, { mute: true });
+  expect(project().mixer.buses.map((bus) => [bus.name, bus.level, bus.mute])).toEqual([
+    ['Hall with a', 6, true],
+    ['Echo', -48, false],
+  ]);
+  // Taking the source away leaves the channel that ducked to it without a source.
+  app.removeChannel(a);
+  expect(project().channels[0].duck.source).toBeNull();
+  app.undo();
+  expect(project().channels[1].duck.source).toBe(a);
+});
+
+test('the racks of the buses and the master take effects like a sound does, fully wet on a bus', () => {
+  const master = { rack: 'master' } as const;
+  const room = { rack: 0 } as const;
+  expect(app.addEffect(master, 'lfo')).toBeNull();
+  const filter = app.addEffect(master, 'filter')!;
+  const delay = app.addEffect(master, 'delay', 0)!;
+  expect(project().mixer.master.chain.map((m) => [m.id, m.params.mix])).toEqual([[delay, 0.3], [filter, undefined]]);
+  app.moveEffect(master, delay, 1);
+  expect(project().mixer.master.chain.map((m) => m.id)).toEqual([filter, delay]);
+  app.setParam(master, delay, 'feedback', 2);
+  app.setParam(master, delay, 'nothing', 2);
+  app.setParam(master, 'missing', 'feedback', 0.1);
+  app.setModuleOn(master, filter, false);
+  expect(project().mixer.master.chain.map((m) => [m.on, m.params.feedback])).toEqual([
+    [false, undefined],
+    [true, 0.95],
+  ]);
+  app.removeModule(master, filter);
+  expect(project().mixer.master.chain.map((m) => m.id)).toEqual([delay]);
+  const drive = app.addEffect(room, 'drive')!;
+  const echo = app.addEffect({ rack: 1 }, 'reverb', 0)!;
+  expect(project().mixer.buses[0].chain.map((m) => m.type)).toEqual(['reverb', 'drive']);
+  expect(project().mixer.buses[1].chain.map((m) => [m.id, m.params.mix])).toEqual([[echo, 1], [expect.any(String), 1]]);
+  app.removeModule(room, drive);
+  app.undo();
+  expect(project().mixer.buses[0].chain.map((m) => m.id)).toContain(drive);
+});
+
+test('a sound from a library or a block starts with no sends and no ducking', () => {
+  const a = app.addChannel(newSound());
+  app.setSend(a, 0, 0.5);
+  app.setDuck(a, { source: app.addChannel(newSound()) });
+  app.insertBlock({ name: 'X', color: 0, bars: 1, tracks: [{ sound: newSound('noise'), notes: [] }], samples: {} });
+  expect(project().channels.at(-1)).toMatchObject({ sends: [0, 0], duck: { source: null } });
+  const copy = app.duplicateChannel(a)!;
+  expect(project().channels.find((c) => c.id === copy)?.sends).toEqual([0.5, 0]);
 });

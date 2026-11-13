@@ -40,6 +40,7 @@ function command(e: KeyboardEvent): (() => unknown) | null {
   if (e.code === 'Digit1') return () => setView('factory');
   if (e.code === 'Digit2') return () => setView('track');
   if (e.code === 'Digit3') return () => setView('song');
+  if (e.code === 'Digit4') return () => setView('mixer');
   return null;
 }
 

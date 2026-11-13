@@ -94,12 +94,13 @@ export function buildMenus(state: AppState, prefs: Prefs): { label: string; tour
         { label: 'Factory', shortcut: modKey('1'), checked: state.view === 'factory', onSelect: () => setView('factory') },
         { label: 'Track', shortcut: modKey('2'), checked: state.view === 'track', onSelect: () => setView('track') },
         { label: 'Song', shortcut: modKey('3'), checked: state.view === 'song', onSelect: () => setView('song') },
+        { label: 'Mixer', shortcut: modKey('4'), checked: state.view === 'mixer', onSelect: () => setView('mixer') },
         'separator',
         {
           label: 'Beginner Mode',
           checked: prefs.beginner,
-          hint: 'Folds the Shaping and Deep controls away (in the Factory, the note inspector and the time signature) '
-            + 'and groups the add lists by level.',
+          hint: 'Folds the Shaping and Deep controls away (in the Factory, the note inspector, the Mixer and the time '
+            + 'signature) and groups the add lists by level.',
           onSelect: () => setPrefs({ beginner: !prefs.beginner }),
         },
       ],

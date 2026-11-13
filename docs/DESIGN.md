@@ -44,7 +44,7 @@ The area behind the window, which shows when the app runs in a browser, is the d
 
 ## Displays
 
-Anything that shows a signal or a number that matters is an amber display: `--crt` background in a sunken bevel, `--amber` for the trace or the digits, `--amber-mid` for secondary marks, `--amber-dim` for the grid dots and unlit segments. Text on a display gets `text-shadow: var(--amber-glow)`. The scope, the level meter, envelope shapes and sample waveforms are all displays. Meter segments above 0 dB are `--red`. The compressor's gain reduction meter is a row of twelve segments of 2 dB that light from the left, over a scale with a longer tick every 6 dB, with its caption and value under it like a knob's.
+Anything that shows a signal or a number that matters is an amber display: `--crt` background in a sunken bevel, `--amber` for the trace or the digits, `--amber-mid` for secondary marks, `--amber-dim` for the grid dots and unlit segments. Text on a display gets `text-shadow: var(--amber-glow)`. The scope, the level meter, envelope shapes and sample waveforms are all displays. Meter segments above 0 dB are `--red`; a meter lies along the transport bar and stands upright in a mixer strip. The compressor's gain reduction meter is a row of twelve segments of 2 dB that light from the left, over a scale with a longer tick every 6 dB, with its caption and value under it like a knob's.
 
 The Factory's scope is a bench scope: a dotted `--amber-dim` graticule, a sweep that starts on a rising zero crossing so the wave stands still, and a range and timebase that step in 1-2-5 like a real one. When the sound falls quiet its last trace holds in `--amber-mid`, steps down to `--amber-dim` and then clears to a resting line; it never fades smoothly.
 
@@ -73,6 +73,10 @@ The grid sits in a sunken panel. A cell is 24 by 22 pixels with a shallow well b
 The piano roll is the same sheet turned on its side: the grid's columns with their gaps as step, beat and bar lines, one pixel per tick, and a 12-pixel row per semitone, putty for white keys and `--face-lo` for black ones. Keys are drawn at the left on `--paper` with `--ink` black keys, and only the Cs are named. A note is a lit key in its channel colour, shaded towards `--face` the softer it plays, with its name inside when it is at least a step long; a selected note turns `--ink` with a line of its colour inside, so it stands out on any colour. Snap positions that fall inside a cell are one-pixel `--face-hi` lines. Velocities are an amber display along the bottom, a stalk with a small head per note, brighter and wider for the selection. The rubber band is a dotted `--ink` rectangle and the paste mark a small `--sel` triangle in the ruler.
 
 Channel colours come from `--c0` to `--c7` and are used for the chip in lists, the lamp in the channel header and the steps.
+
+## The mixer
+
+The Mixer is a small desk in a sunken panel: one raised putty strip per sound, about 100 pixels wide, then the two buses and the master, each group set a little apart. Every strip has the same rows, top to bottom: the name with its colour chip (the bus letter on an ink plate for a bus; the picked sound's name on `--sel`), the send knobs, the ducking, the pan knob, the fader beside its meter, and mute and solo; a strip that has nothing for a row leaves it empty, so the rows line up across the desk. The captions of the rows stand in a column at the left, in the caption style, and stay there while the strips scroll. A strip's meter is the level meter turned upright: twelve segments per side from the bottom up, the top two red. The fader is the Windows 98 trackbar on its side, its value under it. In beginner mode the Shaping row (ducking, and the master's Rack button) folds away behind a toggle in the caption column, with the lamp of a rack unit. The rack of the chosen bus or the master sits under the desk, drawn exactly like the Factory's rack.
 
 ## Icons
 

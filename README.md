@@ -12,13 +12,15 @@
 +==========================================================================+
 ```
 
-Hadjitron 3000 is a small music machine for electronic and experimental music. You build sounds in the Factory, write short blocks of steps with them on the Track, arrange the blocks into a song in the Song, press Space, and export what you made. It looks and behaves like a program from 1998 on purpose.
+Hadjitron 3000 is a small music machine for electronic and experimental music. You build sounds in the Factory, write short blocks of steps with them on the Track, arrange the blocks into a song in the Song, balance them in the Mixer, press Space, and export what you made. It looks and behaves like a program from 1998 on purpose.
 
 ![The Song](docs/img/song.png)
 
 ![The Track](docs/img/track.png)
 
 ![The Factory](docs/img/factory.png)
+
+![The Mixer](docs/img/mixer.png)
 
 ```
 +--------------------------------------------------------------------------+
@@ -88,7 +90,7 @@ A project holds up to twenty-six blocks. A block can also travel to other projec
 +--------------------------------------------------------------------------+
 ```
 
-A sound is a rack of units, read from top to bottom. The source makes the tone: an oscillator, an FM pair, noise, or a sampler that plays an audio file. The oscillator can also mix in a second oscillator, tuned against the first, and a sine one or two octaves below the note; when either of them is set to the square wave, Pulse makes the square narrower or wider. Besides sine, triangle, saw and square, each oscillator can play a wave you draw yourself: choose Draw, the last of the wave pictures, and a display shows one cycle of the wave. Drag across it to draw, hold Shift for a straight line, start again from one of the four stock waves with the buttons beside it, and press Smooth to round off the corners. A note you hold while drawing changes along with the drawing. Under the source sits the filter, which every sound has and which is off until you click its lamp. It works on each note by itself, so overlapping notes each keep their own brightness. It cuts at 12 or 24 dB per octave, can be driven into a growl, can follow the note up the keyboard, and can close for softer notes. The amp envelope shapes the loudness of each note over time; its attack, decay and release each go up to thirty seconds, for swells and fades that take their time. After that come as many effects as you like, in any order, working on all the notes together: a second filter for the whole sound, a three-band EQ with a low cut, a compressor with a meter that shows how far it turns the sound down, drive, a ring modulator that makes metal and bells or, slowed to a few hertz, a tremolo, a chorus, a phaser that can sweep in time with the tempo, a width control that narrows a sound to mono or spreads it wide while it keeps the bass in the middle, a delay whose low cut thins the echoes as they repeat, as in dub, and a reverb whose room can ring for up to thirty seconds. The output unit sets level and pan.
+A sound is a rack of units, read from top to bottom. The source makes the tone: an oscillator, an FM pair, noise, or a sampler that plays an audio file. The oscillator can also mix in a second oscillator, tuned against the first, and a sine one or two octaves below the note; when either of them is set to the square wave, Pulse makes the square narrower or wider. Besides sine, triangle, saw and square, each oscillator can play a wave you draw yourself: choose Draw, the last of the wave pictures, and a display shows one cycle of the wave. Drag across it to draw, hold Shift for a straight line, start again from one of the four stock waves with the buttons beside it, and press Smooth to round off the corners. A note you hold while drawing changes along with the drawing. Under the source sits the filter, which every sound has and which is off until you click its lamp. It works on each note by itself, so overlapping notes each keep their own brightness. It cuts at 12 or 24 dB per octave, can be driven into a growl, can follow the note up the keyboard, and can close for softer notes. The amp envelope shapes the loudness of each note over time; its attack, decay and release each go up to thirty seconds, for swells and fades that take their time. After that come as many effects as you like, in any order, working on all the notes together: a second filter for the whole sound, a three-band EQ with a low cut, a compressor with a meter that shows how far it turns the sound down, drive, a ring modulator that makes metal and bells or, slowed to a few hertz, a tremolo, a chorus, a phaser that can sweep in time with the tempo, a width control that narrows a sound to mono or spreads it wide while it keeps the bass in the middle, a delay whose low cut thins the echoes as they repeat, as in dub, and a reverb whose room can ring for up to thirty seconds. The output unit sets level and pan, and how much of the sound goes to the two shared effects of the Mixer, the Room and the Echo.
 
 Modulators move a knob of your choice for you, for example the filter cutoff or the pitch. An envelope rises and falls with each note. An LFO wobbles to and fro: at its own rate, from many per second down to one cycle in more than eight minutes, or locked to the tempo with Sync, one cycle per eight bars down to one per thirty-second note, so a wobble bass or a pulsing filter stays in time when you change the tempo. Its Fade lets the wobble grow in slowly after a note starts, and Retrigger starts the wave from the beginning with every note instead of letting it run on. A drift wanders between random values and never repeats itself, jumping from one to the next or gliding between them as Smooth says; set slowly, it gives a pad or a drone the gentle, unpredictable movement of something alive. A modulator works either on each note or on the whole sound. Working on each note, every note gets its own copy, which starts with the note, so a filter envelope opens every note of a chord on its own; Velocity then lets harder notes get more of it. Working on the whole sound, there is one modulator for all the notes: an envelope starts again with every new note, which suits a bass line, and an LFO keeps running. A new envelope works on each note, and a new LFO or drift on the whole sound; a drift that works on each note wanders its own way in every note. Only the source and the filter live inside a note, so a modulator pointed at an effect or the output always works on the whole sound.
 
@@ -106,30 +108,46 @@ Save to Library keeps a sound for other projects. The library is the folder `Doc
 
 ```
 +--------------------------------------------------------------------------+
-|  5. FILES                                                                |
+|  5. THE MIXER                                                            |
++--------------------------------------------------------------------------+
+```
+
+The Mixer shows every sound of the project side by side as a strip, the way a mixing desk does: its level fader with a meter beside it, its pan knob, and mute and solo. These are the same controls as in the Factory's output unit and on the Track's row headers, so a change in one place shows in the others. Click the name at the top of a strip to pick that sound for the computer keyboard, and double-click it to open it in the Factory. With many sounds the strips scroll sideways.
+
+Two shared effects sit to the right of the sounds, on buses called Room and Echo. A new project has a reverb on the Room and a delay on the Echo, both fully wet. The two send knobs at the top of each strip, named after the buses, set how much of the sound goes to each; the sound itself plays on as before, and the bus adds its effect on top. This puts several sounds in the same space, at different depths, and costs much less than a reverb in every sound. Each bus has its own fader, meter and mute. Its Rack button shows its effects under the strips, as rack units like the Factory's: change them, add any effect, move or remove one, and rename the bus. In a sound the delay and the reverb add their effect on top of the whole dry sound; on a bus their Mix fades from the dry sound to the effect, as every other effect's Mix does, so at 100 % only the effect comes back. A compressor in a rack shows how far it turns the sound down, as it does in the Factory. The send knobs are also in each sound's output unit in the Factory.
+
+The Master strip at the right holds the master level and meter of the transport bar, and a rack of its own for effects that work on everything you hear and export.
+
+Duck makes a sound dip every time another one plays a note and swell back afterwards, the pumping of a pad under the kick in house and techno. Choose the sound that pushes it down, how far it dips (Amount) and how long it takes to come back (Release). It follows the notes, so it works the same in an export, and it keeps working while the other sound is muted, which gives you a pump with no kick to hear. Ducking and the master rack are Shaping controls: in beginner mode they wait behind the Shaping button at the left of the strips, whose lamp lights when a sound ducks or the master rack holds an effect.
+
+Sends and ducking belong to the project, not to the sound: a sound saved to the library or a block keeps neither, and a sound brought into a project starts with its sends at zero. The demo song sends its keys and pads to the Room.
+
+```
++--------------------------------------------------------------------------+
+|  6. FILES                                                                |
 +--------------------------------------------------------------------------+
 ```
 
 | File   | What it is                                                              |
 | ------ | ----------------------------------------------------------------------- |
-| `.h3k` | A project: its sounds, blocks, song, tempo and any samples it uses.     |
+| `.h3k` | A project: its sounds, blocks, song, mixer and any samples it uses.     |
 | `.h3s` | One sound, with its sample if it has one.                               |
 | `.h3b` | One block, with the sounds it plays and their samples.                  |
 | `.wav` | Export Audio, 16-bit stereo.                                            |
 | `.mp3` | Export Audio, 128 to 320 kbit/s.                                        |
 
-Projects, sounds and blocks are plain JSON, so they are safe to keep in git or to send by mail. Samples travel inside the file. Sounds in the library are kept in `Documents/Hadjitron 3000/Sounds` and blocks in `Documents/Hadjitron 3000/Blocks`. Dropping a `.h3s` or `.h3b` file on the window adds the sound or the block to the project. Export Audio in the File menu renders the current block or the whole song, and Export in the Factory renders a single sound. With Let the end ring out, an export goes on after the last note for as long as the longest release, reverb or echo needs, up to a minute, and stops as soon as everything is quiet. WAV, MP3, AIFF, FLAC, Ogg and M4A files can be imported.
+Projects, sounds and blocks are plain JSON, so they are safe to keep in git or to send by mail. Samples travel inside the file. Sounds in the library are kept in `Documents/Hadjitron 3000/Sounds` and blocks in `Documents/Hadjitron 3000/Blocks`. Dropping a `.h3s` or `.h3b` file on the window adds the sound or the block to the project. Export Audio in the File menu renders the current block or the whole song, and Export in the Factory renders a single sound. With Let the end ring out, an export goes on after the last note for as long as the longest release, reverb or echo needs, those on the buses and the master included, up to a minute, and stops as soon as everything is quiet. WAV, MP3, AIFF, FLAC, Ogg and M4A files can be imported.
 
 ```
 +--------------------------------------------------------------------------+
-|  6. KEYS                                                                 |
+|  7. KEYS                                                                 |
 +--------------------------------------------------------------------------+
 ```
 
 | Key                    | What it does                              |
 | ---------------------- | ----------------------------------------- |
 | Space                  | Play or stop                              |
-| Cmd+1, Cmd+2, Cmd+3    | Factory, Track, Song                      |
+| Cmd+1 to Cmd+4         | Factory, Track, Song, Mixer               |
 | Cmd+N, Cmd+O, Cmd+S    | New, open, save                           |
 | Shift+Cmd+S            | Save as                                   |
 | Cmd+E                  | Export audio                              |
@@ -145,7 +163,7 @@ The full list is under Help, Keyboard Shortcuts.
 
 ```
 +--------------------------------------------------------------------------+
-|  7. FOR THE TINKERER                                                     |
+|  8. FOR THE TINKERER                                                     |
 +--------------------------------------------------------------------------+
 ```
 

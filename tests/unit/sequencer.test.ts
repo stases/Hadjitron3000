@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { fadeGain } from '../../src/core/arrangement';
-import { emptyProject, newSound, TICKS_PER_STEP } from '../../src/core/defaults';
+import { emptyProject, newChannel, newSound, TICKS_PER_STEP } from '../../src/core/defaults';
 import { eventsBetween, heardAt, loopSteps, plays, songBars, stepSeconds, tickTime } from '../../src/core/sequencer';
 import type { Note, Placement, Project } from '../../src/core/types';
 import { notesOf, stepNote } from '../support/steps';
@@ -10,7 +10,7 @@ const T = TICKS_PER_STEP;
 function demo(): Project {
   const p = emptyProject();
   p.bpm = 120;
-  p.channels.push({ id: 'k', sound: newSound(), color: 0, mute: false, solo: false });
+  p.channels.push(newChannel('k', newSound(), 0));
   p.patterns[0].notes = { k: notesOf({ 0: { note: 60, vel: 0.8, len: 1 }, 3: { note: 67, vel: 0.5, len: 2 } }) };
   return p;
 }
@@ -129,7 +129,7 @@ function windowed(p: Project, scope: Parameters<typeof eventsBetween>[1], size: 
 test('tick windows schedule every note once, across window edges and the loop wrap, with chords and overlaps', () => {
   const p = demo();
   p.swing = 0.4;
-  p.channels.push({ id: 'pad', sound: newSound(), color: 1, mute: false, solo: false });
+  p.channels.push(newChannel('pad', newSound(), 1));
   const pad: Note[] = [
     { id: 'c1', start: 0, len: 96, note: 48, vel: 0.7 },
     { id: 'c2', start: 0, len: 96, note: 55, vel: 0.7 },
@@ -163,7 +163,7 @@ test('tick windows schedule every note once, across window edges and the loop wr
 function oneRow(notes: Note[], meter: Project['meter'] = [4, 4]): Project {
   const p = emptyProject();
   p.meter = meter;
-  p.channels.push({ id: 'k', sound: newSound(), color: 0, mute: false, solo: false });
+  p.channels.push(newChannel('k', newSound(), 0));
   p.patterns[0].notes = { k: notes };
   return p;
 }
@@ -395,7 +395,7 @@ test('without fades in a lane at 0 dB notes carry no curve; the block on repeat 
 
 test('a lane plays at its level, multiplies the fades, and a muted lane or one at the bottom plays nothing', () => {
   const p = placed([stepNote(0), { ...stepNote(4 * 16), hold: true }]);
-  p.channels.push({ id: 'h', sound: newSound(), color: 1, mute: false, solo: false });
+  p.channels.push(newChannel('h', newSound(), 1));
   p.patterns.push({ id: 'b', name: 'B', color: 1, bars: 1, notes: { h: [stepNote(0, 72)] } });
   p.song.push({ id: 't', pattern: 'b', lane: 1, bar: 0, bars: 1 });
   const lane = 10 ** (-12 / 20);
@@ -418,8 +418,8 @@ test('a lane plays at its level, multiplies the fades, and a muted lane or one a
 
 test('a placement silences exactly the sounds it mutes; the same block elsewhere plays them', () => {
   const p = oneRow([stepNote(0), stepNote(8)]);
-  p.channels.push({ id: 'h', sound: newSound(), color: 1, mute: false, solo: false });
-  p.channels.push({ id: 's', sound: newSound(), color: 2, mute: false, solo: false });
+  p.channels.push(newChannel('h', newSound(), 1));
+  p.channels.push(newChannel('s', newSound(), 2));
   const a = p.patterns[0];
   a.notes.h = [stepNote(2, 72), stepNote(6, 72)];
   a.notes.s = [stepNote(4, 50)];

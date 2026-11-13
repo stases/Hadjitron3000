@@ -170,10 +170,13 @@ test('the menus list their commands and follow the store', async () => {
   await userEvent.click(button('Close'));
 
   const view = await openMenu('View');
-  expect(labels(view)).toEqual(['Factory', 'Track', 'Song', 'Beginner Mode']);
-  expect(view.slice(0, 3).map((el) => el.querySelector('.h-menu-shortcut')!.textContent))
-    .toEqual(['Ctrl+1', 'Ctrl+2', 'Ctrl+3']);
-  await userEvent.click(view[2]);
+  expect(labels(view)).toEqual(['Factory', 'Track', 'Song', 'Mixer', 'Beginner Mode']);
+  expect(view.slice(0, 4).map((el) => el.querySelector('.h-menu-shortcut')!.textContent))
+    .toEqual(['Ctrl+1', 'Ctrl+2', 'Ctrl+3', 'Ctrl+4']);
+  await userEvent.click(view[3]);
+  expect(state().view).toBe('mixer');
+  expect($('.h-tab.is-selected').textContent).toBe('Mixer');
+  await userEvent.click((await openMenu('View'))[2]);
   expect(state().view).toBe('song');
   expect($('.h-tab.is-selected').textContent).toBe('Song');
   expect(labels(await openMenu('Help'))).toEqual([
@@ -340,7 +343,11 @@ test('Space, undo and redo, and the view shortcuts', () => {
   press('3', { ctrlKey: true, code: 'Digit3' });
   expect(state().view).toBe('song');
   expect(state().scope).toBe('song');
-  expect(SHORTCUT_GROUPS[0].keys).toContainEqual(['Ctrl+1, Ctrl+2, Ctrl+3', 'Factory, Track, Song']);
+  // The Mixer, like the Factory, leaves Play playing what it played.
+  press('4', { ctrlKey: true, code: 'Digit4' });
+  expect(state().view).toBe('mixer');
+  expect(state().scope).toBe('song');
+  expect(SHORTCUT_GROUPS[0].keys).toContainEqual(['Ctrl+1, Ctrl+2, Ctrl+3, Ctrl+4', 'Factory, Track, Song, Mixer']);
 });
 
 test('the transport and the status bar say what Play plays, the block or the song', async () => {

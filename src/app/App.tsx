@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { ComponentType } from 'react';
 import { TICKS_PER_STEP } from '../core/defaults';
 import { barOf, beatOf } from '../core/meter';
 import { heardAt, songBars } from '../core/sequencer';
@@ -7,6 +8,7 @@ import { playScope, setView, useApp } from '../state/store';
 import type { AppState, View } from '../state/store';
 import { FactoryView } from '../ui/factory';
 import { Icon, MenuBar, Separator, StatusBar, StatusField, TabPage, Tabs, Window, useHintText } from '../ui/kit';
+import { MixerView } from '../ui/mixer';
 import { SongView } from '../ui/song';
 import { TrackView } from '../ui/track';
 import { position, sampleRate } from './audio';
@@ -22,7 +24,12 @@ const TABS = [
   { id: 'factory', label: 'Factory' },
   { id: 'track', label: 'Track' },
   { id: 'song', label: 'Song', tour: 'tab-song' },
+  { id: 'mixer', label: 'Mixer' },
 ];
+
+const VIEWS: Record<View, ComponentType> = {
+  factory: FactoryView, track: TrackView, song: SongView, mixer: MixerView,
+};
 
 function Menus() {
   const state = useApp();
@@ -140,6 +147,7 @@ export function App() {
   const name = useApp((s) => documentName(s));
   const dirty = useApp((s) => s.dirty);
   const view = useApp((s) => s.view);
+  const ViewPage = VIEWS[view];
   const active = useWindowActive();
   const dropping = useFileDrop();
   const win = platform.window;
@@ -164,7 +172,9 @@ export function App() {
       <div className="h-app-views">
         <Tabs tabs={TABS} value={view} onChange={(id) => setView(id as View)} />
         <TabPage>
-          <div className="h-app-view">{view === 'factory' ? <FactoryView /> : view === 'track' ? <TrackView /> : <SongView />}</div>
+          <div className="h-app-view">
+            <ViewPage />
+          </div>
         </TabPage>
         {dropping && (
           <div className="h-app-drop">

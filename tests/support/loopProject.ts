@@ -1,13 +1,13 @@
 // A two-block loop with every sound in each block, for tests of the Track view.
 
-import { emptyProject, newPattern, uid } from '../../src/core/defaults';
+import { emptyProject, newChannel, newPattern, uid } from '../../src/core/defaults';
 import type { Channel, Note, Pattern, Project } from '../../src/core/types';
 import { preset } from '../../src/presets';
 import { notesOf } from './steps';
 import type { StepSpec } from './steps';
 
 function channels(names: string[]): Channel[] {
-  return names.map((name, color) => ({ id: uid('c'), sound: preset(name), color: color % 8, mute: false, solo: false }));
+  return names.map((name, color) => newChannel(uid('c'), preset(name), color % 8));
 }
 
 /** Drum row: x is a hit, X an accent, o a ghost note. */

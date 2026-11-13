@@ -76,7 +76,7 @@ export function FactoryView() {
       <div className="h-factory-well">
         <div className="h-factory-scroll">
           {channel ? (
-            <Rack channelId={channel.id} sound={channel.sound} />
+            <Rack channel={channel} />
           ) : (
             <p className="h-factory-empty">
               {channels.length

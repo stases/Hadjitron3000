@@ -42,3 +42,15 @@ test('the demo song plays notes on every channel', () => {
     expect(events.some((e) => e.channelId === channel.id), channel.sound.name).toBe(true);
   }
 });
+
+test('the starter sends nothing, the demo its keys and pads to the Room with drier reverbs of their own', () => {
+  expect(starterProject().channels.every((c) => c.sends[0] === 0 && c.sends[1] === 0)).toBe(true);
+  const demo = demoProject();
+  expect(demo.mixer.buses.map((b) => b.name)).toEqual(['Room', 'Echo']);
+  const sent = demo.channels.filter((c) => c.sends[0] > 0);
+  expect(sent.map((c) => c.sound.name)).toEqual(['Kalimba', 'Warm Pad', 'Glass Pad', 'Bell']);
+  for (const c of sent) {
+    const mix = (s: typeof c.sound) => s.chain.find((m) => m.type === 'reverb')!.params.mix as number;
+    expect(mix(c.sound)).toBeLessThan(mix(preset(c.sound.name)));
+  }
+});

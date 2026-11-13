@@ -227,7 +227,15 @@ const RED_FROM = 10;
 const PEAK_HOLD_MS = 900;
 const PEAK_FALL_MS = 90;
 
-export function Meter({ read, width = 74, height = 30 }: { read: () => [number, number]; width?: number; height?: number }) {
+interface MeterProps {
+  read: () => [number, number];
+  width?: number;
+  height?: number;
+  /** Segments stacked from the bottom up, left and right side by side, for a mixer strip. */
+  vertical?: boolean;
+}
+
+export function Meter({ read, width = 74, height = 30, vertical }: MeterProps) {
   const peaks = useRef([
     { seg: -1, at: 0 },
     { seg: -1, at: 0 },
@@ -240,10 +248,12 @@ export function Meter({ read, width = 74, height = 30 }: { read: () => [number, 
       draw={(g, w, h) => {
         const now = performance.now();
         const levels = read();
-        const pitch = Math.floor((w - 2) / SEGMENTS_DB.length);
-        const left = Math.floor((w - pitch * SEGMENTS_DB.length + 2) / 2);
-        const rowH = Math.floor((h - 10) / 2);
-        const top = Math.floor((h - rowH * 2 - 4) / 2);
+        const n = SEGMENTS_DB.length;
+        const [along, across] = vertical ? [h, w] : [w, h];
+        const pitch = Math.floor((along - 2) / n);
+        const start = Math.floor((along - pitch * n + 2) / 2);
+        const thick = Math.floor((across - 10) / 2);
+        const side = Math.floor((across - thick * 2 - 4) / 2);
         levels.forEach((level, ch) => {
           const db = 20 * Math.log10(Math.max(level, 1e-6));
           const count = SEGMENTS_DB.filter((t) => db >= t).length;
@@ -259,7 +269,10 @@ export function Meter({ read, width = 74, height = 30 }: { read: () => [number, 
             const red = i >= RED_FROM;
             const lit = i < count || i === peak.seg;
             g.fillStyle = tokenColor(red ? (lit ? '--red' : '--red-off') : lit ? '--amber' : '--amber-dim');
-            g.fillRect(left + i * pitch, top + ch * (rowH + 4), pitch - 2, rowH);
+            const a = start + (vertical ? n - 1 - i : i) * pitch;
+            const b = side + ch * (thick + 4);
+            if (vertical) g.fillRect(b, a, thick, pitch - 2);
+            else g.fillRect(a, b, pitch - 2, thick);
           });
         });
       }}

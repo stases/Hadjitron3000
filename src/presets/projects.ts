@@ -2,12 +2,12 @@
 // and the factory blocks taken from the demo.
 
 import { extractBlock } from '../core/block';
-import { TICKS_PER_STEP, emptyProject, newPattern, uid } from '../core/defaults';
+import { TICKS_PER_STEP, emptyProject, newChannel, newPattern, uid } from '../core/defaults';
 import type { Block, Channel, Note, Pattern, Project } from '../core/types';
 import { preset } from './index';
 
 function channels(names: string[]): Channel[] {
-  return names.map((name, color) => ({ id: uid('c'), sound: preset(name), color: color % 8, mute: false, solo: false }));
+  return names.map((name, color) => newChannel(uid('c'), preset(name), color % 8));
 }
 
 /** A new project: six sounds and one empty bar. */
@@ -33,9 +33,20 @@ function block(name: string, color: number, rows: Record<string, Note[]>): Patte
   return { ...newPattern(name, color), bars: 2, notes: rows };
 }
 
+/** The keys and pads of the demo share the Room on bus A: [reverb mix of their own, send to the Room]. */
+const ROOM: Readonly<Record<string, [number, number]>> = {
+  Kalimba: [0.12, 0.2], 'Warm Pad': [0.28, 0.15], 'Glass Pad': [0.32, 0.15], Bell: [0.22, 0.25],
+};
+
 /** "Welcome": eight blocks in E flat, a little swung, layered into a sixteen-bar song. */
 export function demoProject(): Project {
   const chans = channels(['Kick', 'Clap', 'Hat', 'Sub Bass', 'Kalimba', 'Warm Pad', 'Glass Pad', 'Bell']);
+  for (const channel of chans) {
+    if (!Object.hasOwn(ROOM, channel.sound.name)) continue;
+    const [mix, send] = ROOM[channel.sound.name];
+    channel.sound.chain.find((m) => m.type === 'reverb')!.params.mix = mix;
+    channel.sends = [send, 0];
+  }
   const [kick, clap, hat, bass, kalimba, warm, glass, bell] = chans.map((c) => c.id);
   const beat = block('Beat', 0, {
     [kick]: hits('x...x...x...x...x...x...x...x..o'),

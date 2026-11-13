@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { extractBlock } from '../../src/core/block';
 import {
-  CHANNEL_COLORS, emptyProject, MAX_BARS, newMod, newModule, newSound, TICKS_PER_STEP,
+  CHANNEL_COLORS, emptyProject, MAX_BARS, newChannel, newMod, newModule, newSound, TICKS_PER_STEP,
 } from '../../src/core/defaults';
 import { MAX_TICKS } from '../../src/core/meter';
 import {
@@ -21,7 +21,7 @@ function project(): Project {
   const silent = newSound('sample', 'Silent');
   silent.source.params.sample = 'unused';
   result.channels = [sampler, silent, newSound('fm', 'Bass'), newSound()].map((sound, i) => ({
-    id: `c${i}`, sound, color: i, mute: i === 0, solo: false,
+    ...newChannel(`c${i}`, sound, i), mute: i === 0,
   }));
   result.channels[2].sound.source.on = true;
   result.patterns = [{

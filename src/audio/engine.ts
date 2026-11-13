@@ -151,6 +151,11 @@ export class Engine {
     return this.channels.get(channelId)?.sounding(this.ctx.currentTime) ?? null;
   }
 
+  /** The gain reduction of a compressor in a channel's chain, in dB, or 0. */
+  effectReduction(channelId: string, moduleId: string): number {
+    return this.channels.get(channelId)?.effect(moduleId)?.reduction?.() ?? 0;
+  }
+
   dispose(): void {
     for (const graph of this.channels.values()) graph.dispose();
     this.channels.clear();

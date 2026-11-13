@@ -64,6 +64,16 @@ test('modTargets follows signal order and numbers repeated effects', () => {
   ]);
 });
 
+test('the ring modulator and the EQ offer their frequency as a target, the other new effects nothing', () => {
+  const sound = newSound();
+  const types = ['eq', 'compressor', 'ring', 'chorus', 'phaser', 'width'];
+  sound.chain = types.map((type) => ({ ...newModule(type), id: type }));
+  expect(modTargets(sound).filter((t) => sound.chain.some((m) => m.id === t.module))).toEqual([
+    { module: 'eq', param: 'freq', label: 'EQ · Mid Freq' },
+    { module: 'ring', param: 'freq', label: 'Ring Mod · Freq' },
+  ]);
+});
+
 test('a modulator works on each note only when it is set to and its target lives in the note', () => {
   const env = newMod('env');
   expect([env.per, newMod('lfo').per]).toEqual(['note', 'sound']);

@@ -61,12 +61,22 @@ test.each<[Unit, number, string]>([
   ['Hz', 2, '2.00 Hz'], ['Hz', 20, '20.0 Hz'], ['Hz', 200, '200 Hz'],
   ['Hz', 1234, '1.23 kHz'], ['Hz', 12500, '12.5 kHz'],
   ['s', 0.002, '2.0 ms'], ['s', 0.02, '20 ms'], ['s', 1.25, '1.25 s'],
-  ['dB', -10, '-inf dB'], ['dB', -6, '-6.0 dB'], ['dB', 3, '+3.0 dB'], ['dB', 0, '0.0 dB'],
+  ['dB', -10, '-10.0 dB'], ['dB', -6, '-6.0 dB'], ['dB', 3, '+3.0 dB'], ['dB', 0, '0.0 dB'],
   ['%', 0.256, '26 %'], ['st', 12, '+12 st'], ['st', -12, '-12 st'], ['ct', 5, '+5 ct'], ['oct', -2, '-2 oct'],
-  ['x', 1.5, '×1.50'], ['pan', 0, 'C'], ['pan', -0.25, 'L 25'], ['pan', 0.4, 'R 40'],
+  ['x', 1.5, '×1.50'], [':1', 4, '4.0:1'], [':1', 20, '20:1'],
+  ['pan', 0, 'C'], ['pan', -0.25, 'L 25'], ['pan', 0.4, 'R 40'],
   ['', 2.5, '2.50'],
 ])('formatValue formats %s value %s', (unit, value, expected) => {
   expect(formatValue({ ...float, unit }, value)).toBe(expected);
+});
+
+test('a parameter whose lowest setting switches it off reads Off there, the output level -inf', () => {
+  const lowcut = MODULES.delay.params.find((p) => p.id === 'lowcut') as FloatSpec;
+  expect(formatValue(lowcut, 20)).toBe('Off');
+  expect(formatValue(lowcut, 21)).toBe('21.0 Hz');
+  expect(formatValue(MODULES.width.params[1], 20)).toBe('Off');
+  expect(formatValue(MODULES.out.params[0], -48)).toBe('-inf dB');
+  expect(formatValue(MODULES.eq.params[0], -18)).toBe('-18.0 dB');
 });
 
 test('formatValue handles unitless steps and non-numeric parameters', () => {

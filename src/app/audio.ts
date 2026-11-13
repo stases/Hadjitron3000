@@ -172,6 +172,11 @@ export function soundingNote(channelId: string): number | null {
   return engine?.soundingNote(channelId) ?? null;
 }
 
+/** How far a compressor in a channel's chain turns the sound down now, in dB (0 or below). */
+export function effectReduction(channelId: string, moduleId: string): number {
+  return engine?.effectReduction(channelId, moduleId) ?? 0;
+}
+
 export function sampleRate(): number {
   return engine?.ctx.sampleRate ?? 0;
 }

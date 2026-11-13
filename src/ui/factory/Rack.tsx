@@ -18,6 +18,7 @@ import { EnvelopeDisplay } from './EnvelopeDisplay';
 import { MOD_HINTS } from './hints';
 import { addMenu, useLevels, useShown } from './levels';
 import type { Cell } from './levels';
+import { ReductionMeter } from './ReductionMeter';
 import { SamplerUnit } from './SamplerUnit';
 
 const signed = (v: number) => (v > 0 ? `+${v}` : `${v}`);
@@ -218,6 +219,7 @@ export function Rack({ channelId, sound }: { channelId: string; sound: Sound }) 
           onRemove={() => removeModule(channelId, m.id)}
           type={m.type}
           cells={paramCells(channelId, m.id, m.type, m.params)}
+          tail={m.type === 'compressor' && <ReductionMeter channelId={channelId} moduleId={m.id} />}
         />
       ))}
       <AddButton

@@ -1,0 +1,78 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Dub Stab",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sawtooth",
+        "wave2": "sawtooth",
+        "pitch2": 7,
+        "fine2": 6,
+        "mix2": 0.45
+      }
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 650,
+      "reso": 0.25,
+      "key": 0.4
+    },
+    "amp": {
+      "attack": 0.002,
+      "decay": 0.22,
+      "sustain": 0,
+      "release": 0.15
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "delay",
+        "params": {
+          "sync": "1/8d",
+          "feedback": 0.7,
+          "tone": 2400,
+          "lowcut": 380,
+          "pingpong": true,
+          "mix": 0.4
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "reverb",
+        "params": {
+          "size": 2.6,
+          "tone": 4000,
+          "mix": 0.2
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.16,
+          "sustain": 0,
+          "release": 0.1,
+          "vel": 0.5
+        },
+        "per": "note",
+        "target": {
+          "module": "filter",
+          "param": "cutoff"
+        },
+        "amount": 0.35
+      }
+    ],
+    "out": {
+      "level": -10,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

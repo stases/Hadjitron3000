@@ -53,6 +53,7 @@ export function coerce(spec: ParamSpec, v: unknown): ParamValue {
 const signed = (v: number, digits = 0) => (v > 0 ? '+' : '') + v.toFixed(digits);
 
 function formatFloat(spec: FloatSpec, v: number): string {
+  if (spec.off !== undefined && v <= spec.min) return spec.off;
   switch (spec.unit) {
     case 'Hz':
       // A slow rate reads better as the length of one cycle.
@@ -64,7 +65,7 @@ function formatFloat(spec: FloatSpec, v: number): string {
       if (v >= 1) return `${v.toFixed(2)} s`;
       return `${(v * 1000).toFixed(v < 0.01 ? 1 : 0)} ms`;
     case 'dB':
-      return v <= spec.min ? '-inf dB' : `${signed(v, 1)} dB`;
+      return `${signed(v, 1)} dB`;
     case '%':
       return `${Math.round(v * 100)} %`;
     case 'st':
@@ -75,6 +76,8 @@ function formatFloat(spec: FloatSpec, v: number): string {
       return `${signed(v)} oct`;
     case 'x':
       return `×${v.toFixed(2)}`;
+    case ':1':
+      return `${v.toFixed(v < 10 ? 1 : 0)}:1`;
     case 'pan': {
       const p = Math.round(v * 100);
       return p === 0 ? 'C' : p < 0 ? `L ${-p}` : `R ${p}`;

@@ -6,7 +6,7 @@ import { eventsBetween, loopSteps, stepSeconds } from '../core/sequencer';
 import type { NoteEvent, Pcm, PlayScope, Project, SampleData, Sound } from '../core/types';
 import { Engine } from './engine';
 import { playEvent } from './transport';
-import { delayTime } from './modules/effects';
+import { SHORT_TAILS, delayTime } from './modules/effects';
 
 // Rendering pauses this often (in audio seconds) to schedule the next notes and report progress.
 const CHUNK = 0.5;
@@ -54,13 +54,14 @@ async function render(
 }
 
 /**
- * How long a sound can go on after its last note ends: its release, then each effect in turn, a reverb for its size
- * and a delay until its echoes have fallen by 80 dB.
+ * How long a sound can go on after its last note ends: its release, then each effect in turn, a reverb for its size,
+ * a delay until its echoes have fallen by 80 dB, and the short tails of the chorus, compressor and phaser.
  */
 function ringTime(sound: Sound, bpm: number): number {
   let t = 1.25 * (sound.amp.release as number);
   for (const m of sound.chain) {
     if (m.on === false) continue;
+    t += SHORT_TAILS[m.type] ?? 0;
     if (m.type === 'reverb') t += m.params.size as number;
     if (m.type === 'delay') {
       const feedback = m.params.feedback as number;

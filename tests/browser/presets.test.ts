@@ -14,7 +14,7 @@ test('every factory sound makes a healthy note', async () => {
   }
 });
 
-test('the basses and leads made with the voice path are as loud as their neighbours in the library', async () => {
+test('the basses, leads and effect showcases are as loud as their neighbours in the library', async () => {
   const level = async (name: string) => {
     const [l, r] = (await renderSound(preset(name), {}, { dur: 0.5 })).channels;
     return db(Math.hypot(rms(slice(l, 0, 0.5)), rms(slice(r, 0, 0.5))) / Math.SQRT2);
@@ -22,6 +22,7 @@ test('the basses and leads made with the voice path are as loud as their neighbo
   const pairs = [
     ['Acid Bass', 'Round Bass'], ['Reese Bass', 'Round Bass'], ['Sub 808', 'Sub Bass'], ['Trance Pluck', 'Pluck'],
     ['PWM Lead', 'Square Lead'], ['Wobble Bass', 'Round Bass'], ['Glass Draw', 'Kalimba'],
+    ['Punch Kick', 'Kick'], ['Dub Stab', 'Pluck'], ['Ring Bell', 'Bell'],
   ];
   for (const [name, peer] of pairs) expect(Math.abs((await level(name)) - (await level(peer))), name).toBeLessThan(2.5);
 });
@@ -34,7 +35,9 @@ test('the slow pads and drones are as loud as the other pads once they have swel
     return db(Math.hypot(rms(slice(l, 13, 16, sr)), rms(slice(r, 13, 16, sr))) / Math.SQRT2);
   };
   const warm = await level('Warm Pad');
-  for (const name of ['Slow Tide', 'Deep Drone']) expect(Math.abs((await level(name)) - warm), name).toBeLessThan(3);
+  for (const name of ['Slow Tide', 'Deep Drone', 'Wide Strings', 'Phase Pad']) {
+    expect(Math.abs((await level(name)) - warm), name).toBeLessThan(3);
+  }
 });
 
 test('the demo song renders without hitting the clipper hard', async () => {

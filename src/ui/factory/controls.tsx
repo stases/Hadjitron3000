@@ -17,6 +17,7 @@ const LABELS: Readonly<Record<string, Readonly<Record<string, string>>>> = { del
 const IDLE: Readonly<Record<string, Readonly<Record<string, (p: Params) => boolean>>>> = {
   delay: { time: (p) => p.sync !== 'free' },
   lfo: { rate: (p) => p.sync !== 'free' },
+  phaser: { rate: (p) => p.sync !== 'free' },
   osc: { pw: (p) => p.wave !== 'square' && !(p.wave2 === 'square' && (p.mix2 as number) > 0) },
 };
 

@@ -1,0 +1,62 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Ring Bell",
+    "source": {
+      "id": "source",
+      "type": "fm",
+      "params": {
+        "ratio": 2,
+        "amount": 0.8
+      }
+    },
+    "amp": {
+      "attack": 0.001,
+      "decay": 2.4,
+      "sustain": 0,
+      "release": 1.4
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "ring",
+        "params": {
+          "freq": 740,
+          "mix": 0.55
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "reverb",
+        "params": {
+          "size": 3.2,
+          "tone": 7000,
+          "mix": 0.3
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 1.0,
+          "sustain": 0,
+          "release": 0.5
+        },
+        "target": {
+          "module": "source",
+          "param": "amount"
+        },
+        "amount": 0.15
+      }
+    ],
+    "out": {
+      "level": -5.5,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

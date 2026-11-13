@@ -21,7 +21,7 @@ import { PARAM_HINTS } from '../../src/ui/factory/hints';
 import { addMenu, sourceItems, useFolds } from '../../src/ui/factory/levels';
 
 // What the mocked channel tap plays: a sine of this many hertz at the given note, or silence.
-const tapped = vi.hoisted(() => ({ freq: 0, note: null as number | null }));
+const tapped = vi.hoisted(() => ({ freq: 0, note: null as number | null, reduction: 0 }));
 
 vi.mock('../../src/app/audio', () => {
   const held = new Set<string>();
@@ -45,6 +45,7 @@ vi.mock('../../src/app/audio', () => {
       for (let i = 0; i < out.length; i++) out[i] = 0.4 * Math.sin(w * (t + i / 48000));
     }),
     soundingNote: () => tapped.note,
+    effectReduction: () => tapped.reduction,
     sampleRate: () => 48000,
   };
 });
@@ -70,6 +71,7 @@ afterEach(async () => {
   vi.clearAllMocks();
   tapped.freq = 0;
   tapped.note = null;
+  tapped.reduction = 0;
 });
 
 const state = () => useApp.getState();
@@ -312,7 +314,11 @@ test('a modulator works on each note or the whole sound, and on the whole sound 
 });
 
 test('the add lists and the source list are grouped by level in beginner mode and flat in pro mode', async () => {
-  expect(await addList('effect')).toEqual(['BASICS', 'Delay', 'Reverb', 'SHAPING', 'Filter (whole sound)', 'Drive']);
+  expect(await addList('effect')).toEqual([
+    'BASICS', 'EQ', 'Delay', 'Reverb',
+    'SHAPING', 'Filter (whole sound)', 'Compressor', 'Drive', 'Chorus', 'Phaser', 'Width',
+    '-', 'Deep >',
+  ]);
   expect(await addList('modulator')).toEqual(['BASICS', 'Envelope', 'LFO', 'SHAPING', 'Drift']);
   await userEvent.click(unit('Source').querySelector('[role="combobox"]')!);
   expect([...document.querySelector('.h-select-list')!.children].map((el) => el.textContent)).toEqual([
@@ -321,7 +327,9 @@ test('the add lists and the source list are grouped by level in beginner mode an
   await userEvent.keyboard('{Escape}');
 
   pro();
-  expect(await addList('effect')).toEqual(['Filter (whole sound)', 'Drive', 'Delay', 'Reverb']);
+  expect(await addList('effect')).toEqual([
+    'Filter (whole sound)', 'EQ', 'Compressor', 'Drive', 'Ring Mod', 'Chorus', 'Phaser', 'Width', 'Delay', 'Reverb',
+  ]);
   expect(await addList('modulator')).toEqual(['Envelope', 'LFO', 'Drift']);
   await userEvent.click(unit('Source').querySelector('[role="combobox"]')!);
   expect(optionTexts()).toEqual(['Oscillator', 'FM Pair', 'Noise', 'Sampler']);
@@ -335,14 +343,16 @@ test('Deep modules wait one step away: in a submenu of the add list and behind M
   expect(menu.slice(-2, -1)).toEqual(['separator']);
   const deep = menu.at(-1) as { label: string; items: { label: string; onSelect(): void }[] };
   expect(deep.label).toBe('Deep');
-  expect(deep.items.map((i) => i.label)).toEqual(['Deep One']);
-  deep.items[0].onSelect();
+  expect(deep.items.map((i) => i.label)).toEqual(['Ring Mod', 'Deep One']);
+  deep.items[1].onSelect();
   expect(add).toHaveBeenCalledWith('deepfx');
   expect(addMenu(false, defs, add)).toHaveLength(defs.length);
 
   const sources = sourceItems(true, defs);
   expect(sources.options).not.toContainEqual({ value: 'deepfx', label: 'Deep One' });
-  expect(sources.more).toEqual([{ heading: 'Deep' }, { value: 'deepfx', label: 'Deep One' }]);
+  expect(sources.more).toEqual([
+    { heading: 'Deep' }, { value: 'ring', label: 'Ring Mod' }, { value: 'deepfx', label: 'Deep One' },
+  ]);
   expect(sourceItems(false, defs).more).toEqual([]);
 });
 
@@ -561,4 +571,58 @@ test('Draw is a Deep wave with a display to draw one cycle on, stock shapes and 
   expect(unit('Source').querySelectorAll('.h-factory-shape')).toHaveLength(1);
   flushSync(() => setParam(id, 'source', 'wave2', 'draw'));
   expect(unit('Source').querySelector('.h-factory-group[aria-label="Osc 2"] .h-factory-shape')).not.toBeNull();
+});
+
+test('the new effects show their Basics in beginner mode and every control in table order in pro mode', async () => {
+  const id = state().channelId!;
+  flushSync(() => replaceSound(id, newSound('osc', 'Test')));
+  for (const type of ['eq', 'compressor', 'ring', 'chorus', 'phaser', 'width', 'delay']) addEffect(id, type);
+  const names = ['EQ', 'Compressor', 'Ring Mod', 'Chorus', 'Phaser', 'Width', 'Delay'];
+  await expect.poll(units).toEqual(['Source', 'Filter', 'Amp', ...names, 'Output']);
+  const beginner: Record<string, [string[], string[]]> = {
+    EQ: [['Low', 'Mid', 'High'], ['Shaping']],
+    Compressor: [['Threshold', 'Make-up'], ['Shaping']],
+    'Ring Mod': [['Freq', 'Mix'], []],
+    Chorus: [['Depth', 'Mix'], ['Shaping']],
+    Phaser: [['Rate', 'Depth'], ['Shaping']],
+    Width: [['Width'], ['Deep']],
+  };
+  for (const [name, [basics, levels]] of Object.entries(beginner)) {
+    expect(knobs(name), name).toEqual(basics);
+    expect(folds(name).map((b) => b.textContent), name).toEqual(levels);
+  }
+  await userEvent.click(fold('Delay', 'Shaping'));
+  expect(knobs('Delay')).toEqual(['Mix', 'Time', 'Feedback', 'Tone', 'Low Cut']);
+  const lowCut = unit('Delay').querySelector('[role="slider"][aria-label="Low Cut"]')!;
+  expect(lowCut.getAttribute('aria-valuetext')).toBe('Off');
+
+  pro();
+  expect(knobs('EQ')).toEqual(['Low', 'Mid', 'Mid Freq', 'High', 'Low Cut']);
+  expect(knobs('Compressor')).toEqual(['Threshold', 'Ratio', 'Attack', 'Release', 'Make-up', 'Mix']);
+  expect(knobs('Ring Mod')).toEqual(['Freq', 'Mix']);
+  expect(knobs('Chorus')).toEqual(['Rate', 'Depth', 'Spread', 'Mix']);
+  expect(knobs('Phaser')).toEqual(['Rate', 'Depth', 'Feedback', 'Mix']);
+  expect(knobs('Width')).toEqual(['Width', 'Bass Mono']);
+  expect([...unit('Phaser').querySelectorAll('.h-param-label')].map((l) => l.textContent)).toEqual(['Sync', 'Stages']);
+  expect(unit('Compressor').querySelector('[aria-label="Ratio"]')!.getAttribute('aria-valuetext')).toBe('4.0:1');
+  expect(unit('Width').querySelector('[aria-label="Width"]')!.getAttribute('aria-valuetext')).toBe('100 %');
+});
+
+test('the compressor shows its gain reduction, and a synced phaser greys out its rate', async () => {
+  const id = state().channelId!;
+  flushSync(() => replaceSound(id, newSound('osc', 'Test')));
+  addEffect(id, 'compressor');
+  const phaser = addEffect(id, 'phaser')!;
+  await expect.poll(units).toContain('Phaser');
+  const value = () => unit('Compressor').querySelector('.h-factory-meter-value')!.textContent;
+  await expect.poll(value).toBe('0.0 dB');
+  expect(unit('Compressor').textContent).toContain('Reduction');
+  tapped.reduction = -6.04;
+  await expect.poll(value).toBe('-6.0 dB');
+
+  const rate = () => unit('Phaser').querySelector('[role="slider"][aria-label="Rate"]')!;
+  expect(rate().getAttribute('aria-disabled')).toBe('false');
+  flushSync(() => setParam(id, phaser, 'sync', '1bar'));
+  expect(rate().getAttribute('aria-disabled')).toBe('true');
+  expect(lit('Phaser', 'Shaping')).toBe(true);
 });

@@ -188,6 +188,11 @@ export class ChannelGraph {
     return this.effects.get(module)?.targets;
   }
 
+  /** The running effect of a module in the chain, if it is on. */
+  effect(moduleId: string): Effect | undefined {
+    return this.effects.get(moduleId);
+  }
+
   /** Apply a sound with the same structure in place. */
   update(sound: Sound, bpm: number): void {
     const old = this.sound;

@@ -1,0 +1,64 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Wide Strings",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sawtooth",
+        "voices": 5,
+        "spread": 14,
+        "width": 0.6
+      }
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 2600,
+      "reso": 0.1
+    },
+    "amp": {
+      "attack": 0.45,
+      "decay": 1.0,
+      "sustain": 0.85,
+      "release": 1.3
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "chorus",
+        "params": {
+          "rate": 0.5,
+          "depth": 0.5,
+          "spread": 1,
+          "mix": 0.5
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "width",
+        "params": {
+          "width": 1.6,
+          "bass": 150
+        }
+      },
+      {
+        "id": "fx3",
+        "type": "reverb",
+        "params": {
+          "size": 3.5,
+          "tone": 6000,
+          "mix": 0.3
+        }
+      }
+    ],
+    "mods": [],
+    "out": {
+      "level": -9.5,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

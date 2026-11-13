@@ -13,7 +13,7 @@ import { usePrefs } from './prefs';
 
 const SWING: FloatSpec = { kind: 'float', id: 'swing', label: 'Swing', min: 0, max: 1, def: 0, unit: '%' };
 const MASTER: FloatSpec = {
-  kind: 'float', id: 'master', label: 'Master', min: -48, max: 6, def: 0, unit: 'dB', step: 0.5,
+  kind: 'float', id: 'master', label: 'Master', min: -48, max: 6, def: 0, unit: 'dB', step: 0.5, off: '-inf dB',
 };
 
 const MIN_BPM = 40;

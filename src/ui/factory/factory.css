@@ -166,6 +166,25 @@
   gap: 4px;
 }
 
+/* A meter takes two columns and has a caption and a value under it, like a knob. */
+.h-factory-cell.is-meter {
+  width: 120px;
+  color: var(--ink-soft);
+}
+
+.h-factory-meter-label {
+  padding-left: 1px;
+  font: var(--font-small);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+
+.h-factory-meter-value {
+  font: var(--font-mono);
+  white-space: nowrap;
+}
+
 .h-factory-cell.is-display {
   width: auto;
   height: auto;

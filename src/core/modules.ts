@@ -7,7 +7,7 @@ import { DEFAULT_SHAPE } from './shape';
 import type { ModInst, ModTarget, Sound } from './types';
 
 export type Taper = 'lin' | 'log' | 'cube';
-export type Unit = 'Hz' | 's' | 'dB' | '%' | 'st' | 'ct' | 'oct' | 'x' | 'pan' | '';
+export type Unit = 'Hz' | 's' | 'dB' | '%' | 'st' | 'ct' | 'oct' | 'x' | ':1' | 'pan' | '';
 
 /** How a float parameter responds to a modulator. */
 export interface ModSpec {
@@ -27,6 +27,7 @@ export interface FloatSpec extends Levelled {
   unit?: Unit;
   step?: number;
   mod?: ModSpec; // present when the parameter can be a modulation target
+  off?: string; // what the minimum reads as when it switches the parameter off, such as "Off"
 }
 
 export interface ChoiceSpec extends Levelled {
@@ -93,6 +94,11 @@ const shaping = <T extends ParamSpec>(spec: T): T => ({ ...spec, level: 2 });
 const deep = <T extends ParamSpec>(spec: T): T => ({ ...spec, level: 3 });
 
 const percent: ModSpec = { depth: 1, span: 100, unit: '%' };
+// A frequency moved in cents, four octaves up or down at amount 1.
+const octaves: ModSpec = { depth: 4800, span: 4, unit: 'oct' };
+// A high pass that is not there at its lowest setting, so a sound made before it existed plays bit for bit the same.
+const lowCut = (max: number) => shaping(f('lowcut', 'Low Cut', 20, max, 20, { taper: 'log', unit: 'Hz', off: 'Off' }));
+const mix = (def: number) => f('mix', 'Mix', 0, 1, def, { unit: '%' });
 const pitch = f('pitch', 'Pitch', -24, 24, 0, { unit: 'st', step: 1, mod: { depth: 4800, span: 48, unit: 'st' } });
 const cutoff = f('cutoff', 'Cutoff', 20, 20000, 2000, {
   taper: 'log', unit: 'Hz', mod: { depth: 6000, span: 5, unit: 'oct' },
@@ -118,6 +124,24 @@ const WAVES = [
 ] as const;
 // The oscillator also plays a cycle drawn by hand, its `shape` (or `shape2`).
 const OSC_WAVES = [...WAVES, ['draw', 'Draw', 3]] as const;
+// One cycle per note value at the tempo (SYNC_BEATS), or Free for a rate of its own; LFOs and the phaser use it.
+const cycleSync = c('sync', 'Sync', [
+  ['free', 'Free'],
+  ['8bar', '8 bars'],
+  ['4bar', '4 bars'],
+  ['2bar', '2 bars'],
+  ['1bar', '1 bar'],
+  ['1/2', '1/2'],
+  ['1/4d', '1/4 dotted'],
+  ['1/4', '1/4'],
+  ['1/4t', '1/4 triplet'],
+  ['1/8d', '1/8 dotted'],
+  ['1/8', '1/8'],
+  ['1/8t', '1/8 triplet'],
+  ['1/16', '1/16'],
+  ['1/16t', '1/16 triplet'],
+  ['1/32', '1/32'],
+]);
 
 export const SOURCES: readonly ModuleDef[] = [
   {
@@ -240,6 +264,33 @@ export const EFFECTS: readonly ModuleDef[] = [
     params: [filterModes, cutoff, shaping(f('reso', 'Reso', 0, 1, 0.15, { unit: '%' }))],
   },
   {
+    // A low and a high shelf at fixed corners and a bell at Mid Freq between them.
+    type: 'eq',
+    kind: 'effect',
+    label: 'EQ',
+    params: [
+      f('low', 'Low', -18, 18, 0, { unit: 'dB', step: 0.5 }),
+      f('mid', 'Mid', -18, 18, 0, { unit: 'dB', step: 0.5 }),
+      shaping(f('freq', 'Mid Freq', 100, 8000, 1000, { taper: 'log', unit: 'Hz', mod: octaves })),
+      f('high', 'High', -18, 18, 0, { unit: 'dB', step: 0.5 }),
+      lowCut(1000),
+    ],
+  },
+  {
+    type: 'compressor',
+    kind: 'effect',
+    label: 'Compressor',
+    level: 2,
+    params: [
+      f('threshold', 'Threshold', -60, 0, -18, { unit: 'dB', step: 0.5 }),
+      shaping(f('ratio', 'Ratio', 1, 20, 4, { taper: 'log', unit: ':1', step: 0.1 })),
+      shaping(f('attack', 'Attack', 0.0005, 0.2, 0.01, { taper: 'log', unit: 's' })),
+      shaping(f('release', 'Release', 0.02, 1, 0.15, { taper: 'log', unit: 's' })),
+      f('makeup', 'Make-up', 0, 24, 0, { unit: 'dB', step: 0.5 }),
+      shaping(mix(1)),
+    ],
+  },
+  {
     type: 'drive',
     kind: 'effect',
     label: 'Drive',
@@ -254,7 +305,55 @@ export const EFFECTS: readonly ModuleDef[] = [
       ),
       f('amount', 'Amount', 0, 1, 0.3, { unit: '%' }),
       shaping(f('tone', 'Tone', 200, 20000, 12000, { taper: 'log', unit: 'Hz' })),
-      f('mix', 'Mix', 0, 1, 1, { unit: '%' }),
+      mix(1),
+    ],
+  },
+  {
+    type: 'ring',
+    kind: 'effect',
+    label: 'Ring Mod',
+    level: 3,
+    params: [f('freq', 'Freq', 1, 5000, 300, { taper: 'log', unit: 'Hz', mod: octaves }), mix(1)],
+  },
+  {
+    type: 'chorus',
+    kind: 'effect',
+    label: 'Chorus',
+    level: 2,
+    params: [
+      shaping(f('rate', 'Rate', 0.05, 8, 0.6, { taper: 'log', unit: 'Hz' })),
+      f('depth', 'Depth', 0, 1, 0.4, { unit: '%' }),
+      shaping(f('spread', 'Spread', 0, 1, 0.8, { unit: '%' })),
+      mix(0.5),
+    ],
+  },
+  {
+    type: 'phaser',
+    kind: 'effect',
+    label: 'Phaser',
+    level: 2,
+    params: [
+      f('rate', 'Rate', 0.02, 10, 0.3, { taper: 'log', unit: 'Hz' }),
+      shaping(cycleSync),
+      f('depth', 'Depth', 0, 1, 0.7, { unit: '%' }),
+      shaping(f('feedback', 'Feedback', 0, 0.8, 0.3, { unit: '%' })),
+      shaping(
+        c('stages', 'Stages', [
+          ['4', '4 stages'],
+          ['8', '8 stages'],
+        ]),
+      ),
+      shaping(mix(0.5)),
+    ],
+  },
+  {
+    type: 'width',
+    kind: 'effect',
+    label: 'Width',
+    level: 2,
+    params: [
+      f('width', 'Width', 0, 2, 1, { unit: '%' }),
+      deep(f('bass', 'Bass Mono', 20, 500, 20, { taper: 'log', unit: 'Hz', off: 'Off' })),
     ],
   },
   {
@@ -281,6 +380,8 @@ export const EFFECTS: readonly ModuleDef[] = [
       shaping(f('time', 'Time', 0.001, 2, 0.3, { taper: 'log', unit: 's', mod: { depth: 0.02, span: 20, unit: 'ms' } })),
       shaping(f('feedback', 'Feedback', 0, 0.95, 0.4, { unit: '%' })),
       shaping(f('tone', 'Tone', 200, 20000, 4000, { taper: 'log', unit: 'Hz' })),
+      // Only in the feedback, so every repeat is thinner than the one before.
+      lowCut(2000),
       shaping(b('pingpong', 'Ping pong', false)),
       f('mix', 'Mix', 0, 1, 0.3, { unit: '%', mod: percent }),
     ],
@@ -309,25 +410,7 @@ export const MODS: readonly ModuleDef[] = [
     params: [
       c('wave', 'Wave', WAVES, 'sine'),
       f('rate', 'Rate', 0.002, 40, 2, { taper: 'log', unit: 'Hz' }),
-      shaping(
-        c('sync', 'Sync', [
-          ['free', 'Free'],
-          ['8bar', '8 bars'],
-          ['4bar', '4 bars'],
-          ['2bar', '2 bars'],
-          ['1bar', '1 bar'],
-          ['1/2', '1/2'],
-          ['1/4d', '1/4 dotted'],
-          ['1/4', '1/4'],
-          ['1/4t', '1/4 triplet'],
-          ['1/8d', '1/8 dotted'],
-          ['1/8', '1/8'],
-          ['1/8t', '1/8 triplet'],
-          ['1/16', '1/16'],
-          ['1/16t', '1/16 triplet'],
-          ['1/32', '1/32'],
-        ]),
-      ),
+      shaping(cycleSync),
       // The depth rises from nothing over this time after a note starts.
       deep(f('fade', 'Fade', 0, 30, 0, { unit: 's', taper: 'cube' })),
       // An LFO of the whole sound starts its wave again with every note; one in every note always does.
@@ -355,7 +438,7 @@ export const OUT: ModuleDef = {
   label: 'Output',
   params: [
     // The bottom of the range (-48 dB) is silence.
-    f('level', 'Level', -48, 6, -6, { unit: 'dB', mod: percent }),
+    f('level', 'Level', -48, 6, -6, { unit: 'dB', mod: percent, off: '-inf dB' }),
     f('pan', 'Pan', -1, 1, 0, { unit: 'pan', mod: percent }),
   ],
 };

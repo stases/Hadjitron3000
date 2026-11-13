@@ -117,11 +117,11 @@ test('the header renames the current block and steps through its colours', async
 test('New, Copy, Delete and the library buttons, with their limits', async () => {
   await click(button('New'));
   expect(current().name).toBe('A');
-  expect(current().cells).toEqual({});
+  expect(current().notes).toEqual({});
   await click(row('Beat'));
   await click(button('Copy'));
   expect(current().name).toBe('B');
-  expect(current().cells).toEqual(state().project.patterns[0].cells);
+  expect(current().notes).toEqual(state().project.patterns[0].notes);
   await click(button('Delete'));
   expect(state().project.patterns.map((p) => p.name)).not.toContain('B');
 
@@ -197,7 +197,11 @@ test('dragging a tile moves it by bars and lanes as one undo step, and stops whe
   const past = state().past.length;
   const from = centre(tile(beat));
   const lane1 = centre(lanes()[1]).y;
+  // Each move lands a second after the last, as when the drag pauses: still one undo step.
+  let time = Date.now();
+  const clock = vi.spyOn(Date, 'now').mockImplementation(() => (time += 1000));
   await drag(from, { x: from.x + 40, y: from.y }, { x: from.x + 185, y: from.y }, { x: from.x + 185, y: lane1 });
+  clock.mockRestore();
   expect(find(beat.id)).toMatchObject({ lane: 1, bar: 19, bars: 4 });
   expect(state().past.length).toBe(past + 1);
   undo();
@@ -248,9 +252,15 @@ test('the context menu of a tile edits, duplicates and removes it', async () => 
   expect(state().placementId).toBe(last.id);
   const labels = [...document.querySelectorAll('.h-menu-item')].map((el) => el.textContent);
   expect(labels).toEqual(['Edit in Track', 'Duplicate', 'Remove']);
+  const past = state().past.length;
   await click(menuItem('Duplicate'));
   const copy = find(state().placementId!);
   expect(copy).toMatchObject({ pattern: last.pattern, lane: 0, bar: 16, bars: 4 });
+  expect(state().past.length).toBe(past + 1);
+  undo();
+  expect(song().some((p) => p.id === copy.id)).toBe(false);
+  await rightClick(tile(last));
+  await click(menuItem('Duplicate'));
 
   // The first Beat runs into Break, so there is no room for a copy.
   const first = placed('Beat')[0];

@@ -5,7 +5,8 @@ import { MAX_SONG_BARS, SONG_LANES, STEPS_PER_BAR } from '../../core/defaults';
 import { songBars } from '../../core/sequencer';
 import type { Placement } from '../../core/types';
 import {
-  addPlacement, movePlacement, removePlacement, resizePlacement, selectPlacement, useApp,
+  addPlacement, beginGesture, commitGesture, duplicatePlacement, movePlacement, removePlacement, resizePlacement,
+  selectPlacement, useApp,
 } from '../../state/store';
 import { Well, openMenu, setHint, useHint } from '../kit';
 import { SpriteImage } from '../kit/Icon';
@@ -45,10 +46,7 @@ function tileMenu(placement: Placement) {
     {
       label: 'Duplicate',
       disabled: room(song, placement) === placement.bars,
-      onSelect: () => {
-        const id = addPlacement(placement.pattern, placement.lane, placement.bar + placement.bars);
-        if (id) resizePlacement(id, placement.bars);
-      },
+      onSelect: () => duplicatePlacement(placement.id),
     },
     'separator' as const,
     { label: 'Remove', onSelect: () => removePlacement(placement.id) },
@@ -132,13 +130,17 @@ export function Timeline() {
     const tile = target.closest<HTMLElement>('.h-song-tile');
     const { bar, lane } = locate(e.clientX, e.clientY);
     let g: Gesture;
+    beginGesture();
     if (tile) {
       const placement = findPlacement(tile.dataset.id!)!;
       selectPlacement(placement.id);
       g = { id: placement.id, mode: target.closest('.h-song-edge') ? 'resize' : 'move', grab: bar - placement.bar };
     } else {
       const id = addPlacement(patternId, lane, bar);
-      if (!id) return;
+      if (!id) {
+        commitGesture();
+        return;
+      }
       added.current = { id, time: e.timeStamp };
       g = { id, mode: 'move', grab: 0 };
     }
@@ -189,6 +191,7 @@ export function Timeline() {
   const finish = () => {
     if (!gesture.current) return;
     gesture.current = null;
+    commitGesture();
     delete scroller.current!.dataset.resizing;
     setHint(null);
   };

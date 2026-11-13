@@ -2,15 +2,18 @@ import { produce } from 'immer';
 import { create } from 'zustand';
 import type { StoreApi, UseBoundStore } from 'zustand';
 import {
-  CHANNEL_COLORS, MAX_BARS, MAX_SONG_BARS, PATTERN_NAMES, SONG_LANES, STEPS_PER_BAR,
+  CHANNEL_COLORS, MAX_BARS, MAX_SONG_BARS, MAX_TICKS, PATTERN_NAMES, SONG_LANES, STEPS_PER_BAR,
   emptyProject, newMod, newModule, newPattern, newSound, uid,
 } from '../core/defaults';
 import { MODULES, moduleDef, paramSpec } from '../core/modules';
-import { MAX_NOTE, MIN_NOTE } from '../core/notes';
+import { MAX_NOTE, MIN_NOTE, cleanNotes, compareNotes } from '../core/notes';
 import { coerce, defaultParams } from '../core/params';
-import type { Block, Channel, ModTarget, ParamValue, PlayScope, Project, SampleData, Sound, Step } from '../core/types';
+import type {
+  Block, Channel, ModTarget, Note, NoteInit, ParamValue, PlayScope, Project, SampleData, Sound,
+} from '../core/types';
 
 export type View = 'factory' | 'track' | 'song';
+/** A cell of the Track grid: a row and a step. */
 export interface StepRef { channelId: string; index: number }
 export interface FileRef { name: string; path: string | null }
 
@@ -45,7 +48,10 @@ export function playScope(state: AppState): PlayScope {
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+// Changes with the same key less than 800 ms apart are one undo step (a knob turned, a field typed in).
 let lastChange: { key: string; time: number } | null = null;
+// While a gesture is open every change is part of one undo step; `pushed` once its first change is in the history.
+let gesture: { pushed: boolean } | null = null;
 
 function equal(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true;
@@ -79,14 +85,37 @@ function edit(
   useApp.setState((state) => {
     const project = produce(state.project, recipe);
     if (equal(project, state.project)) return state;
-    const time = Date.now();
-    const merge = key !== undefined && lastChange?.key === key && time - lastChange.time < 800;
-    lastChange = key === undefined ? null : { key, time };
+    let merge: boolean;
+    if (gesture) {
+      merge = gesture.pushed;
+      gesture.pushed = true;
+    } else {
+      const time = Date.now();
+      merge = key !== undefined && lastChange?.key === key && time - lastChange.time < 800;
+      lastChange = key === undefined ? null : { key, time };
+    }
     return repair({
       ...state, ...selection, project, dirty: true,
       past: merge ? state.past : [...state.past, state.project].slice(-100), future: [],
     });
   });
+}
+
+/** The history moved or was replaced: the next change starts a new undo step. */
+function forgetLastChange(): void {
+  lastChange = null;
+  if (gesture) gesture.pushed = false;
+}
+
+/** Start a gesture of the pointer (a drag, a paint stroke): every change until `commitGesture` is one undo step. */
+export function beginGesture(): void {
+  gesture = { pushed: false };
+  lastChange = null;
+}
+
+export function commitGesture(): void {
+  gesture = null;
+  lastChange = null;
 }
 
 function editSound(channelId: string, recipe: (sound: Sound) => void, key?: string): void {
@@ -152,7 +181,7 @@ export function removeChannel(channelId: string): void {
   const channel = state.project.channels[index + 1] ?? state.project.channels[index - 1];
   edit((p) => {
     p.channels.splice(index, 1);
-    for (const pattern of p.patterns) delete pattern.cells[channelId];
+    for (const pattern of p.patterns) delete pattern.notes[channelId];
   }, undefined, state.channelId === channelId ? { channelId: channel?.id ?? null } : {});
 }
 
@@ -303,37 +332,100 @@ function validIndex(index: number): boolean {
   return Number.isInteger(index) && index >= 0 && index < MAX_BARS * STEPS_PER_BAR;
 }
 
-function normalizeStep(step: Step): Step {
-  return {
-    note: clamp(Math.round(step.note), MIN_NOTE, MAX_NOTE),
-    vel: clamp(step.vel, 0, 1), len: Math.max(1, Math.round(step.len)),
-  };
+const finiteNote = (n: NoteInit) => [n.start, n.len, n.note, n.vel].every(Number.isFinite);
+
+/** The notes of a row with these ids, in the current document. */
+function chosenNotes(patternId: string, channelId: string, ids: readonly string[]): Note[] {
+  const pattern = useApp.getState().project.patterns.find((p) => p.id === patternId);
+  return pattern?.notes[channelId]?.filter((n) => ids.includes(n.id)) ?? [];
 }
 
-export function setStep(patternId: string, channelId: string, index: number, step: Step | null): void {
-  if (!validIndex(index)) return;
+/**
+ * Change some notes of a row. `change` gives each chosen note its new values, which are kept in range. Nothing
+ * happens when the change would put two notes of the row on the same start and pitch.
+ */
+function editNotes(
+  patternId: string, channelId: string, ids: readonly string[], change: (note: Note) => NoteInit, key: string,
+): void {
   edit((p) => {
     const pattern = p.patterns.find((pattern) => pattern.id === patternId);
-    if (!pattern || !p.channels.some((c) => c.id === channelId)) return;
-    if (step) {
-      (pattern.cells[channelId] ??= {})[index] = normalizeStep(step);
-    } else if (pattern.cells[channelId]?.[index]) {
-      delete pattern.cells[channelId][index];
-      if (Object.keys(pattern.cells[channelId]).length === 0) delete pattern.cells[channelId];
+    const notes = pattern?.notes[channelId];
+    if (!pattern || !notes) return;
+    const next = notes.map((n): Note => {
+      if (!ids.includes(n.id)) return n;
+      const v = change(n);
+      return {
+        id: n.id, start: clamp(Math.round(v.start), 0, MAX_TICKS - 1), len: clamp(Math.round(v.len), 1, MAX_TICKS),
+        note: clamp(Math.round(v.note), MIN_NOTE, MAX_NOTE), vel: clamp(v.vel, 0, 1),
+      };
+    });
+    if (new Set(next.map((n) => `${n.start}:${n.note}`)).size === next.length) {
+      pattern.notes[channelId] = next.sort(compareNotes);
     }
+  }, JSON.stringify([patternId, channelId, [...ids].sort(), key]));
+}
+
+/**
+ * Add a note to a row. Returns its id, or null when it starts outside the block range or the row already has a
+ * note on that start and pitch.
+ */
+export function addNote(patternId: string, channelId: string, note: NoteInit): string | null {
+  const { project } = useApp.getState();
+  const pattern = project.patterns.find((p) => p.id === patternId);
+  if (!pattern || !project.channels.some((c) => c.id === channelId) || !finiteNote(note)) return null;
+  const row = pattern.notes[channelId] ?? [];
+  let id: string;
+  do { id = uid('n'); } while (row.some((n) => n.id === id));
+  const notes = cleanNotes([...row, { ...note, id }]);
+  if (notes.length === row.length) return null;
+  edit((p) => { p.patterns.find((pattern) => pattern.id === patternId)!.notes[channelId] = notes; });
+  return id;
+}
+
+/** Take notes out of a row. */
+export function removeNotes(patternId: string, channelId: string, ids: readonly string[]): void {
+  edit((p) => {
+    const pattern = p.patterns.find((pattern) => pattern.id === patternId);
+    const notes = pattern?.notes[channelId];
+    if (!pattern || !notes) return;
+    const kept = notes.filter((n) => !ids.includes(n.id));
+    if (kept.length > 0) pattern.notes[channelId] = kept;
+    else delete pattern.notes[channelId];
   });
 }
 
-export function patchStep(patternId: string, channelId: string, index: number, patch: Partial<Step>): void {
-  if (!validIndex(index)) return;
-  edit((p) => {
-    const pattern = p.patterns.find((pattern) => pattern.id === patternId);
-    if (!pattern || !p.channels.some((c) => c.id === channelId)) return;
-    const cell = pattern.cells[channelId]?.[index];
-    if (cell) {
-      pattern.cells[channelId][index] = normalizeStep({ ...cell, ...patch });
-    }
-  }, JSON.stringify(['step', patternId, channelId, index]));
+/**
+ * Shift notes later or earlier by `ticks` and up or down by `semitones`, together: the shift is cut short so that
+ * every one of them stays inside the block range and the note range.
+ */
+export function moveNotes(
+  patternId: string, channelId: string, ids: readonly string[], ticks: number, semitones = 0,
+): void {
+  const chosen = chosenNotes(patternId, channelId, ids);
+  if (chosen.length === 0 || !Number.isFinite(ticks) || !Number.isFinite(semitones)) return;
+  const starts = chosen.map((n) => n.start);
+  const pitches = chosen.map((n) => n.note);
+  const dt = clamp(Math.round(ticks), -Math.min(...starts), MAX_TICKS - 1 - Math.max(...starts));
+  const dn = clamp(Math.round(semitones), MIN_NOTE - Math.min(...pitches), MAX_NOTE - Math.max(...pitches));
+  editNotes(patternId, channelId, ids, (n) => ({ ...n, start: n.start + dt, note: n.note + dn }), 'move');
+}
+
+/** Make notes longer or shorter by `ticks` each; none gets shorter than one tick. */
+export function resizeNotes(patternId: string, channelId: string, ids: readonly string[], ticks: number): void {
+  if (!Number.isFinite(ticks)) return;
+  editNotes(patternId, channelId, ids, (n) => ({ ...n, len: n.len + ticks }), 'len');
+}
+
+/** Give notes one pitch. */
+export function setNotesPitch(patternId: string, channelId: string, ids: readonly string[], note: number): void {
+  if (!Number.isFinite(note)) return;
+  editNotes(patternId, channelId, ids, (n) => ({ ...n, note }), 'pitch');
+}
+
+/** Give notes one velocity. */
+export function setNotesVelocity(patternId: string, channelId: string, ids: readonly string[], vel: number): void {
+  if (!Number.isFinite(vel)) return;
+  editNotes(patternId, channelId, ids, (n) => ({ ...n, vel }), 'vel');
 }
 
 export function setPatternBars(patternId: string, bars: number): void {
@@ -368,7 +460,7 @@ function insertPattern(copyId?: string): string | null {
   if (!name || !source) return null;
   const pattern = newPattern(name, copyId === undefined ? nextColor(state.project.patterns) : source.color);
   pattern.bars = source.bars;
-  if (copyId !== undefined) pattern.cells = structuredClone(source.cells);
+  if (copyId !== undefined) pattern.notes = structuredClone(source.notes);
   edit((p) => { p.patterns.push(pattern); }, undefined, { patternId: pattern.id, step: null });
   return pattern.id;
 }
@@ -395,9 +487,8 @@ export function insertBlock(block: Block): string | null {
         p.channels.push(channel);
       }
       used.add(channel.id);
-      for (const [index, step] of Object.entries(track.steps)) {
-        if (validIndex(Number(index))) (pattern.cells[channel.id] ??= {})[Number(index)] = normalizeStep(step);
-      }
+      const notes = cleanNotes(track.notes);
+      if (notes.length > 0) pattern.notes[channel.id] = notes;
     }
     p.patterns.push(pattern);
     mergeSamples(p.samples, copy.samples);
@@ -419,7 +510,7 @@ export function removePattern(patternId: string): void {
 export function clearPattern(patternId: string): void {
   edit((p) => {
     const pattern = p.patterns.find((pattern) => pattern.id === patternId);
-    if (pattern) pattern.cells = {};
+    if (pattern) pattern.notes = {};
   });
 }
 
@@ -450,6 +541,22 @@ export function addPlacement(patternId: string, lane: number, bar: number): stri
   edit((p) => {
     p.song.push({ id, pattern: patternId, lane, bar, bars: Math.min(pattern.bars, room) });
   }, undefined, { placementId: id, patternId, step: null });
+  return id;
+}
+
+/** Put a copy of a placement right after it in its lane, as long as it is or as fits. */
+export function duplicatePlacement(placementId: string): string | null {
+  const project = useApp.getState().project;
+  const source = project.song.find((p) => p.id === placementId);
+  if (!source) return null;
+  const { pattern, lane } = source;
+  const bar = source.bar + source.bars;
+  const room = validPosition(lane, bar) ? placementRoom(project, lane, bar) : 0;
+  if (room === 0) return null;
+  const id = uid('s');
+  edit((p) => {
+    p.song.push({ id, pattern, lane, bar, bars: Math.min(source.bars, room) });
+  }, undefined, { placementId: id, patternId: pattern, step: null });
   return id;
 }
 
@@ -485,7 +592,7 @@ export function removePlacement(placementId: string): void {
 export function undo(): void {
   const state = useApp.getState();
   if (state.past.length === 0) return;
-  lastChange = null;
+  forgetLastChange();
   useApp.setState(repair({
     ...state, project: state.past[state.past.length - 1], past: state.past.slice(0, -1),
     future: [state.project, ...state.future], dirty: true,
@@ -495,7 +602,7 @@ export function undo(): void {
 export function redo(): void {
   const state = useApp.getState();
   if (state.future.length === 0) return;
-  lastChange = null;
+  forgetLastChange();
   useApp.setState(repair({
     ...state, project: state.future[0], past: [...state.past, state.project].slice(-100),
     future: state.future.slice(1), dirty: true,
@@ -503,13 +610,13 @@ export function redo(): void {
 }
 
 export function openProject(project: Project, file: FileRef | null): void {
-  lastChange = null;
+  forgetLastChange();
   const { view, octave } = useApp.getState();
   useApp.setState({ ...initialState(project, file), view, octave }, true);
 }
 
 export function markSaved(file: FileRef): void {
-  lastChange = null;
+  forgetLastChange();
   useApp.setState({ file, dirty: false });
 }
 

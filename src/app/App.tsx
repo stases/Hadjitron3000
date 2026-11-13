@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { STEPS_PER_BAR } from '../core/defaults';
+import { STEPS_PER_BAR, TICKS_PER_STEP } from '../core/defaults';
 import { heardAt, songBars } from '../core/sequencer';
 import { platform } from '../platform';
 import { playScope, setView, useApp } from '../state/store';
@@ -65,7 +65,8 @@ function playText(state: AppState): [string, string] {
   const what = scope === 'song' ? 'Song' : `Block ${pattern.name}`;
   if (!state.playing) return [what, scope === 'song' ? bars(songBars(project)) : bars(pattern.bars)];
   const step = Math.max(0, Math.floor(position()));
-  const at = scope === 'song' ? step % (songBars(project) * STEPS_PER_BAR) : heardAt(project, playScope(state), step)[0].step;
+  const at = scope === 'song' ? step % (songBars(project) * STEPS_PER_BAR)
+    : heardAt(project, playScope(state), step * TICKS_PER_STEP)[0].tick / TICKS_PER_STEP;
   return [what, `${Math.floor(at / STEPS_PER_BAR) + 1}.${Math.floor((at % STEPS_PER_BAR) / 4) + 1}`];
 }
 

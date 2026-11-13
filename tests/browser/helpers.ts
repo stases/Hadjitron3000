@@ -3,7 +3,9 @@
 import { AMP, MODULES } from '../../src/core/modules';
 import { defaultParams } from '../../src/core/params';
 import { emptyProject, newSound } from '../../src/core/defaults';
-import type { Channel, ModInst, ModTarget, ModuleInst, Params, Project, Sound, Step } from '../../src/core/types';
+import type { Channel, ModInst, ModTarget, ModuleInst, Params, Project, Sound } from '../../src/core/types';
+import { rowsOf } from '../support/steps';
+import type { StepSpec } from '../support/steps';
 
 export const SR = 44100;
 
@@ -130,14 +132,14 @@ export function mod(type: string, target: ModTarget | null, amount: number, para
   return { id: `mod${ids++}`, type, params: { ...defaultParams(MODULES[type]), ...params }, on, target, amount };
 }
 
-/** A one-pattern project; `cells` maps channel ids to their steps. */
+/** A one-pattern project; `steps` maps channel ids to their steps, which become notes. */
 export function project(
   channels: (Partial<Channel> & { id: string; sound: Sound })[],
-  cells: Record<string, Record<number, Step>> = {},
+  steps: Record<string, Record<number, StepSpec>> = {},
   extra: Partial<Project> = {},
 ): Project {
   const p = emptyProject();
   p.channels = channels.map((c) => ({ color: 0, mute: false, solo: false, ...c }));
-  p.patterns[0].cells = cells;
+  p.patterns[0].notes = rowsOf(steps);
   return { ...p, master: 0, ...extra };
 }

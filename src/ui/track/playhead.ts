@@ -3,6 +3,7 @@
 
 import { useEffect, useSyncExternalStore } from 'react';
 import { position } from '../../app/audio';
+import { TICKS_PER_STEP } from '../../core/defaults';
 import { heardAt } from '../../core/sequencer';
 import { playScope, useApp } from '../../state/store';
 
@@ -42,8 +43,9 @@ export function usePlayhead(): void {
       const pos = position();
       const state = useApp.getState();
       const at = pos < 0 ? undefined
-        : heardAt(state.project, playScope(state), Math.floor(pos)).find((h) => h.pattern.id === state.patternId);
-      publish(at ? { patternId: at.pattern.id, step: at.step } : null);
+        : heardAt(state.project, playScope(state), Math.floor(pos) * TICKS_PER_STEP)
+          .find((h) => h.pattern.id === state.patternId);
+      publish(at ? { patternId: at.pattern.id, step: Math.floor(at.tick / TICKS_PER_STEP) } : null);
       frame = requestAnimationFrame(poll);
     });
     return () => {

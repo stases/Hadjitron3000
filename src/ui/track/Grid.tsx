@@ -2,30 +2,32 @@ import { memo, useEffect, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { tap } from '../../app/audio';
 import { addSound } from '../../app/commands';
-import { STEPS_PER_BAR } from '../../core/defaults';
+import { STEPS_PER_BAR, TICKS_PER_STEP, newNote } from '../../core/defaults';
 import { OUT, paramSpec } from '../../core/modules';
 import type { FloatSpec } from '../../core/modules';
 import { MAX_NOTE, MIN_NOTE, ROOT_NOTE, noteName } from '../../core/notes';
 import { formatValue, fromNorm, toNorm } from '../../core/params';
 import { patternSteps } from '../../core/sequencer';
-import type { Channel, Step } from '../../core/types';
+import type { Channel, Note } from '../../core/types';
 import {
-  duplicateChannel, moveChannel, patchStep, removeChannel, selectChannel, selectStep, setChannel, setParam, setStep,
-  setView, useApp,
+  addNote, beginGesture, commitGesture, duplicateChannel, moveChannel, moveNotes, removeChannel, removeNotes,
+  selectChannel, selectStep, setChannel, setNotesVelocity, setParam, setView, useApp,
 } from '../../state/store';
 import { Button, Icon, Led, Slider, Well, openMenu, setHint, useHint } from '../kit';
 import { cx } from '../kit/cx';
 import { SpriteImage } from '../kit/Icon';
 import { getHeard, subscribeHeard, useHeard } from './playhead';
 import type { Heard } from './playhead';
-import type { Cells } from './steps';
-import { CELL_W, cellX, columnAt, lastNote, laneWidth, maxLength, rememberNote, spanWidth, stepOver } from './steps';
+import type { Cell, Cells } from './steps';
+import {
+  CELL_W, cellX, columnAt, fitNotes, lastNote, laneWidth, makeCell, maxLength, rememberNote, resizeCell, rowCells,
+  spanWidth, stepOver,
+} from './steps';
 
 const LEVEL = paramSpec(OUT, 'level') as FloatSpec;
 const PITCH_PX = 4;
 const EDGE_PX = 5;
 const STILL_PX = 3;
-const NEW_VEL = 0.8;
 const WHEEL_VEL = 0.05;
 const CELL_H = 22;
 const LANE_PAD = 4;
@@ -38,20 +40,22 @@ const MARKER = {
 const HINTS = {
   empty: 'Click to add a step here; keep the button down and move sideways to add more.',
   step: 'Click to take this step out, drag up or down to change its note, scroll to make it louder or softer.',
+  chord: 'Click to take these notes out, drag up or down to move them all, scroll to make them louder or softer.',
   edge: 'Drag this edge sideways to make the step longer or shorter.',
 };
 
-/** The step being edited by the pointer, drawn from here until the gesture ends and the store takes it. */
+/** The cell being edited by the pointer, drawn from here until the gesture ends and the store takes it. */
 interface Draft {
   channelId: string;
-  index: number;
-  step: Step;
+  cell: Cell;
 }
 
 interface Gesture extends Draft {
   mode: 'press' | 'paint' | 'pitch' | 'length';
   created: boolean;
-  base: number;
+  original: Cell;
+  shift: number; // semitones
+  columns: number; // length of the key
   laneLeft: number;
   x: number;
   y: number;
@@ -62,7 +66,7 @@ interface Gesture extends Draft {
 interface Hit {
   channelId: string;
   patternId: string;
-  cells: Cells | undefined;
+  cells: Cells;
   x: number;
   column: number;
   start: number;
@@ -79,7 +83,7 @@ function hitTest(target: EventTarget | null, clientX: number): Hit | null {
   if (!lane) return null;
   const pattern = currentPattern();
   const channelId = lane.dataset.channel!;
-  const cells = pattern.cells[channelId];
+  const cells = rowCells(pattern.notes[channelId]);
   const laneLeft = lane.firstElementChild!.getBoundingClientRect().left;
   const x = clientX - laneLeft;
   const column = columnAt(x, patternSteps(pattern));
@@ -88,7 +92,14 @@ function hitTest(target: EventTarget | null, clientX: number): Hit | null {
 }
 
 const onEdge = (hit: Hit) =>
-  hit.start >= 0 && hit.x >= cellX(hit.start) + spanWidth(hit.start, hit.cells![hit.start].len) - EDGE_PX;
+  hit.start >= 0 && hit.x >= cellX(hit.start) + spanWidth(hit.start, hit.cells.get(hit.start)!.span) - EDGE_PX;
+
+const ids = (cell: Cell) => cell.notes.map((n) => n.id);
+
+/** The cell's notes moved by `shift` semitones, as the draft shows them. */
+function moved(cell: Cell, shift: number): Cell {
+  return makeCell(cell.index, cell.notes.map((n) => ({ ...n, note: n.note + shift })));
+}
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
@@ -125,10 +136,10 @@ export function Grid() {
       const hit = hitTest(e.target, e.clientX);
       if (!hit || hit.start < 0 || gesture.current) return;
       e.preventDefault();
-      const step = hit.cells![hit.start];
-      const vel = clamp(Math.round((step.vel - Math.sign(e.deltaY) * WHEEL_VEL) * 100) / 100, 0, 1);
+      const cell = hit.cells.get(hit.start)!;
+      const vel = clamp(Math.round((cell.notes[0].vel - Math.sign(e.deltaY) * WHEEL_VEL) * 100) / 100, 0, 1);
       selectStep({ channelId: hit.channelId, index: hit.start });
-      patchStep(hit.patternId, hit.channelId, hit.start, { vel });
+      setNotesVelocity(hit.patternId, hit.channelId, ids(cell), vel);
       setHint(`Velocity ${Math.round(vel * 100)} %`);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
@@ -149,17 +160,20 @@ export function Grid() {
     e.currentTarget.setPointerCapture(e.pointerId);
     const created = hit.start < 0;
     const index = created ? hit.column : hit.start;
-    const step = created ? { note: lastNote(hit.channelId), vel: NEW_VEL, len: 1 } : hit.cells![index];
+    const cell = created
+      ? makeCell(index, [{ id: 'new', ...newNote(index * TICKS_PER_STEP, lastNote(hit.channelId)) }])
+      : hit.cells.get(index)!;
     const g: Gesture = {
-      channelId: hit.channelId, index, step, created, base: step.note,
+      channelId: hit.channelId, cell, original: cell, created, shift: 0, columns: cell.span,
       mode: !created && onEdge(hit) ? 'length' : 'press',
       laneLeft: hit.laneLeft, x: e.clientX, y: e.clientY, moved: false, painted: index,
     };
     gesture.current = g;
+    beginGesture();
     selectStep({ channelId: g.channelId, index });
     if (created) {
       setDraft(g);
-      tap(g.channelId, step.note, step.vel);
+      tap(g.channelId, cell.notes[0].note, cell.notes[0].vel);
     }
   };
 
@@ -167,7 +181,8 @@ export function Grid() {
     const g = gesture.current;
     if (!g) {
       const hit = hitTest(e.target, e.clientX);
-      setHint(!hit || hit.column < 0 ? null : hit.start < 0 ? HINTS.empty : onEdge(hit) ? HINTS.edge : HINTS.step);
+      setHint(!hit || hit.column < 0 ? null : hit.start < 0 ? HINTS.empty : onEdge(hit) ? HINTS.edge
+        : hit.cells.get(hit.start)!.notes.length > 1 ? HINTS.chord : HINTS.step);
       return;
     }
     const pattern = currentPattern();
@@ -175,35 +190,41 @@ export function Grid() {
     const n = patternSteps(pattern);
     const column = clamp(columnAt(clamp(e.clientX - g.laneLeft, 0, laneWidth(n) - 1), n), 0, n - 1);
     const dy = g.y - e.clientY;
+    const { index, notes } = g.original;
     if (g.mode === 'press') {
       if (Math.abs(dy) >= PITCH_PX) g.mode = 'pitch';
-      else if (g.created && column !== g.index) {
+      else if (g.created && column !== index) {
         g.mode = 'paint';
-        setStep(patternId, g.channelId, g.index, g.step);
+        addNote(patternId, g.channelId, g.cell.notes[0]);
         setDraft(null);
       } else if (Math.abs(e.clientX - g.x) > STILL_PX) g.moved = true;
     }
     if (g.mode === 'pitch') {
-      const note = clamp(g.base + Math.trunc(dy / PITCH_PX), MIN_NOTE, MAX_NOTE);
-      if (note !== g.step.note) {
-        g.step = { ...g.step, note };
+      const pitches = notes.map((n) => n.note);
+      const shift = clamp(Math.trunc(dy / PITCH_PX), MIN_NOTE - Math.min(...pitches), MAX_NOTE - Math.max(...pitches));
+      const lead = notes[0];
+      if (shift !== g.shift) {
+        g.shift = shift;
+        g.cell = moved(g.original, shift);
         setDraft({ ...g });
-        tap(g.channelId, note, g.step.vel);
+        tap(g.channelId, lead.note + shift, lead.vel);
       }
-      setHint(noteName(note));
+      setHint(noteName(lead.note + shift));
     } else if (g.mode === 'length') {
-      const len = clamp(column - g.index + 1, 1, maxLength(pattern.cells[g.channelId], g.index, n));
-      if (len !== g.step.len) {
-        g.step = { ...g.step, len };
+      const len = clamp(column - index + 1, 1, maxLength(rowCells(pattern.notes[g.channelId]), index, n));
+      if (len !== g.columns) {
+        g.columns = len;
+        g.cell = makeCell(index, fitNotes(g.original, len));
         setDraft({ ...g });
       }
       setHint(`Length ${len}`);
     } else if (g.mode === 'paint') {
       const dir = Math.sign(column - g.painted);
+      const note = g.cell.notes[0];
       for (let c = g.painted + dir; dir !== 0 && c !== column + dir; c += dir) {
-        if (stepOver(currentPattern().cells[g.channelId], c) >= 0) continue;
-        setStep(patternId, g.channelId, c, { ...g.step });
-        tap(g.channelId, g.step.note, g.step.vel);
+        if (stepOver(rowCells(currentPattern().notes[g.channelId]), c) >= 0) continue;
+        addNote(patternId, g.channelId, { ...note, start: c * TICKS_PER_STEP });
+        tap(g.channelId, note.note, note.vel);
       }
       g.painted = column;
     }
@@ -214,17 +235,19 @@ export function Grid() {
     if (!g) return;
     gesture.current = null;
     const patternId = currentPattern().id;
+    const lead = g.cell.notes[0];
     if (g.created && (g.mode === 'press' || g.mode === 'pitch')) {
-      setStep(patternId, g.channelId, g.index, g.step);
+      addNote(patternId, g.channelId, lead);
     } else if (g.mode === 'press' && !g.moved) {
-      setStep(patternId, g.channelId, g.index, null);
+      removeNotes(patternId, g.channelId, ids(g.original));
       selectStep(null);
     } else if (g.mode === 'pitch') {
-      patchStep(patternId, g.channelId, g.index, { note: g.step.note });
+      moveNotes(patternId, g.channelId, ids(g.original), 0, g.shift);
     } else if (g.mode === 'length') {
-      patchStep(patternId, g.channelId, g.index, { len: g.step.len });
+      resizeCell(patternId, g.channelId, g.original, g.columns);
     }
-    if (g.created || g.mode === 'pitch') rememberNote(g.channelId, g.step.note);
+    commitGesture();
+    if (g.created || g.mode === 'pitch') rememberNote(g.channelId, lead.note);
     setDraft(null);
     setHint(null);
   };
@@ -250,7 +273,7 @@ export function Grid() {
             key={channel.id}
             channel={channel}
             index={i}
-            cells={pattern.cells[channel.id]}
+            notes={pattern.notes[channel.id]}
             columns={columns}
             active={channel.id === channelId}
             selected={selected?.channelId === channel.id ? selected.index : -1}
@@ -306,19 +329,19 @@ const Ruler = memo(function Ruler({ columns }: { columns: number }) {
 interface RowProps {
   channel: Channel;
   index: number;
-  cells: Cells | undefined;
+  notes: Note[] | undefined;
   columns: number;
   active: boolean;
   selected: number;
   draft: Draft | null;
 }
 
-const Row = memo(function Row({ channel, index, cells, columns, active, selected, draft }: RowProps) {
-  const shown: Record<number, Step> = { ...cells };
-  if (draft) shown[draft.index] = draft.step;
-  // Steps left past the end when the pattern was shortened stay in the document but are not drawn.
-  const keys = Object.keys(shown).map(Number).filter((i) => i < columns);
-  const span = (i: number) => spanWidth(i, Math.min(shown[i].len, columns - i));
+const Row = memo(function Row({ channel, index, notes, columns, active, selected, draft }: RowProps) {
+  const shown = rowCells(notes);
+  if (draft) shown.set(draft.cell.index, draft.cell);
+  // Notes left past the end when the pattern was shortened stay in the document but are not drawn.
+  const keys = [...shown.keys()].filter((i) => i < columns).sort((a, b) => a - b);
+  const span = (i: number) => spanWidth(i, Math.min(shown.get(i)!.span, columns - i));
   return (
     <div className="h-track-row" data-tour={`row-${channel.sound.name}`}>
       <Header channel={channel} index={index} active={active} />
@@ -330,7 +353,7 @@ const Row = memo(function Row({ channel, index, cells, columns, active, selected
           <EmptyCells columns={columns} />
           <i className="h-track-now" />
           {keys.map((i) => (
-            <StepKey key={i} index={i} step={shown[i]} width={span(i)} />
+            <StepKey key={i} cell={shown.get(i)!} width={span(i)} />
           ))}
           {keys.includes(selected) && (
             <i className="h-track-sel" style={{ left: cellX(selected), width: span(selected) }} />
@@ -345,11 +368,21 @@ const EmptyCells = memo(function EmptyCells({ columns }: { columns: number }) {
   return Array.from({ length: columns }, (_, i) => <i key={i} className="h-track-cell" />);
 });
 
-function StepKey({ index, step, width }: { index: number; step: Step; width: number }) {
-  const style = { left: cellX(index), width, '--lit': `${Math.round(step.vel * CELL_H)}px` } as CSSProperties;
+/**
+ * A cell's key: the lowest note's name (none for C3 alone), "+2" when two more notes start in the step, and a mark
+ * where a note starts off the grid line.
+ */
+function StepKey({ cell, width }: { cell: Cell; width: number }) {
+  const [lead, ...rest] = cell.notes;
+  const style = { left: cellX(cell.index), width, '--lit': `${Math.round(lead.vel * CELL_H)}px` } as CSSProperties;
+  const offsets = [...new Set(cell.notes.map((n) => n.start % TICKS_PER_STEP).filter((t) => t > 0))];
   return (
-    <div className={cx('h-track-step', width > CELL_W && 'is-long')} style={style}>
-      {step.note !== ROOT_NOTE && noteName(step.note)}
+    <div className={cx('h-track-step', width > CELL_W && 'is-long', rest.length > 0 && 'is-chord')} style={style}>
+      {rest.length > 0 && <span className="h-track-more">+{rest.length}</span>}
+      {(lead.note !== ROOT_NOTE || rest.length > 0) && noteName(lead.note)}
+      {offsets.map((t) => (
+        <i key={t} className="h-track-offset" style={{ left: Math.round((t * CELL_W) / TICKS_PER_STEP) }} />
+      ))}
     </div>
   );
 }
@@ -357,8 +390,8 @@ function StepKey({ index, step, width }: { index: number; step: Step; width: num
 function Lamp({ channelId, color }: { channelId: string; color: number }) {
   const on = useHeard((heard) => {
     if (!heard) return false;
-    const cells = useApp.getState().project.patterns.find((p) => p.id === heard.patternId)?.cells[channelId];
-    return stepOver(cells, heard.step) >= 0;
+    const notes = useApp.getState().project.patterns.find((p) => p.id === heard.patternId)?.notes[channelId];
+    return stepOver(rowCells(notes), heard.step) >= 0;
   });
   return <Led on={on} color={color} hint="This lamp lights up while the sound is playing a step." />;
 }

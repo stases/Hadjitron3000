@@ -17,6 +17,7 @@ import { parseBlock, parseProject, serializeBlock } from '../../src/core/filefor
 import { platform } from '../../src/platform';
 import { demoProject, factoryBlocks, starterProject } from '../../src/presets/projects';
 import * as store from '../../src/state/store';
+import { stepsOf } from '../support/steps';
 
 vi.mock('../../src/app/audio', async (original) => ({
   ...(await original<typeof import('../../src/app/audio')>()),
@@ -376,7 +377,7 @@ test('the computer keyboard plays the selected sound from the C of the octave', 
 test('step entry writes notes, moves the selection and edits the selected step', () => {
   const { patternId } = state();
   const channelId = state().project.channels[3].id;
-  const cells = () => state().project.patterns.find((p) => p.id === patternId)!.cells[channelId] ?? {};
+  const cells = () => stepsOf(state().project.patterns.find((p) => p.id === patternId)!.notes[channelId]);
   store.clearPattern(patternId);
   store.selectStep({ channelId, index: 30 });
   press('d');
@@ -616,7 +617,7 @@ test('opening or dropping a .h3b file adds its block, and a broken file or a ful
   await commands.dropFiles([new File([blockFile('Break')], 'Break.h3b')]);
   expect(state().project.patterns).toHaveLength(count + 2);
   expect(current().name).toBe('Break');
-  expect(Object.keys(current().cells)).toHaveLength(3);
+  expect(Object.keys(current().notes)).toHaveLength(3);
 
   void commands.dropFiles([new File(['nonsense'], 'broken.h3b')]);
   expect(await messageText()).toBe('broken.h3b could not be opened. This is not a Hadjitron 3000 block file.');
@@ -672,7 +673,7 @@ test('the export dialog offers the song or the current block by name and refuses
   commands.exportAudio();
   await expect.poll(() => document.querySelector('.h-dialog')).not.toBeNull();
   await userEvent.click(button('Export'));
-  expect(await messageText()).toBe('The block Beat has no notes to export. Add some steps first.');
+  expect(await messageText()).toBe('The block Beat has no notes to export. Add some notes first.');
   await userEvent.click(messageButton('OK'));
   await userEvent.click(button('Cancel'));
 

@@ -2,8 +2,8 @@
 // and the factory blocks taken from the demo.
 
 import { extractBlock } from '../core/block';
-import { emptyProject, newPattern, uid } from '../core/defaults';
-import type { Block, Channel, Pattern, Project, Step } from '../core/types';
+import { TICKS_PER_STEP, emptyProject, newPattern, uid } from '../core/defaults';
+import type { Block, Channel, Note, Pattern, Project } from '../core/types';
 import { preset } from './index';
 
 function channels(names: string[]): Channel[] {
@@ -15,20 +15,22 @@ export function starterProject(): Project {
   return { ...emptyProject(), channels: channels(['Kick', 'Snare', 'Hat', 'Sub Bass', 'Kalimba', 'Warm Pad']) };
 }
 
+/** Melody row: [step, note, length in steps, velocity] with length 1 and velocity 0.8 by default. */
+function notes(row: [number, number, number?, number?][]): Note[] {
+  return row.map(([step, note, len = 1, vel = 0.8]) => ({
+    id: uid('n'), start: step * TICKS_PER_STEP, len: len * TICKS_PER_STEP, note, vel,
+  }));
+}
+
 /** Drum row: x is a hit, X an accent, o a ghost note. */
-function hits(row: string): Record<number, Step> {
+function hits(row: string): Note[] {
   const vel: Record<string, number> = { x: 0.8, X: 1, o: 0.4 };
-  return Object.fromEntries([...row].flatMap((ch, i) => (vel[ch] ? [[i, { note: 60, vel: vel[ch], len: 1 }]] : [])));
+  return notes([...row].flatMap((ch, i): [number, number, number, number][] => (vel[ch] ? [[i, 60, 1, vel[ch]]] : [])));
 }
 
-/** Melody row: [step, note, length, velocity] with length 1 and velocity 0.8 by default. */
-function notes(row: [number, number, number?, number?][]): Record<number, Step> {
-  return Object.fromEntries(row.map(([i, note, len = 1, vel = 0.8]) => [i, { note, vel, len }]));
-}
-
-/** A two-bar block: its name, colour, and the steps of some of the sounds. */
-function block(name: string, color: number, rows: Record<string, Record<number, Step>>): Pattern {
-  return { ...newPattern(name, color), bars: 2, cells: rows };
+/** A two-bar block: its name, colour, and the notes of some of the sounds. */
+function block(name: string, color: number, rows: Record<string, Note[]>): Pattern {
+  return { ...newPattern(name, color), bars: 2, notes: rows };
 }
 
 /** "Welcome": eight blocks in E flat, a little swung, layered into a sixteen-bar song. */

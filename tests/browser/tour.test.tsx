@@ -12,6 +12,7 @@ import { LESSONS } from '../../src/app/tour/lessons';
 import { closeTour, startLesson, useTour } from '../../src/app/tour/tourStore';
 import { platform } from '../../src/platform';
 import { demoProject } from '../../src/presets/projects';
+import { newNote, TICKS_PER_STEP } from '../../src/core/defaults';
 import * as store from '../../src/state/store';
 
 vi.mock('../../src/app/audio', async (original) => ({
@@ -208,7 +209,8 @@ test('Make a Song can be walked from the first step to the last by doing each th
   await startLesson('song');
   const block = () => state().patternId;
   const row = (name: string) => state().project.channels.find((c) => c.sound.name === name)!.id;
-  const hit = { note: 60, vel: 0.8, len: 1 };
+  const put = (pattern: string, name: string, step: number, note = 60) =>
+    store.addNote(pattern, row(name), newNote(step * TICKS_PER_STEP, note));
 
   await pointsAt('grid', true);
   await next();
@@ -219,15 +221,15 @@ test('Make a Song can be walked from the first step to the last by doing each th
   }
   await doneThenNext();
 
-  store.setStep(block(), row('Snare'), 4, hit);
-  store.setStep(block(), row('Hat'), 2, hit);
+  put(block(), 'Snare', 4);
+  put(block(), 'Hat', 2);
   await doneThenNext();
 
   await pointsAt('row-Sub Bass');
-  store.setStep(block(), row('Sub Bass'), 0, { ...hit, note: 63 });
+  const bass = put(block(), 'Sub Bass', 0, 63)!;
   await doneThenNext();
 
-  store.patchStep(block(), row('Sub Bass'), 0, { len: 4 });
+  store.resizeNotes(block(), row('Sub Bass'), [bass], 3 * TICKS_PER_STEP);
   await doneThenNext();
 
   await pointsAt('copy-block');
@@ -238,7 +240,7 @@ test('Make a Song can be walked from the first step to the last by doing each th
   const b = block();
   expect(b).not.toBe(a);
   expect(ticked()).toBe(false);
-  store.setStep(b, row('Hat'), 10, hit);
+  put(b, 'Hat', 10);
   await doneThenNext();
 
   await pointsAt('tab-song');

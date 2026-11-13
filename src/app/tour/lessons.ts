@@ -1,8 +1,9 @@
 // The two tutorials as plain data: what each step says, which control it points at (the element with that
 // data-tour attribute), the view it opens in, and how to tell that the user has done it.
 
+import { TICKS_PER_STEP } from '../../core/defaults';
 import { SOURCES } from '../../core/modules';
-import type { Pattern, Project, Sound, Step } from '../../core/types';
+import type { Note, Pattern, Project, Sound } from '../../core/types';
 import type { AppState, View } from '../../state/store';
 import type { DialogKind } from '../dialogStore';
 
@@ -34,16 +35,16 @@ const sound = ({ state }: Look): Sound | undefined =>
 const effect = (look: Look, type: string) => sound(look)?.chain.find((m) => m.type === type);
 const block = ({ state }: Look): Pattern => state.project.patterns.find((p) => p.id === state.patternId)!;
 
-/** The steps of the current block in the row of the sound with this name. */
-function row(look: Look, name: string): Step[] {
+/** The notes of the current block in the row of the sound with this name. */
+function row(look: Look, name: string): Note[] {
   const channel = look.state.project.channels.find((c) => c.sound.name === name);
-  return channel ? Object.values(block(look).cells[channel.id] ?? {}) : [];
+  return channel ? block(look).notes[channel.id] ?? [] : [];
 }
 
-/** A block's steps as text, so that two blocks can be compared. */
-const stepsText = (pattern: Pattern) =>
-  Object.entries(pattern.cells)
-    .flatMap(([channel, steps]) => Object.entries(steps).map(([i, s]) => `${channel}:${i}:${s.note}:${s.len}:${s.vel}`))
+/** A block's notes as text, so that two blocks can be compared. */
+const notesText = (pattern: Pattern) =>
+  Object.entries(pattern.notes)
+    .flatMap(([channel, notes]) => notes.map((n) => `${channel}:${n.start}:${n.note}:${n.len}:${n.vel}`))
     .sort()
     .join(' ');
 
@@ -195,7 +196,7 @@ const MAKE_A_SONG: TourStep[] = [
       + 'grid tells you which note it is.',
     target: 'row-Sub Bass',
     view: 'track',
-    done: (look) => row(look, 'Sub Bass').some((s) => s.note !== 60),
+    done: (look) => row(look, 'Sub Bass').some((n) => n.note !== 60),
   },
   {
     title: 'A longer note',
@@ -203,7 +204,7 @@ const MAKE_A_SONG: TourStep[] = [
       + 'many columns as you like.',
     target: 'row-Sub Bass',
     view: 'track',
-    done: (look) => row(look, 'Sub Bass').some((s) => s.len > 1),
+    done: (look) => row(look, 'Sub Bass').some((n) => n.len > TICKS_PER_STEP),
   },
   {
     title: 'A second block',
@@ -221,7 +222,7 @@ const MAKE_A_SONG: TourStep[] = [
     done: (look) => {
       const current = block(look);
       const others = look.state.project.patterns.filter((p) => p !== current);
-      return others.length > 0 && others.every((p) => stepsText(p) !== stepsText(current));
+      return others.length > 0 && others.every((p) => notesText(p) !== notesText(current));
     },
   },
   {

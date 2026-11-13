@@ -1,14 +1,16 @@
-import { CHANNEL_COLORS, MAX_BARS, MAX_SONG_BARS, SONG_LANES, newPattern, uid } from './defaults';
+import {
+  CHANNEL_COLORS, MAX_BARS, MAX_SONG_BARS, MAX_TICKS, SONG_LANES, STEPS_PER_BAR, TICKS_PER_STEP, newPattern, uid,
+} from './defaults';
 import { AMP, MODULES, OUT, paramSpec } from './modules';
 import type { ModuleDef, ModuleKind } from './modules';
-import { MAX_NOTE, MIN_NOTE } from './notes';
+import { MAX_NOTE, MIN_NOTE, cleanNotes } from './notes';
 import { coerce } from './params';
-import type { Block, ModInst, ModuleInst, Params, Pattern, Placement, Project, SampleData, Sound, Step } from './types';
+import type { Block, ModInst, ModuleInst, Note, Params, Pattern, Placement, Project, SampleData, Sound } from './types';
 
 export const SOUND_EXT = 'h3s';
 export const PROJECT_EXT = 'h3k';
 export const BLOCK_EXT = 'h3b';
-export const FORMAT_VERSION = 2;
+export const FORMAT_VERSION = 3;
 
 /** Thrown for any file the app cannot read. Its message is shown to the user as is. */
 export class FormatError extends Error {}
@@ -193,30 +195,47 @@ function uniqueId(value: unknown, ids: Set<string>, label: string): string {
   return value;
 }
 
-function readSteps(value: unknown, label: string): Record<number, Step> {
-  return Object.fromEntries(Object.entries(object(value, label)).flatMap(([index, value]) => {
+/** A row's notes. Version 3 keeps a list of notes in ticks. */
+function readNotes(value: unknown, label: string): Note[] {
+  return cleanNotes(array(value, label).map((entry) => {
+    const raw = object(entry, 'note');
+    return {
+      id: typeof raw.id === 'string' ? raw.id : undefined,
+      start: number(raw.start, -1, -1, MAX_TICKS),
+      len: number(raw.len, TICKS_PER_STEP, 1, MAX_TICKS),
+      note: number(raw.note, 60, MIN_NOTE, MAX_NOTE),
+      vel: number(raw.vel, 0.8, 0, 1),
+    };
+  }));
+}
+
+/** Versions 1 and 2 keep a map from step index to one step with a length in steps; each becomes a note. */
+function readSteps(value: unknown, label: string): Note[] {
+  return cleanNotes(Object.entries(object(value, label)).flatMap(([index, value]) => {
     const i = Number(index);
     if (index.trim() === '' || !Number.isSafeInteger(i) || i < 0) return [];
     const raw = object(value, `step ${index}`);
-    const step: Step = {
-      note: Math.round(number(raw.note, 60, MIN_NOTE, MAX_NOTE)),
+    return [{
+      start: i * TICKS_PER_STEP,
+      len: Math.round(number(raw.len, 1, 1, MAX_BARS * STEPS_PER_BAR)) * TICKS_PER_STEP,
+      note: number(raw.note, 60, MIN_NOTE, MAX_NOTE),
       vel: number(raw.vel, 0.8, 0, 1),
-      len: Math.round(number(raw.len, 1, 1, 128)),
-    };
-    return [[i, step]];
+    }];
   }));
 }
 
 function readPattern(value: unknown, ids: Set<string>, channels: Set<string>): Pattern {
   const raw = object(value, 'pattern');
-  const cells = object(raw.cells === undefined ? {} : raw.cells, 'pattern cells');
+  const old = raw.notes === undefined && raw.cells !== undefined;
+  const rows = object(old ? raw.cells : raw.notes === undefined ? {} : raw.notes, 'pattern notes');
   return {
     id: uniqueId(raw.id, ids, 'pattern'),
     name: typeof raw.name === 'string' ? raw.name : '',
     color: Math.round(number(raw.color, 0, 0, CHANNEL_COLORS - 1)),
     bars: Math.round(number(raw.bars, 1, 1, MAX_BARS)),
-    cells: Object.fromEntries(Object.entries(cells).filter(([id]) => channels.has(id))
-      .map(([id, value]) => [id, readSteps(value, `cells for channel ${id}`)])),
+    notes: Object.fromEntries(Object.entries(rows).filter(([id]) => channels.has(id))
+      .map(([id, value]): [string, Note[]] => [id, (old ? readSteps : readNotes)(value, `notes for channel ${id}`)])
+      .filter(([, notes]) => notes.length > 0)),
   };
 }
 
@@ -266,7 +285,9 @@ export function parseBlock(text: string): Block {
     bars: Math.round(number(raw.bars, 1, 1, MAX_BARS)),
     tracks: array(raw.tracks, 'block tracks').map((value) => {
       const track = object(value, 'block track');
-      return { sound: readSound(track.sound, samples), steps: readSteps(track.steps, 'block steps') };
+      const notes = track.notes === undefined && track.steps !== undefined
+        ? readSteps(track.steps, 'block steps') : readNotes(track.notes, 'block notes');
+      return { sound: readSound(track.sound, samples), notes };
     }),
     samples,
   };

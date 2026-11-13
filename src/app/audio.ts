@@ -107,10 +107,10 @@ function blockProject(block: Block): Project {
   const channels = block.tracks.map((track, i) => ({
     id: `b${i}`, sound: track.sound, color: 0, mute: false, solo: false,
   }));
-  const cells = Object.fromEntries(block.tracks.map((track, i) => [`b${i}`, track.steps]));
+  const notes = Object.fromEntries(block.tracks.map((track, i) => [`b${i}`, track.notes]));
   return {
     name: block.name, bpm, swing, master, channels, song: [], samples: block.samples,
-    patterns: [{ id: 'block', name: block.name, color: block.color, bars: block.bars, cells }],
+    patterns: [{ id: 'block', name: block.name, color: block.color, bars: block.bars, notes }],
   };
 }
 

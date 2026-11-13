@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import { decodeSample, encodeMp3, renderProject, renderSound } from '../../src/audio';
-import { stepTime } from '../../src/core/sequencer';
+import { TICKS_PER_STEP } from '../../src/core/defaults';
+import { tickTime } from '../../src/core/sequencer';
 import type { Project } from '../../src/core/types';
 import { adsr, db, onset, project, rms, slice, sound, SR } from './helpers';
 
@@ -24,7 +25,7 @@ test('note onsets land on the sequencer times, with and without swing', async ()
     // Two loops at 100 bpm put steps 20 and 30 on 3.0 s and 4.5 s, where the renderer pauses to schedule.
     const pcm = await renderProject(p, scopeOf(p), { tail: 0, loops: 2 });
     for (const s of [...STEPS, ...STEPS.map((x) => x + 16)]) {
-      const expected = stepTime(s, bpm, swing);
+      const expected = tickTime(s * TICKS_PER_STEP, bpm, swing);
       expect(Math.abs(onset(pcm.channels[0], expected - 0.01) - expected), `step ${s} at ${bpm} bpm`).toBeLessThan(0.001);
     }
   }
@@ -41,7 +42,8 @@ test('tail 0 renders exactly the loop, loops 2 doubles it, and trailing silence 
   expect(maxDiff(second, two.channels[0].subarray(0, loop))).toBeLessThan(1e-4);
 
   // A note on the last step rings 0.3 s past the loop end; the 6 s tail is cut to that plus 50 ms.
-  const late = { ...p, patterns: [{ ...p.patterns[0], cells: { a: { 15: { note: 81, vel: 1, len: 1 } } } }] };
+  const last = { id: 'n', start: 15 * TICKS_PER_STEP, len: TICKS_PER_STEP, note: 81, vel: 1 };
+  const late = { ...p, patterns: [{ ...p.patterns[0], notes: { a: [last] } }] };
   late.channels = [{ ...p.channels[0], sound: { ...p.channels[0].sound, amp: adsr(0.001, 0.1, 1, 0.3) } }];
   const trimmed = await renderProject(late, scopeOf(late));
   const seconds = trimmed.channels[0].length / SR;

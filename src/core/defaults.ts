@@ -2,10 +2,14 @@
 
 import { AMP, MODULES, OUT } from './modules';
 import { defaultParams } from './params';
-import type { ModInst, ModuleInst, Pattern, Project, Sound, Step } from './types';
+import type { ModInst, ModuleInst, NoteInit, Pattern, Project, Sound } from './types';
 
 export const STEPS_PER_BAR = 16;
-export const MAX_BARS = 8;
+/** 96 ticks to a quarter note: a 32nd is 12 ticks, a sixteenth triplet 16. */
+export const TICKS_PER_STEP = 24;
+export const MAX_BARS = 32;
+/** The length of the longest block in ticks; no note starts at or after it. */
+export const MAX_TICKS = MAX_BARS * STEPS_PER_BAR * TICKS_PER_STEP;
 export const CHANNEL_COLORS = 8;
 export const SONG_LANES = 4;
 export const MAX_SONG_BARS = 256;
@@ -36,12 +40,13 @@ export function newSound(sourceType = 'osc', name = 'New Sound'): Sound {
   };
 }
 
-export function newStep(note = 60): Step {
-  return { note, vel: 0.8, len: 1 };
+/** A note one step long at `start` ticks, as the grid and the computer keyboard write it. */
+export function newNote(start = 0, note = 60): NoteInit {
+  return { start, len: TICKS_PER_STEP, note, vel: 0.8 };
 }
 
 export function newPattern(name: string, color = 0): Pattern {
-  return { id: uid('p'), name, color, bars: 1, cells: {} };
+  return { id: uid('p'), name, color, bars: 1, notes: {} };
 }
 
 export function emptyProject(): Project {

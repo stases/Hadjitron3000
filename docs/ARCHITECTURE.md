@@ -23,11 +23,13 @@ Dependencies point one way: `core` knows nothing else; `audio` and `state` use `
 
 A project (`Project` in `src/core/types.ts`) has a tempo, a swing amount, a master level, a list of channels, a list of blocks, a song and the audio files it uses. A channel is one row of the Track grid: a sound plus mute and solo. The Factory and the Track are two views of the same channels, so a sound made in the Factory is immediately a row on the grid.
 
-What the user sees as a block is a `Pattern` in the code, and the store keeps that word in its names (`patternId`, `addPattern`, `renamePattern` and so on). A block has a name, a colour and one to eight bars of sixteen steps for any of the channels; a project holds up to 26. A step holds a note, a velocity and a length in steps. Note 60 is C3 and plays a sound at its own pitch.
+What the user sees as a block is a `Pattern` in the code, and the store keeps that word in its names (`patternId`, `addPattern`, `renamePattern` and so on). A block has a name, a colour, one to thirty-two bars of sixteen steps, and for each channel a list of notes (`Pattern.notes`); a project holds up to 26 blocks. A note (`Note`) has an id that is unique within its block, a start and a length in ticks, a pitch and a velocity. A step has 24 ticks (`TICKS_PER_STEP`, 96 to a quarter note), so a 32nd is 12 ticks and a sixteenth triplet 16. A row's notes are kept sorted by start and then pitch; they may overlap, and several may start together as a chord, but no two share both start and pitch. Note 60 is C3 and plays a sound at its own pitch.
+
+The Track's step grid shows a row's notes by the step they start in. A cell with more than one note shows the lowest one and how many more; a note that starts between grid lines gets a small mark at its place in the step. The grid's gestures act on all the notes that start in a cell, so material the grid cannot draw on its own survives ordinary editing.
 
 The song is a list of placements (`Placement`): a block put on one of four lanes at a bar, for a number of bars. Placements in different lanes play together; in one lane they never overlap. A placement longer than its block repeats it, and a shorter one cuts it off. The Track edits one block and the Song arranges them.
 
-A block can also stand on its own outside a project (`Block`): its steps together with the sounds that play them and their samples. `extractBlock` in `src/core/block.ts` lifts one out of a project, and the store's `insertBlock` adds one to a project, reusing a channel when the project already has the same sound. The Block Library offers the blocks of the demo song this way and the user's own blocks from the block library folder.
+A block can also stand on its own outside a project (`Block`): its notes together with the sounds that play them and their samples. `extractBlock` in `src/core/block.ts` lifts one out of a project, and the store's `insertBlock` adds one to a project, reusing a channel when the project already has the same sound. The Block Library offers the blocks of the demo song this way and the user's own blocks from the block library folder.
 
 A sound is a source, an amp envelope, a chain of effects, a set of modulators and an output:
 
@@ -40,7 +42,7 @@ Every module is described once in `src/core/modules.ts`: its parameters with ran
 
 ## Files
 
-Sounds are saved as `.h3s`, blocks as `.h3b` and projects as `.h3k`. All three are JSON text with a `format` tag and a `version`. Audio files used by a sampler are embedded as base64 in their original encoding and are keyed by a hash of their content, so the same file is stored once however many sounds use it. `src/core/fileformat.ts` reads and writes the three formats and refuses files it does not understand with a readable message. Projects of version 1, whose song was a list of patterns played one after another, open with that list laid out in the first lane.
+Sounds are saved as `.h3s`, blocks as `.h3b` and projects as `.h3k`. All three are JSON text with a `format` tag and a `version`. Audio files used by a sampler are embedded as base64 in their original encoding and are keyed by a hash of their content, so the same file is stored once however many sounds use it. `src/core/fileformat.ts` reads and writes the three formats and refuses files it does not understand with a readable message. The current version is 3. Projects of version 1, whose song was a list of patterns played one after another, open with that list laid out in the first lane. Versions 1 and 2 kept one step per row and step index (`cells` in a project, `steps` in a block) with a length in steps; reading them, and a stored session of that age, turns step i into a note at tick 24 i and its length into ticks, so nothing is lost. Only version 3 is written.
 
 ## The engine
 
@@ -63,7 +65,11 @@ The engine takes any `BaseAudioContext`. The same code plays live through an `Au
 
 ## Time
 
-The sequencer in `src/core/sequencer.ts` is a pure function from a project, a play scope (one block on repeat, or the song) and a range of steps to a list of note events with times in seconds. `heardAt` tells which blocks are heard at a step, which is also how the views place their play markers. The transport calls it a little ahead of the audio clock (a look-ahead scheduler) and hands the events to the engine; the offline renderer calls it once for the whole export. A step is a sixteenth note. Swing delays every second sixteenth by up to half a step.
+The sequencer in `src/core/sequencer.ts` is a pure function from a project, a play scope (one block on repeat, or the song) and a range of ticks to a list of note events with times in seconds; every note that starts in the range is in it once. `heardAt` tells which blocks are heard at a tick, which is also how the views place their play markers. The transport calls it a little ahead of the audio clock (a look-ahead scheduler), one step's window of ticks at a time, and hands the events to the engine; the offline renderer calls it once for the whole export. A step is a sixteenth note. Swing delays every second sixteenth by up to half a step: `tickTime` stretches the first step of each pair and squeezes the second, and moves the ticks inside them in proportion, so notes on the grid play exactly where the swung steps fall and notes between grid lines keep their relative place. A note's end is placed the same way as its start.
+
+## Undo
+
+The store keeps up to 100 earlier projects. A change normally is one undo step; changes with the same key less than 800 ms apart (a knob being turned, a name being typed) are merged. A pointer gesture in the views (painting cells, dragging a note or a placement) calls `beginGesture` when the button goes down and `commitGesture` when it comes up, and everything the store changes in between is one undo step however long the gesture takes. Actions that are one gesture on their own, such as `duplicatePlacement`, change the document once.
 
 ## The shell
 

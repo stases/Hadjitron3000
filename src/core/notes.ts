@@ -1,4 +1,7 @@
-// Notes are MIDI numbers; 60 is C3 and plays a sound at its own pitch.
+// Pitches are MIDI numbers; 60 is C3 and plays a sound at its own pitch. Below them, the notes of a row.
+
+import { MAX_TICKS, uid } from './defaults';
+import type { Note, NoteInit } from './types';
 
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
@@ -37,3 +40,35 @@ export const KEY_SEMITONES: Readonly<Record<string, number>> = {
   l: 14,
   p: 15,
 };
+
+/** The order of a row's notes: by start, then by pitch. */
+export function compareNotes(a: NoteInit, b: NoteInit): number {
+  return a.start - b.start || a.note - b.note;
+}
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+/**
+ * A row's notes made valid and sorted: whole ticks, starts inside the longest block, pitches and velocities in
+ * range, unique ids, and never two notes with the same start and pitch (the first one stays).
+ */
+export function cleanNotes(notes: readonly (NoteInit & { id?: string })[]): Note[] {
+  const reserved = new Set(notes.flatMap((n) => (n.id ? [n.id] : [])));
+  const ids = new Set<string>();
+  const taken = new Set<string>();
+  const clean: Note[] = [];
+  for (const n of notes) {
+    const start = Math.round(n.start);
+    const note = clamp(Math.round(n.note), MIN_NOTE, MAX_NOTE);
+    const key = `${start}:${note}`;
+    if (!(start >= 0 && start < MAX_TICKS) || taken.has(key)) continue;
+    taken.add(key);
+    let id = n.id ?? '';
+    if (id === '' || ids.has(id)) {
+      do { id = uid('n'); } while (ids.has(id) || reserved.has(id));
+    }
+    ids.add(id);
+    clean.push({ id, start, len: clamp(Math.round(n.len), 1, MAX_TICKS), note, vel: clamp(n.vel, 0, 1) });
+  }
+  return clean.sort(compareNotes);
+}

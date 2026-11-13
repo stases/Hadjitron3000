@@ -49,7 +49,7 @@ export function PatternBar() {
       >
         Copy
       </Button>
-      <Button onClick={() => clearPattern(patternId)} hint="Take every step out of this block.">
+      <Button onClick={() => clearPattern(patternId)} hint="Take every note out of this block.">
         Clear
       </Button>
       <Button

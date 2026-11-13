@@ -1,7 +1,8 @@
 // Offline rendering of a project or a single sound, and MP3 encoding.
 
 import { createMp3Encoder } from 'wasm-media-encoders';
-import { eventsBetween, loopSteps, stepTime } from '../core/sequencer';
+import { TICKS_PER_STEP } from '../core/defaults';
+import { eventsBetween, loopSteps, stepSeconds } from '../core/sequencer';
 import type { NoteEvent, Pcm, PlayScope, Project, SampleData, Sound } from '../core/types';
 import { Engine } from './engine';
 
@@ -64,8 +65,9 @@ export async function renderProject(
 ): Promise<Pcm> {
   const { loops = 1, tail = 6, sampleRate = 44100, onProgress } = opts;
   const steps = loopSteps(project, scope) * loops;
-  const loopSeconds = stepTime(steps, project.bpm, 0);
-  const buf = await render(project, eventsBetween(project, scope, 0, steps), loopSeconds + tail, sampleRate, onProgress);
+  const loopSeconds = steps * stepSeconds(project.bpm);
+  const events = eventsBetween(project, scope, 0, steps * TICKS_PER_STEP);
+  const buf = await render(project, events, loopSeconds + tail, sampleRate, onProgress);
   return trimmed(buf, Math.round(loopSeconds * sampleRate));
 }
 

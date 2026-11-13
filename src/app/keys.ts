@@ -1,8 +1,11 @@
 // The one global keyboard handler: menu shortcuts, the computer-keyboard piano and step entry.
 
-import { STEPS_PER_BAR, newStep } from '../core/defaults';
+import { STEPS_PER_BAR, TICKS_PER_STEP, newNote } from '../core/defaults';
 import { KEY_SEMITONES, MAX_NOTE, MIN_NOTE } from '../core/notes';
-import { patchStep, redo, selectStep, setOctave, setPlaying, setStep, setView, undo, useApp } from '../state/store';
+import {
+  addNote, moveNotes, redo, removeNotes, selectStep, setOctave, setPlaying, setView, undo, useApp,
+} from '../state/store';
+import { rowCells } from '../ui/track/steps';
 import { noteOff, noteOn, tap } from './audio';
 import { exportAudio, newProject, openProject, saveProject, saveProjectAs } from './commands';
 import { IS_MAC } from './shortcuts';
@@ -43,7 +46,8 @@ function stepKey(e: KeyboardEvent): boolean {
   const pattern = state.project.patterns.find((p) => p.id === state.patternId);
   if (!pattern) return false;
   const length = pattern.bars * STEPS_PER_BAR;
-  const cell = pattern.cells[step.channelId]?.[step.index];
+  const cell = rowCells(pattern.notes[step.channelId]).get(step.index);
+  const ids = cell?.notes.map((n) => n.id) ?? [];
   switch (e.key) {
     case 'ArrowLeft':
     case 'ArrowRight': {
@@ -54,14 +58,15 @@ function stepKey(e: KeyboardEvent): boolean {
     case 'ArrowUp':
     case 'ArrowDown': {
       if (!cell) return true;
-      const note = clampNote(cell.note + (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 12 : 1));
-      patchStep(pattern.id, step.channelId, step.index, { note });
-      tap(step.channelId, note, cell.vel);
+      const [lead] = cell.notes;
+      const note = clampNote(lead.note + (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 12 : 1));
+      moveNotes(pattern.id, step.channelId, ids, 0, note - lead.note);
+      tap(step.channelId, note, lead.vel);
       return true;
     }
     case 'Backspace':
     case 'Delete':
-      setStep(pattern.id, step.channelId, step.index, null);
+      removeNotes(pattern.id, step.channelId, ids);
       return true;
     case 'Escape':
       selectStep(null);
@@ -78,8 +83,9 @@ function pianoKey(e: KeyboardEvent, semitone: number): void {
   const { step } = state;
   const pattern = state.project.patterns.find((p) => p.id === state.patternId);
   if (state.view === 'track' && step && pattern) {
-    const cell = pattern.cells[step.channelId]?.[step.index];
-    setStep(pattern.id, step.channelId, step.index, cell ? { ...cell, note } : newStep(note));
+    const cell = rowCells(pattern.notes[step.channelId]).get(step.index);
+    if (cell) moveNotes(pattern.id, step.channelId, cell.notes.map((n) => n.id), 0, note - cell.notes[0].note);
+    else addNote(pattern.id, step.channelId, newNote(step.index * TICKS_PER_STEP, note));
     selectStep({ ...step, index: (step.index + 1) % (pattern.bars * STEPS_PER_BAR) });
   }
   const { channelId } = state;

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { encodeMp3, renderProject } from '../audio';
+import { TICKS_PER_STEP } from '../core/defaults';
 import { eventsBetween, loopSteps } from '../core/sequencer';
 import type { PlayScope } from '../core/types';
 import { encodeWav } from '../core/wav';
@@ -35,11 +36,10 @@ export function ExportDialog() {
   const run = async () => {
     const { project } = useApp.getState();
     const scope: PlayScope = what === 'song' ? { kind: 'song' } : { kind: 'pattern', patternId };
-    const steps = loopSteps(project, scope);
-    if (eventsBetween(project, scope, 0, steps).length === 0) {
+    if (eventsBetween(project, scope, 0, loopSteps(project, scope) * TICKS_PER_STEP).length === 0) {
       await fail(what === 'song'
         ? 'The song has no notes to export. Place blocks with notes in the Song view first.'
-        : `The block ${block} has no notes to export. Add some steps first.`);
+        : `The block ${block} has no notes to export. Add some notes first.`);
       return;
     }
     const mp3 = format !== 'wav';

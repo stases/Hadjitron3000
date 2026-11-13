@@ -1,16 +1,23 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import {
-  CHANNEL_COLORS, MAX_BARS, MAX_SONG_BARS, PATTERN_NAMES, SONG_LANES, STEPS_PER_BAR,
-  emptyProject, newMod, newModule, newSound, newStep,
+  CHANNEL_COLORS, MAX_BARS, MAX_SONG_BARS, MAX_TICKS, PATTERN_NAMES, SONG_LANES, TICKS_PER_STEP,
+  emptyProject, newMod, newModule, newNote, newSound,
 } from '../../src/core/defaults';
 import { MAX_NOTE, MIN_NOTE } from '../../src/core/notes';
-import type { Block, Channel, SampleData } from '../../src/core/types';
+import type { Block, Channel, NoteInit, SampleData } from '../../src/core/types';
 import * as app from '../../src/state/store';
+import { stepNote } from '../support/steps';
 
+const T = TICKS_PER_STEP;
 const state = app.useApp.getState;
 const project = () => state().project;
 const sound = (id: string) => project().channels.find((c) => c.id === id)!.sound;
 const pattern = () => project().patterns.find((p) => p.id === state().patternId)!;
+/** Put a one-step note on step `step` of a row; returns its id. */
+const put = (p: string, channelId: string, step: number, note = 60) =>
+  app.addNote(p, channelId, newNote(step * T, note));
+/** The notes of a row of the current block, without their ids. */
+const row = (channelId: string): NoteInit[] => (pattern().notes[channelId] ?? []).map(({ id: _, ...n }) => n);
 const sample: SampleData = { name: 'kick.drum.wav', bytes: new Uint8Array([1, 2, 3]) };
 
 beforeEach(() => {
@@ -96,34 +103,34 @@ test('sample imports retain existing entries by content id across all sample act
   expect(project().samples.kick).toBe(sample);
 });
 
-test('removing channels clears all pattern cells and selects the next, previous, or no channel', () => {
+test('removing channels clears all pattern notes and selects the next, previous, or no channel', () => {
   const a = app.addChannel(newSound());
   const b = app.addChannel(newSound());
   const c = app.addChannel(newSound());
   const first = state().patternId;
-  app.setStep(first, b, 0, newStep());
+  put(first, b, 0);
   const second = app.addPattern()!;
-  app.setStep(second, b, 2, newStep());
-  app.setStep(second, a, 1, newStep());
+  put(second, b, 2);
+  put(second, a, 1);
   app.selectStep({ channelId: b, index: 0 });
   app.removeChannel(b);
   expect(state().channelId).toBe(c);
   expect(state().step).toBeNull();
-  expect(project().patterns.map((p) => p.cells[b])).toEqual([undefined, undefined]);
-  expect(pattern().cells[a][1]).toEqual(newStep());
+  expect(project().patterns.map((p) => p.notes[b])).toEqual([undefined, undefined]);
+  expect(row(a)).toEqual([newNote(T)]);
   app.removeChannel(c);
   expect(state().channelId).toBe(a);
   app.removeChannel(a);
   expect(state().channelId).toBeNull();
 });
 
-test('duplicating a channel deep copies the sound, preserves mixer settings, and does not copy cells', () => {
+test('duplicating a channel deep copies the sound, preserves mixer settings, and does not copy notes', () => {
   const a = app.addChannel(newSound('fm', 'Bell'));
   const b = app.addChannel(newSound());
   app.addEffect(a, 'filter');
   app.addMod(a, 'lfo');
   app.setChannel(a, { mute: true, solo: true });
-  app.setStep(state().patternId, a, 0, newStep());
+  put(state().patternId, a, 0);
   const original = sound(a);
   const copy = app.duplicateChannel(a)!;
   expect(project().channels.map((c) => c.id)).toEqual([a, copy, b]);
@@ -133,7 +140,7 @@ test('duplicating a channel deep copies the sound, preserves mixer settings, and
   expect(sound(copy).source.params).not.toBe(original.source.params);
   expect(sound(copy).chain[0]).not.toBe(original.chain[0]);
   expect(sound(copy).mods[0]).not.toBe(original.mods[0]);
-  expect(pattern().cells[copy]).toBeUndefined();
+  expect(pattern().notes[copy]).toBeUndefined();
   expect(state().channelId).toBe(copy);
 });
 
@@ -151,10 +158,10 @@ test('moving channels clamps insertion positions and channel patches are restric
   expect(project().channels[0].color).toBe(0);
 });
 
-test('replacing and renaming sounds preserves the channel and its cells', () => {
+test('replacing and renaming sounds preserves the channel and its notes', () => {
   const a = app.addChannel(newSound(), { old: sample });
   app.setChannel(a, { color: 5, mute: true });
-  app.setStep(state().patternId, a, 0, newStep());
+  put(state().patternId, a, 0);
   const before = pattern();
   const replacement = newSound('fm', 'FM');
   app.replaceSound(a, replacement, { next: sample });
@@ -317,53 +324,100 @@ test('mod targets require a modulatable float on source, output, or an effect', 
   expect(sound(a).mods[0].amount).toBe(-1);
 });
 
-test('steps normalize, patch only existing cells, and remove empty channel maps', () => {
+test('notes are added in range, kept sorted, refused on the same start and pitch, and empty rows are removed', () => {
   const a = app.addChannel(newSound());
   const p = state().patternId;
   const before = state();
-  app.patchStep(p, a, 0, { note: 80 });
+  app.moveNotes(p, a, ['missing'], 24, 1);
   expect(state()).toBe(before);
-  app.setStep(p, a, 0, { note: -10, vel: 2, len: 0 });
-  expect(pattern().cells[a][0]).toEqual({ note: MIN_NOTE, vel: 1, len: 1 });
-  app.patchStep(p, a, 0, { note: 200, vel: -1, len: 2.8 });
-  expect(pattern().cells[a][0]).toEqual({ note: MAX_NOTE, vel: 0, len: 3 });
-  app.patchStep(p, a, 0, { note: 60.6 });
-  expect(pattern().cells[a][0]).toEqual({ note: 61, vel: 0, len: 3 });
-  app.setStep(p, a, 1, newStep());
-  app.setStep(p, a, 0, null);
-  expect(pattern().cells[a]).toEqual({ 1: newStep() });
-  app.setStep(p, a, 1, null);
-  expect(pattern().cells).toEqual({});
+  const first = app.addNote(p, a, { start: 30.4, len: 0, note: -10, vel: 2 })!;
+  expect(first).toMatch(/^n_/);
+  expect(pattern().notes[a]).toEqual([{ id: first, start: 30, len: 1, note: MIN_NOTE, vel: 1 }]);
+  const chord = [64, 67, 60].map((note) => app.addNote(p, a, newNote(0, note))!);
+  expect(row(a).map((n) => [n.start, n.note])).toEqual([[0, 60], [0, 64], [0, 67], [30, MIN_NOTE]]);
+  const history = state().past.length;
+  expect(app.addNote(p, a, { ...newNote(0, 64), vel: 0.1 })).toBeNull();
+  for (const start of [-1, MAX_TICKS, NaN]) expect(app.addNote(p, a, newNote(start))).toBeNull();
+  expect(app.addNote(p, a, { ...newNote(), len: Infinity })).toBeNull();
+  expect(app.addNote('missing', a, newNote())).toBeNull();
+  expect(app.addNote(p, 'missing', newNote())).toBeNull();
+  expect(state().past).toHaveLength(history);
+  app.addNote(p, a, { start: MAX_TICKS - 1, len: MAX_TICKS * 2, note: 200, vel: -1 });
+  expect(row(a).at(-1)).toEqual({ start: MAX_TICKS - 1, len: MAX_TICKS, note: MAX_NOTE, vel: 0 });
+  app.removeNotes(p, a, [...chord, first]);
+  expect(row(a)).toHaveLength(1);
+  app.removeNotes(p, a, pattern().notes[a].map((n) => n.id));
+  expect(pattern().notes).toEqual({});
 });
 
-test('pattern length is bounded while hidden cells survive shortening', () => {
+test('a set of notes moves, resizes and takes a pitch and a velocity together, inside the ranges', () => {
+  const a = app.addChannel(newSound());
+  const p = state().patternId;
+  const [x, y, z] = [[0, 60], [0, 64], [36, 62]].map(([start, note]) => app.addNote(p, a, newNote(start, note))!);
+  app.moveNotes(p, a, [x, y], 13, 2);
+  expect(row(a).map((n) => [n.start, n.note])).toEqual([[13, 62], [13, 66], [36, 62]]);
+  app.moveNotes(p, a, [x, y], -100, -100);
+  expect(row(a).map((n) => [n.start, n.note])).toEqual([[0, MIN_NOTE], [0, MIN_NOTE + 4], [36, 62]]);
+  app.moveNotes(p, a, [x, y, z], MAX_TICKS, 0.6);
+  expect(row(a).map((n) => [n.start, n.note])).toEqual([
+    [MAX_TICKS - 37, MIN_NOTE + 1], [MAX_TICKS - 37, MIN_NOTE + 5], [MAX_TICKS - 1, 63],
+  ]);
+  app.moveNotes(p, a, [x, y, z], -MAX_TICKS, 0);
+  app.resizeNotes(p, a, [x, z], -30);
+  expect(row(a).map((n) => n.len)).toEqual([1, 24, 1]);
+  app.resizeNotes(p, a, [x, y], 23.6);
+  expect(row(a).map((n) => n.len)).toEqual([25, 48, 1]);
+  app.setNotesVelocity(p, a, [x, z], 1.5);
+  expect(row(a).map((n) => n.vel)).toEqual([1, 0.8, 1]);
+  app.setNotesPitch(p, a, [z], 59.6);
+  expect(row(a).map((n) => n.note)).toEqual([MIN_NOTE + 1, MIN_NOTE + 5, 60]);
+  expect(pattern().notes[a].map((n) => n.id)).toEqual([x, y, z]);
+});
+
+test('an edit that would put two notes of a row on the same start and pitch does nothing', () => {
+  const a = app.addChannel(newSound());
+  const p = state().patternId;
+  const [x, y] = [[0, 60], [24, 60]].map(([start, note]) => app.addNote(p, a, newNote(start, note))!);
+  const z = app.addNote(p, a, newNote(24, 64))!;
+  const before = state();
+  app.moveNotes(p, a, [x], 24);
+  app.moveNotes(p, a, [z], 0, -4);
+  app.setNotesPitch(p, a, [y, z], 62);
+  expect(state()).toBe(before);
+  app.moveNotes(p, a, [x, y], 24);
+  expect(row(a).map((n) => [n.start, n.note])).toEqual([[24, 60], [24, 64], [48, 60]]);
+});
+
+test('pattern length is bounded while hidden notes survive shortening', () => {
   const a = app.addChannel(newSound());
   const p = state().patternId;
   app.setPatternBars(p, 99);
   expect(pattern().bars).toBe(MAX_BARS);
-  app.setStep(p, a, MAX_BARS * STEPS_PER_BAR - 1, newStep());
+  expect(MAX_BARS).toBe(32);
+  const last = put(p, a, MAX_BARS * 16 - 1)!;
   app.setPatternBars(p, -5);
   expect(pattern().bars).toBe(1);
-  expect(pattern().cells[a][127]).toEqual(newStep());
-  app.patchStep(p, a, 127, { vel: 0.2 });
-  expect(pattern().cells[a][127].vel).toBe(0.2);
+  expect(row(a)).toEqual([newNote(MAX_TICKS - T)]);
+  app.setNotesVelocity(p, a, [last], 0.2);
+  expect(row(a)[0].vel).toBe(0.2);
   app.clearPattern(p);
-  expect(pattern().cells).toEqual({});
+  expect(pattern().notes).toEqual({});
 });
 
-test('patterns use unused names, new patterns use current bars, and duplicates copy source bars and cells', () => {
+test('patterns use unused names, new patterns use current bars, and duplicates copy source bars and notes', () => {
   const a = app.addChannel(newSound());
   const first = state().patternId;
   app.setPatternBars(first, 3);
-  app.setStep(first, a, 2, newStep());
+  put(first, a, 2);
   const song = project().song;
   const second = app.addPattern()!;
-  expect(pattern()).toMatchObject({ id: second, name: 'B', bars: 3, cells: {} });
+  expect(pattern()).toMatchObject({ id: second, name: 'B', bars: 3, notes: {} });
   app.setPatternBars(second, 2);
   const copy = app.duplicatePattern(first)!;
-  expect(pattern()).toMatchObject({ id: copy, name: 'C', bars: 3, cells: { [a]: { 2: newStep() } } });
-  expect(pattern().cells).not.toBe(project().patterns[0].cells);
-  expect(pattern().cells[a][2]).not.toBe(project().patterns[0].cells[a][2]);
+  expect(pattern()).toMatchObject({ id: copy, name: 'C', bars: 3, notes: project().patterns[0].notes });
+  expect(row(a)).toEqual([newNote(2 * T)]);
+  expect(pattern().notes).not.toBe(project().patterns[0].notes);
+  expect(pattern().notes[a][0]).not.toBe(project().patterns[0].notes[a][0]);
   expect(project().song).toBe(song);
   app.removePattern(second);
   app.addPattern();
@@ -402,11 +456,14 @@ test('missing entities and invalid grid indices do nothing and create no history
   app.setModuleOn(a, 'missing', false);
   app.setModTarget(a, 'missing', { module: 'out', param: 'pan' });
   app.setModAmount(a, 'missing', 1);
-  app.setStep('missing', a, 0, newStep());
-  app.setStep(p, 'missing', 0, newStep());
-  for (const index of [-1, 0.5, 128, NaN, Infinity]) app.setStep(p, a, index, newStep());
-  app.patchStep('missing', a, 0, { vel: 1 });
-  app.patchStep(p, 'missing', 0, { vel: 1 });
+  expect(app.addNote('missing', a, newNote())).toBeNull();
+  expect(app.addNote(p, 'missing', newNote())).toBeNull();
+  for (const start of [-1, MAX_TICKS, NaN, Infinity]) expect(app.addNote(p, a, newNote(start))).toBeNull();
+  app.removeNotes(p, a, ['missing']);
+  app.moveNotes('missing', a, ['missing'], 1, 1);
+  app.resizeNotes(p, 'missing', ['missing'], 1);
+  app.setNotesPitch(p, a, [], 61);
+  app.setNotesVelocity(p, a, ['missing'], 1);
   app.setPatternBars('missing', 2);
   expect(app.duplicatePattern('missing')).toBeNull();
   app.removePattern('missing');
@@ -420,7 +477,7 @@ test('unchanged values and equivalent replacement objects preserve the project a
   const mod = app.addMod(a, 'lfo')!;
   const p = state().patternId;
   app.setModTarget(a, mod, { module: effect, param: 'cutoff' });
-  app.setStep(p, a, 0, newStep());
+  const note = put(p, a, 0)!;
   app.markSaved({ name: 'saved.h3k', path: null });
   const before = state();
   app.setBpm(120);
@@ -436,9 +493,12 @@ test('unchanged values and equivalent replacement objects preserve the project a
   app.setModAmount(a, mod, 0.5);
   app.setModTarget(a, mod, { module: effect, param: 'cutoff' });
   app.setModuleOn(a, effect, true);
-  app.setStep(p, a, 0, newStep());
-  app.patchStep(p, a, 0, { note: 60 });
-  app.setStep(p, a, 1, null);
+  expect(put(p, a, 0)).toBeNull();
+  app.moveNotes(p, a, [note], 0, 0);
+  app.setNotesPitch(p, a, [note], 60);
+  app.setNotesVelocity(p, a, [note], 0.8);
+  app.resizeNotes(p, a, [note], 0);
+  app.removeNotes(p, a, ['missing']);
   app.setPatternBars(p, 1);
   app.replaceSound(a, structuredClone(sound(a)));
   expect(state()).toBe(before);
@@ -454,7 +514,7 @@ test('undo and redo restore exact project snapshots and new edits discard redo',
   snapshots.push(project());
   app.setBpm(140);
   snapshots.push(project());
-  app.setStep(state().patternId, a, 0, newStep());
+  put(state().patternId, a, 0);
   snapshots.push(project());
   for (let i = 2; i >= 0; i--) {
     app.undo();
@@ -501,15 +561,15 @@ test('parameter bursts merge using the time of the last change, and expire at 80
   expect(state().past).toHaveLength(2);
 });
 
-test('merge keys distinguish parameters, modules, channels, modulators, and cells', () => {
+test('merge keys distinguish parameters, modules, channels, modulators, and notes', () => {
   vi.useFakeTimers();
   const a = app.addChannel(newSound());
   const b = app.addChannel(newSound());
   const mod = app.addMod(a, 'lfo')!;
   const otherMod = app.addMod(a, 'lfo')!;
   const p = state().patternId;
-  app.setStep(p, a, 0, newStep());
-  app.setStep(p, a, 1, newStep());
+  const x = put(p, a, 0)!;
+  const y = put(p, a, 1)!;
   app.openProject(project(), null);
   const edits = [
     () => app.setParam(a, 'source', 'pitch', 1),
@@ -518,8 +578,12 @@ test('merge keys distinguish parameters, modules, channels, modulators, and cell
     () => app.setParam(a, 'amp', 'attack', 1),
     () => app.setModAmount(a, mod, 0.1),
     () => app.setModAmount(a, otherMod, 0.1),
-    () => app.patchStep(p, a, 0, { vel: 0.1 }),
-    () => app.patchStep(p, a, 1, { vel: 0.1 }),
+    () => app.setNotesVelocity(p, a, [x], 0.1),
+    () => app.setNotesVelocity(p, a, [y], 0.1),
+    () => app.setNotesVelocity(p, a, [x, y], 0.2),
+    () => app.setNotesPitch(p, a, [x, y], 50),
+    () => app.moveNotes(p, a, [x, y], 0, 1),
+    () => app.resizeNotes(p, a, [x, y], 1),
   ];
   edits.forEach((edit, index) => {
     edit();
@@ -532,7 +596,7 @@ test('all continuous actions merge but discrete actions break merging', () => {
   const a = app.addChannel(newSound());
   const mod = app.addMod(a, 'lfo')!;
   const p = state().patternId;
-  app.setStep(p, a, 0, newStep());
+  const x = put(p, a, 0)!;
   app.openProject(project(), null);
   const bursts = [
     () => { app.setBpm(130); app.setBpm(140); },
@@ -541,31 +605,34 @@ test('all continuous actions merge but discrete actions break merging', () => {
     () => { app.renameProject('One'); app.renameProject('Two'); },
     () => { app.renameSound(a, 'One'); app.renameSound(a, 'Two'); },
     () => { app.setModAmount(a, mod, 0.1); app.setModAmount(a, mod, 0.2); },
-    () => { app.patchStep(p, a, 0, { vel: 0.1 }); app.patchStep(p, a, 0, { vel: 0.2 }); },
+    () => { app.setNotesVelocity(p, a, [x], 0.1); app.setNotesVelocity(p, a, [x], 0.2); },
+    () => { app.moveNotes(p, a, [x], 0, 1); app.moveNotes(p, a, [x], 0, 1); },
+    () => { app.resizeNotes(p, a, [x], 1); app.resizeNotes(p, a, [x], 1); },
   ];
   bursts.forEach((burst, index) => {
     burst();
     expect(state().past).toHaveLength(index + 1);
   });
   app.setChannel(a, { mute: true });
-  app.patchStep(p, a, 0, { vel: 0.3 });
-  expect(state().past).toHaveLength(9);
-  app.setStep(p, a, 0, newStep(61));
-  app.setStep(p, a, 0, newStep(62));
+  app.setNotesVelocity(p, a, [x], 0.3);
   expect(state().past).toHaveLength(11);
+  put(p, a, 1);
+  put(p, a, 2);
+  app.removeNotes(p, a, [x]);
+  expect(state().past).toHaveLength(14);
 });
 
 test('history keeps only the newest 100 previous projects', () => {
   const a = app.addChannel(newSound());
   app.openProject(project(), null);
-  for (let i = 1; i <= 105; i++) app.setStep(state().patternId, a, 0, { ...newStep(), len: i });
+  for (let i = 1; i <= 105; i++) app.addNote(state().patternId, a, newNote(i));
   expect(state().past).toHaveLength(100);
-  expect(state().past[0].patterns[0].cells[a][0].len).toBe(5);
+  expect(state().past[0].patterns[0].notes[a]).toHaveLength(5);
   for (let i = 0; i < 100; i++) app.undo();
-  expect(pattern().cells[a][0].len).toBe(5);
+  expect(pattern().notes[a]).toHaveLength(5);
   expect(state().future).toHaveLength(100);
   for (let i = 0; i < 100; i++) app.redo();
-  expect(pattern().cells[a][0].len).toBe(105);
+  expect(pattern().notes[a]).toHaveLength(105);
   expect(state().past).toHaveLength(100);
 });
 
@@ -759,7 +826,7 @@ test('block limits apply even when custom names leave unused letters', () => {
 test('adding placements rounds positions, selects their block, fits gaps and supports undo and redo', () => {
   const first = state().patternId;
   const channel = app.addChannel(newSound());
-  app.setPatternBars(first, MAX_BARS);
+  app.setPatternBars(first, 8);
   const next = app.addPlacement(first, 0, 5)!;
   const later = app.addPlacement(first, 0, 20)!;
   app.addPattern();
@@ -767,8 +834,8 @@ test('adding placements rounds positions, selects their block, fits gaps and sup
   const before = project();
   const id = app.addPlacement(first, 0.2, 1.6)!;
   expect(project().song).toEqual([
-    { id: next, pattern: first, lane: 0, bar: 5, bars: MAX_BARS },
-    { id: later, pattern: first, lane: 0, bar: 20, bars: MAX_BARS },
+    { id: next, pattern: first, lane: 0, bar: 5, bars: 8 },
+    { id: later, pattern: first, lane: 0, bar: 20, bars: 8 },
     { id, pattern: first, lane: 0, bar: 2, bars: 3 },
   ]);
   expect(state()).toMatchObject({ placementId: id, patternId: first, step: null });
@@ -969,7 +1036,7 @@ test('inserting a block reuses the first identical unused sounds and adds balanc
   const block: Block = {
     name: 'Imported beat', color: 6, bars: 3,
     tracks: [original, original, original, fresh].map((sound, index) => ({
-      sound: structuredClone(sound), steps: { [index]: newStep(60 + index) },
+      sound: structuredClone(sound), notes: [stepNote(index, 60 + index)],
     })),
     samples: { kick: structuredClone(sample), old: { name: 'duplicate.wav', bytes: new Uint8Array([9]) } },
   };
@@ -985,9 +1052,9 @@ test('inserting a block reuses the first identical unused sounds and adds balanc
   expect(channels[4].sound).toEqual(fresh);
   expect(pattern()).toEqual({
     id, name: block.name, color: block.color, bars: block.bars,
-    cells: {
-      [a]: { 0: newStep(60) }, [b]: { 1: newStep(61) },
-      [channels[3].id]: { 2: newStep(62) }, [channels[4].id]: { 3: newStep(63) },
+    notes: {
+      [a]: [stepNote(0, 60)], [b]: [stepNote(1, 61)],
+      [channels[3].id]: [stepNote(2, 62)], [channels[4].id]: [stepNote(3, 63)],
     },
   });
   expect(state()).toMatchObject({ patternId: id, step: null });
@@ -1002,7 +1069,7 @@ test('inserting a block reuses the first identical unused sounds and adds balanc
   expect(project()).toBe(after);
 });
 
-test('inserting a block normalizes steps and deeply isolates all imported data', () => {
+test('inserting a block normalizes notes and deeply isolates all imported data', () => {
   const importedSound = newSound();
   importedSound.chain.push(newModule('filter'));
   importedSound.mods.push(newMod('lfo'));
@@ -1010,11 +1077,12 @@ test('inserting a block normalizes steps and deeply isolates all imported data',
     name: 'Long block name kept as supplied', color: 5, bars: 2,
     tracks: [{
       sound: importedSound,
-      steps: {
-        0: { note: -5, vel: 2, len: 0 }, 1: { note: 200, vel: -1, len: 2.8 },
-        2: { note: 60.6, vel: 0.4, len: 1 }, [MAX_BARS * STEPS_PER_BAR - 1]: newStep(),
-        [MAX_BARS * STEPS_PER_BAR]: newStep(), 999: newStep(), '-1': newStep(), '0.5': newStep(),
-      },
+      notes: [
+        { id: 'a', start: 0, len: 0, note: -5, vel: 2 }, { id: 'b', start: 24, len: 66.8, note: 200, vel: -1 },
+        { id: 'c', start: 48, len: 24, note: 60.6, vel: 0.4 }, { ...stepNote(0), id: 'd' },
+        { ...stepNote(0), id: 'last', start: MAX_TICKS - 1 },
+        { ...stepNote(0), id: 'e', start: MAX_TICKS }, { ...stepNote(0), id: 'f', start: -1 },
+      ],
     }],
     samples: { kick: structuredClone(sample) },
   };
@@ -1022,26 +1090,27 @@ test('inserting a block normalizes steps and deeply isolates all imported data',
   app.insertBlock(block);
   const channel = project().channels[0];
   expect(pattern()).toMatchObject({ name: block.name, color: 5, bars: 2 });
-  expect(pattern().cells[channel.id]).toEqual({
-    0: { note: MIN_NOTE, vel: 1, len: 1 }, 1: { note: MAX_NOTE, vel: 0, len: 3 },
-    2: { note: 61, vel: 0.4, len: 1 }, [MAX_BARS * STEPS_PER_BAR - 1]: newStep(),
-  });
+  expect(pattern().notes[channel.id]).toEqual([
+    { id: 'a', start: 0, len: 1, note: MIN_NOTE, vel: 1 }, { ...stepNote(0), id: 'd' },
+    { id: 'b', start: 24, len: 67, note: MAX_NOTE, vel: 0 }, { id: 'c', start: 48, len: 24, note: 61, vel: 0.4 },
+    { ...stepNote(0), id: 'last', start: MAX_TICKS - 1 },
+  ]);
   expect(block).toEqual(original);
   expect(channel.sound).not.toBe(importedSound);
   expect(channel.sound.source.params).not.toBe(importedSound.source.params);
   expect(channel.sound.chain[0].params).not.toBe(importedSound.chain[0].params);
   expect(channel.sound.mods[0]).not.toBe(importedSound.mods[0]);
-  expect(pattern().cells[channel.id]).not.toBe(block.tracks[0].steps);
-  expect(pattern().cells[channel.id][127]).not.toBe(block.tracks[0].steps[127]);
+  expect(pattern().notes[channel.id]).not.toBe(block.tracks[0].notes);
+  expect(pattern().notes[channel.id][4]).not.toBe(block.tracks[0].notes[4]);
   expect(project().samples.kick).not.toBe(block.samples.kick);
   expect(project().samples.kick.bytes.buffer).not.toBe(block.samples.kick.bytes.buffer);
   block.tracks[0].sound.source.params.pitch = 12;
   block.tracks[0].sound.chain[0].params.cutoff = 500;
   block.tracks[0].sound.mods[0].amount = 0.1;
-  block.tracks[0].steps[127].note = 80;
+  block.tracks[0].notes[4].note = 80;
   block.samples.kick.bytes[0] = 99;
   expect(channel.sound).toEqual(original.tracks[0].sound);
-  expect(pattern().cells[channel.id][127]).toEqual(newStep());
+  expect(pattern().notes[channel.id][4].note).toBe(60);
   expect(project().samples.kick.bytes[0]).toBe(1);
 });
 
@@ -1049,8 +1118,8 @@ test('removing a channel keeps imported blocks and their placements valid, with 
   const id = app.insertBlock({
     name: 'Beat', color: 2, bars: 2,
     tracks: [
-      { sound: newSound(), steps: { 0: newStep() } },
-      { sound: newSound('fm'), steps: { 1: newStep(65) } },
+      { sound: newSound(), notes: [stepNote(0)] },
+      { sound: newSound('fm'), notes: [stepNote(1, 65)] },
     ],
     samples: {},
   })!;
@@ -1061,8 +1130,8 @@ test('removing a channel keeps imported blocks and their placements valid, with 
   const before = project();
   app.removeChannel(channel);
   expect(project().song).toBe(song);
-  expect(pattern().cells[channel]).toBeUndefined();
-  expect(Object.keys(pattern().cells)).toEqual([project().channels[0].id]);
+  expect(pattern().notes[channel]).toBeUndefined();
+  expect(Object.keys(pattern().notes)).toEqual([project().channels[0].id]);
   expect(state().step).toBeNull();
   expect(state().placementId).toBe(song[0].id);
   const after = project();
@@ -1071,6 +1140,83 @@ test('removing a channel keeps imported blocks and their placements valid, with 
   app.redo();
   expect(project()).toBe(after);
   app.removeChannel(project().channels[0].id);
-  expect(pattern().cells).toEqual({});
+  expect(pattern().notes).toEqual({});
   expect(project().song).toBe(song);
+});
+
+test('a gesture is one undo step: a paint stroke of several notes', () => {
+  const a = app.addChannel(newSound());
+  const p = state().patternId;
+  app.openProject(project(), null);
+  const before = project();
+  app.beginGesture();
+  for (const step of [0, 1, 2, 3]) put(p, a, step);
+  app.commitGesture();
+  expect(row(a)).toHaveLength(4);
+  expect(state().past).toEqual([before]);
+  app.undo();
+  expect(project()).toBe(before);
+  app.redo();
+  expect(row(a)).toHaveLength(4);
+});
+
+test('a gesture is one undo step however long it pauses, and the next change starts a new one', () => {
+  vi.useFakeTimers();
+  const p = state().patternId;
+  app.setPatternBars(p, 2);
+  const id = app.addPlacement(p, 0, 0)!;
+  app.openProject(project(), null);
+  const before = project();
+  app.beginGesture();
+  app.movePlacement(id, 0, 1);
+  vi.advanceTimersByTime(2000);
+  app.movePlacement(id, 1, 3);
+  vi.advanceTimersByTime(2000);
+  app.resizePlacement(id, 4);
+  app.commitGesture();
+  expect(state().past).toEqual([before]);
+  app.movePlacement(id, 1, 4);
+  expect(state().past).toHaveLength(2);
+  app.undo();
+  app.undo();
+  expect(project()).toBe(before);
+});
+
+test('a gesture without a change adds no history, and an undo inside a gesture keeps the history whole', () => {
+  const a = app.addChannel(newSound());
+  const p = state().patternId;
+  app.openProject(project(), null);
+  const before = state();
+  app.beginGesture();
+  app.selectStep({ channelId: a, index: 0 });
+  app.commitGesture();
+  expect(state().past).toBe(before.past);
+  put(p, a, 0);
+  const one = project();
+  app.beginGesture();
+  put(p, a, 1);
+  app.undo();
+  put(p, a, 2);
+  app.commitGesture();
+  expect(state().past).toEqual([before.project, one]);
+});
+
+test('duplicating a placement puts a copy of the same length right after it in one undo step', () => {
+  const p = state().patternId;
+  app.setPatternBars(p, 2);
+  const id = app.addPlacement(p, 1, 3)!;
+  app.resizePlacement(id, 5);
+  app.addPlacement(p, 1, 11);
+  app.openProject(project(), null);
+  const before = project();
+  const copy = app.duplicatePlacement(id)!;
+  expect(project().song.find((s) => s.id === copy)).toEqual({ id: copy, pattern: p, lane: 1, bar: 8, bars: 3 });
+  expect(state()).toMatchObject({ placementId: copy, patternId: p });
+  expect(state().past).toEqual([before]);
+  expect(app.duplicatePlacement(copy)).toBeNull();
+  expect(app.duplicatePlacement('missing')).toBeNull();
+  app.undo();
+  expect(project()).toBe(before);
+  const end = app.addPlacement(p, 0, MAX_SONG_BARS - 2)!;
+  expect(app.duplicatePlacement(end)).toBeNull();
 });

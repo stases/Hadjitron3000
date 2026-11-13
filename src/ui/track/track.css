@@ -212,6 +212,24 @@
   text-align: left;
 }
 
+/* More than one note starts in the step: the count above the lowest note's name. */
+.h-track-step.is-chord {
+  line-height: 11px;
+}
+
+.h-track-more {
+  display: block;
+}
+
+/* A note that starts off the grid line: a tick at its place inside the step. */
+.h-track-offset {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 5px;
+  background: var(--ink);
+}
+
 .h-track-sel {
   position: absolute;
   top: 0;

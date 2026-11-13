@@ -2,7 +2,7 @@ import { beforeEach, expect, test } from 'vitest';
 import { LESSONS } from '../../src/app/tour/lessons';
 import type { LessonId, Look } from '../../src/app/tour/lessons';
 import type { DialogKind } from '../../src/app/dialogStore';
-import { newSound } from '../../src/core/defaults';
+import { newNote, newSound, TICKS_PER_STEP } from '../../src/core/defaults';
 import type { Project } from '../../src/core/types';
 import { starterProject } from '../../src/presets/projects';
 import * as app from '../../src/state/store';
@@ -14,7 +14,9 @@ const look = (): Look => ({ state: state(), start, dialog });
 const channel = () => state().channelId!;
 const row = (name: string) => state().project.channels.find((c) => c.sound.name === name)!.id;
 const block = () => state().patternId;
-const hit = { note: 60, vel: 0.8, len: 1 };
+/** Put a one-step note on a step of the row of the sound with this name. */
+const put = (pattern: string, name: string, step: number, note = 60) =>
+  app.addNote(pattern, row(name), newNote(step * TICKS_PER_STEP, note));
 /** Whether a step that can tell is done now. */
 const done = (lesson: LessonId, index: number) => (LESSONS[lesson].steps[index].done as (look: Look) => boolean)(look());
 
@@ -74,20 +76,21 @@ test('Make a Sound looks at the selected sound only', () => {
 test('the steps of Make a Song are done by writing and arranging two blocks', () => {
   let a = '';
   let b = '';
+  let bass = '';
   walk('song', [
     nothing,
-    () => [0, 4, 8, 12].forEach((i) => app.setStep(block(), row('Kick'), i, hit)),
+    () => [0, 4, 8, 12].forEach((i) => put(block(), 'Kick', i)),
     () => {
-      app.setStep(block(), row('Snare'), 4, hit);
-      app.setStep(block(), row('Hat'), 2, hit);
+      put(block(), 'Snare', 4);
+      put(block(), 'Hat', 2);
     },
-    () => app.setStep(block(), row('Sub Bass'), 0, { ...hit, note: 63 }),
-    () => app.patchStep(block(), row('Sub Bass'), 0, { len: 3 }),
+    () => (bass = put(block(), 'Sub Bass', 0, 63)!),
+    () => app.resizeNotes(block(), row('Sub Bass'), [bass], 2 * TICKS_PER_STEP),
     () => {
       a = block();
       b = app.duplicatePattern(a)!;
     },
-    () => app.setStep(b, row('Hat'), 10, hit),
+    () => put(b, 'Hat', 10),
     () => app.setView('song'),
     () => {
       app.addPlacement(a, 0, 0);
@@ -104,10 +107,10 @@ test('the steps of Make a Song are done by writing and arranging two blocks', ()
 test('a copied block is no variation until it differs from every other block', () => {
   expect(done('song', 6)).toBe(false);
   const a = block();
-  app.setStep(a, row('Kick'), 0, hit);
+  const kick = put(a, 'Kick', 0)!;
   const b = app.duplicatePattern(a)!;
   expect(done('song', 6)).toBe(false);
-  app.setStep(b, row('Kick'), 0, { ...hit, vel: 0.5 });
+  app.setNotesVelocity(b, row('Kick'), [kick], 0.5);
   expect(done('song', 6)).toBe(true);
   app.selectPattern(a);
   expect(done('song', 6)).toBe(true);

@@ -1,26 +1,30 @@
 // A two-block loop with every sound in each block, for tests of the Track view.
 
 import { emptyProject, newPattern, uid } from '../../src/core/defaults';
-import type { Channel, Pattern, Project, Step } from '../../src/core/types';
+import type { Channel, Note, Pattern, Project } from '../../src/core/types';
 import { preset } from '../../src/presets';
+import { notesOf } from './steps';
+import type { StepSpec } from './steps';
 
 function channels(names: string[]): Channel[] {
   return names.map((name, color) => ({ id: uid('c'), sound: preset(name), color: color % 8, mute: false, solo: false }));
 }
 
 /** Drum row: x is a hit, X an accent, o a ghost note. */
-function hits(row: string): Record<number, Step> {
+function hits(row: string): Note[] {
   const vel: Record<string, number> = { x: 0.8, X: 1, o: 0.4 };
-  return Object.fromEntries([...row].flatMap((ch, i) => (vel[ch] ? [[i, { note: 60, vel: vel[ch], len: 1 }]] : [])));
+  const steps = [...row].flatMap((ch, i) => (vel[ch] ? [[i, { note: 60, vel: vel[ch], len: 1 }]] : []));
+  return notesOf(Object.fromEntries(steps));
 }
 
 /** Melody row: [step, note, length, velocity] with length 1 and velocity 0.8 by default. */
-function notes(row: [number, number, number?, number?][]): Record<number, Step> {
-  return Object.fromEntries(row.map(([i, note, len = 1, vel = 0.8]) => [i, { note, vel, len }]));
+function notes(row: [number, number, number?, number?][]): Note[] {
+  return notesOf(Object.fromEntries(row.map(([i, note, len = 1, vel = 0.8]): [number, StepSpec] =>
+    [i, { note, vel, len }])));
 }
 
-function pattern(name: string, ids: string[], rows: Record<number, Step>[]): Pattern {
-  return { ...newPattern(name), bars: 2, cells: Object.fromEntries(rows.map((cells, i) => [ids[i], cells])) };
+function pattern(name: string, ids: string[], rows: Note[][]): Pattern {
+  return { ...newPattern(name), bars: 2, notes: Object.fromEntries(rows.map((notes, i) => [ids[i], notes])) };
 }
 
 export function loopProject(): Project {

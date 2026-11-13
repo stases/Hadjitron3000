@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import { renderProject, renderSound } from '../../src/audio';
+import { TICKS_PER_STEP } from '../../src/core/defaults';
 import type { ModuleInst, Params } from '../../src/core/types';
 import { adsr, amplitudeAt, db, effect, freq, onset, peak, project, rms, slice, sound } from './helpers';
 
@@ -42,7 +43,7 @@ test('the delay repeats at the synced time for the tempo and at the free time', 
   const firstRepeat = async (params: Params, bpm: number) => {
     const p = project([{ id: 'a', sound: blip([effect('delay', { feedback: 0, mix: 1, tone: 20000, ...params })]) }], { a: { 0: { note: 81, vel: 1, len: 1 } } }, { bpm });
     // A 64th note at the tempo is the length of the blip; the pattern is short enough not to retrigger.
-    p.patterns[0].cells.a[0].len = 0.04 / (15 / bpm);
+    p.patterns[0].notes.a[0].len = Math.round((0.04 / (15 / bpm)) * TICKS_PER_STEP);
     const pcm = await renderProject(p, { kind: 'pattern', patternId: p.patterns[0].id }, { tail: 0 });
     return onset(pcm.channels[0], 0.1);
   };

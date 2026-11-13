@@ -1,6 +1,8 @@
-// A look-ahead scheduler: a timer hands the engine every note that starts within the next 120 ms.
+// A look-ahead scheduler: a timer hands the engine every note that starts within the next 120 ms, one step's
+// window of ticks at a time, so each note is scheduled exactly once.
 
-import { eventsBetween, stepSeconds, stepTime } from '../core/sequencer';
+import { TICKS_PER_STEP } from '../core/defaults';
+import { eventsBetween, stepSeconds, tickTime } from '../core/sequencer';
 import type { PlayScope, Project } from '../core/types';
 import type { Engine } from './engine';
 
@@ -60,8 +62,9 @@ export class Transport {
       this.swing = project.swing;
     }
     const now = this.engine.ctx.currentTime;
-    while (this.origin + stepTime(this.next, this.bpm, this.swing) < now + LOOKAHEAD) {
-      for (const e of eventsBetween(project, scope, this.next, this.next + 1)) {
+    while (this.origin + tickTime(this.next * TICKS_PER_STEP, this.bpm, this.swing) < now + LOOKAHEAD) {
+      const from = this.next * TICKS_PER_STEP;
+      for (const e of eventsBetween(project, scope, from, from + TICKS_PER_STEP)) {
         // After a stall (a throttled timer) notes that should already have started are dropped.
         if (this.origin + e.time >= now) this.engine.play(e.channelId, e.note, e.vel, this.origin + e.time, e.dur);
       }

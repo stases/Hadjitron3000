@@ -1,15 +1,17 @@
 import { expect, test, vi } from 'vitest';
 import {
-  CHANNEL_COLORS, emptyProject, MAX_BARS, MAX_SONG_BARS, newMod, newModule, newPattern, newSound, SONG_LANES,
+  CHANNEL_COLORS, emptyProject, MAX_BARS, MAX_SONG_BARS, MAX_TICKS, newMod, newModule, newPattern, newSound,
+  SONG_LANES, TICKS_PER_STEP,
 } from '../../src/core/defaults';
 import {
-  BLOCK_EXT, FORMAT_VERSION, FormatError, parseProject, parseSound, PROJECT_EXT, sampleId,
+  BLOCK_EXT, FORMAT_VERSION, FormatError, parseBlock, parseProject, parseSound, PROJECT_EXT, readProject, sampleId,
   serializeProject, serializeSound, SOUND_EXT, soundSampleIds,
 } from '../../src/core/fileformat';
 import { AMP, EFFECTS, MODS, MODULES, OUT, SOURCES } from '../../src/core/modules';
 import { MAX_NOTE, MIN_NOTE } from '../../src/core/notes';
 import { defaultParams } from '../../src/core/params';
 import type { Project, SampleData, Sound } from '../../src/core/types';
+import { stepNote } from '../support/steps';
 
 function soundFile(sound: unknown = newSound(), samples: unknown = {}): string {
   return JSON.stringify({ format: 'hadjitron3000/sound', version: FORMAT_VERSION, sound, samples });
@@ -40,8 +42,12 @@ function project(): Project {
       color: 5, mute: false, solo: true },
   ];
   result.patterns = [
-    { id: 'a', name: 'A', color: 3, bars: 1, cells: { c1: { 0: { note: 60, vel: 0.7, len: 1 } } } },
-    { id: 'b', name: 'B', color: 0, bars: 2, cells: { c2: { 17: { note: 65, vel: 0.5, len: 3 } } } },
+    { id: 'a', name: 'A', color: 3, bars: 1, notes: { c1: [{ id: 'n1', start: 0, len: 24, note: 60, vel: 0.7 }] } },
+    { id: 'b', name: 'B', color: 0, bars: 2, notes: { c2: [
+      { id: 'n1', start: 408, len: 72, note: 65, vel: 0.5 },
+      { id: 'n2', start: 408, len: 30, note: 69, vel: 0.5 },
+      { id: 'n3', start: 413, len: 5, note: 65, vel: 0.4 },
+    ] } },
   ];
   result.song = [
     { id: 's1', pattern: 'a', lane: 0, bar: 0, bars: 1 },
@@ -52,7 +58,7 @@ function project(): Project {
 }
 
 test('exports the native extensions and format version', () => {
-  expect([SOUND_EXT, PROJECT_EXT, BLOCK_EXT, FORMAT_VERSION]).toEqual(['h3s', 'h3k', 'h3b', 2]);
+  expect([SOUND_EXT, PROJECT_EXT, BLOCK_EXT, FORMAT_VERSION]).toEqual(['h3s', 'h3k', 'h3b', 3]);
 });
 
 test.each([0, 4, 384 * 1024 + 1])('a sampled sound round trips %i bytes exactly', (length) => {
@@ -61,7 +67,7 @@ test.each([0, 4, 384 * 1024 + 1])('a sampled sound round trips %i bytes exactly'
   const original = sound();
   const text = serializeSound(original, samples);
   expect(text).toBe(JSON.stringify(JSON.parse(text), null, 2));
-  expect(JSON.parse(text)).toMatchObject({ format: 'hadjitron3000/sound', version: 2 });
+  expect(JSON.parse(text)).toMatchObject({ format: 'hadjitron3000/sound', version: 3 });
   const parsed = parseSound(text);
   expect(parsed.sound).toStrictEqual(original);
   expect(parsed.samples.kick.name).toBe('kïck.wav');
@@ -69,11 +75,11 @@ test.each([0, 4, 384 * 1024 + 1])('a sampled sound round trips %i bytes exactly'
   expect(parsed.samples.kick.bytes).toStrictEqual(bytes);
 });
 
-test('a project round trips two channels, two patterns and simultaneous placements', () => {
+test('a project round trips two channels, two patterns with a chord and an off-grid note, and simultaneous placements', () => {
   const original = project();
   const text = serializeProject(original);
   expect(text).toBe(JSON.stringify(JSON.parse(text), null, 2));
-  expect(JSON.parse(text)).toMatchObject({ format: 'hadjitron3000/project', version: 2 });
+  expect(JSON.parse(text)).toMatchObject({ format: 'hadjitron3000/project', version: 3 });
   expect(JSON.parse(text).project).not.toHaveProperty('samples');
   expect(parseProject(text)).toStrictEqual(original);
 });
@@ -150,9 +156,12 @@ test.each([
   [{ ...project(), patterns: {} }, 'patterns'],
   [{ ...project(), patterns: null }, 'patterns'],
   [{ ...project(), patterns: [null] }, 'pattern'],
-  [{ ...project(), patterns: [{ id: 'a', cells: [] }] }, 'cells'],
-  [{ ...project(), patterns: [{ id: 'a', cells: null }] }, 'cells'],
-  [{ ...project(), patterns: [{ id: 'a', cells: { c1: [] } }] }, 'cells for channel'],
+  [{ ...project(), patterns: [{ id: 'a', notes: [] }] }, 'pattern notes'],
+  [{ ...project(), patterns: [{ id: 'a', notes: null }] }, 'pattern notes'],
+  [{ ...project(), patterns: [{ id: 'a', notes: { c1: {} } }] }, 'notes for channel'],
+  [{ ...project(), patterns: [{ id: 'a', notes: { c1: [null] } }] }, 'note'],
+  [{ ...project(), patterns: [{ id: 'a', cells: [] }] }, 'pattern notes'],
+  [{ ...project(), patterns: [{ id: 'a', cells: { c1: [] } }] }, 'notes for channel'],
   [{ ...project(), patterns: [{ id: 'a', cells: { c1: { 0: null } } }] }, 'step'],
   [{ ...project(), song: {} }, 'song'],
   [{ ...project(), song: null }, 'song'],
@@ -344,11 +353,31 @@ test.each([
 });
 
 test.each([[0, 1], [99, MAX_BARS], [2.6, 3], ['bad', 1]])('normalizes pattern bars %s', (bars, expected) => {
-  const parsed = parseProject(projectFile({ ...emptyProject(), patterns: [{ id: 'a', name: 5, bars, cells: {} }] }));
-  expect(parsed.patterns[0]).toEqual({ id: 'a', name: '', color: 0, bars: expected, cells: {} });
+  const parsed = parseProject(projectFile({ ...emptyProject(), patterns: [{ id: 'a', name: 5, bars, notes: {} }] }));
+  expect(parsed.patterns[0]).toEqual({ id: 'a', name: '', color: 0, bars: expected, notes: {} });
 });
 
-test('normalizes steps, drops invalid indices and drops cells for missing channels', () => {
+test('normalizes notes, sorts them and drops rows of missing channels, empty rows and repeated notes', () => {
+  const notes = {
+    c1: [
+      { id: 'x', start: 30, len: 0, note: 72, vel: 2 },
+      { id: 'x', start: 30, len: 5, note: 64, vel: 0.5 },
+      { id: 'y', start: 30, len: 5, note: 72, vel: 0.5 },
+      { id: 'z', start: 0.4, len: 2.6, note: 59.5, vel: 0.25, extra: 1 },
+      { id: 'w', start: MAX_TICKS, len: 1, note: 60, vel: 1 },
+    ],
+    c2: [],
+    gone: [{ id: 'g', start: 0, len: 1, note: 60, vel: 1 }],
+  };
+  const parsed = parseProject(projectFile({ ...project(), patterns: [{ id: 'a', bars: 1, notes }] }));
+  expect(parsed.patterns[0].notes).toEqual({ c1: [
+    { id: 'z', start: 0, len: 3, note: 60, vel: 0.25 },
+    { id: expect.stringMatching(/^n_/), start: 30, len: 5, note: 64, vel: 0.5 },
+    { id: 'x', start: 30, len: 1, note: 72, vel: 1 },
+  ] });
+});
+
+test('version 2 steps become notes: step i starts at tick 24 i and lengths are counted in ticks', () => {
   const original = project();
   const cells = {
     c1: {
@@ -361,19 +390,65 @@ test('normalizes steps, drops invalid indices and drops cells for missing channe
     },
     gone: null,
   };
-  const parsed = parseProject(projectFile({ ...original, patterns: [{ id: 'a', bars: 1, cells }] }));
-  expect(parsed.patterns[0].cells).toEqual({ c1: {
-    0: { note: MIN_NOTE, vel: 0, len: 1 },
-    1: { note: MAX_NOTE, vel: 1, len: 128 },
-    2: { note: 61, vel: 0.123, len: 3 },
-    3: { note: 60, vel: 0.8, len: 1 },
-    500: { note: 72, vel: 1, len: 1 },
-  } });
+  const text = JSON.stringify({
+    format: 'hadjitron3000/project', version: 2, project: { ...original, patterns: [{ id: 'a', bars: 1, cells }] },
+  });
+  const step = (i: number, note: number, vel: number, len: number) =>
+    ({ id: expect.stringMatching(/^n_/), start: i * TICKS_PER_STEP, len: len * TICKS_PER_STEP, note, vel });
+  expect(parseProject(text).patterns[0].notes).toEqual({ c1: [
+    step(0, MIN_NOTE, 0, 1), step(1, MAX_NOTE, 1, MAX_BARS * 16), step(2, 61, 0.123, 3), step(3, 60, 0.8, 1),
+    step(500, 72, 1, 1),
+  ] });
+});
+
+// The shapes of versions 1 and 2, written out as those versions saved them.
+const OLD_SOUND = { ...newSound('osc', 'Bass') };
+const OLD_PATTERNS = [
+  { id: 'a', name: 'A', color: 1, bars: 2, cells: {
+    c1: { 0: { note: 60, vel: 0.8, len: 1 }, 4: { note: 63, vel: 0.5, len: 3 }, 31: { note: 70, vel: 1, len: 1 } },
+    c2: { 2: { note: 48, vel: 0.7, len: 16 } },
+  } },
+  { id: 'b', name: 'B', color: 2, bars: 8, cells: { c1: { 127: { note: 72, vel: 0.9, len: 2 } } } },
+];
+const note = (start: number, len: number, note: number, vel: number) =>
+  ({ id: expect.any(String), start, len, note, vel });
+const NEW_NOTES = [
+  { c1: [note(0, 24, 60, 0.8), note(96, 72, 63, 0.5), note(744, 24, 70, 1)], c2: [note(48, 384, 48, 0.7)] },
+  { c1: [note(3048, 48, 72, 0.9)] },
+];
+
+test.each([1, 2])('a version %i project converts its steps to notes without loss', (version) => {
+  const channels = ['c1', 'c2'].map((id) => ({ id, sound: OLD_SOUND, color: 0, mute: false, solo: false }));
+  const song = version === 1 ? ['a', 'b'] : [{ id: 's1', pattern: 'a', lane: 0, bar: 0, bars: 2 }];
+  const parsed = parseProject(JSON.stringify({
+    format: 'hadjitron3000/project', version,
+    project: { name: 'Old', bpm: 120, swing: 0, master: 0, channels, patterns: OLD_PATTERNS, song },
+  }));
+  expect(parsed.patterns.map((p) => p.notes)).toEqual(NEW_NOTES);
+  expect(parsed.patterns.map(({ notes: _, ...p }) => p)).toEqual(OLD_PATTERNS.map(({ cells: _, ...p }) => p));
+  const again = parseProject(serializeProject(parsed));
+  expect(again).toStrictEqual(parsed);
+  expect(JSON.parse(serializeProject(parsed)).version).toBe(3);
+});
+
+test('a stored session in the old shape opens with notes', () => {
+  const channels = ['c1', 'c2'].map((id) => ({ id, sound: OLD_SOUND, color: 0, mute: false, solo: false }));
+  const stored = { name: 'Old', bpm: 120, swing: 0, master: 0, channels, patterns: OLD_PATTERNS, song: [] };
+  const parsed = readProject(stored, {});
+  expect(parsed.patterns.map((p) => p.notes)).toEqual(NEW_NOTES);
+});
+
+test.each([1, 2])('a version %i block converts its steps to notes without loss', (version) => {
+  const tracks = [OLD_PATTERNS[0].cells.c1, OLD_PATTERNS[0].cells.c2].map((steps) => ({ sound: OLD_SOUND, steps }));
+  const block = { name: 'Old', bars: 2, tracks };
+  const parsed = parseBlock(JSON.stringify({ format: 'hadjitron3000/block', version, block }));
+  expect(parsed.tracks.map((t) => t.notes)).toEqual([NEW_NOTES[0].c1, NEW_NOTES[0].c2]);
+  expect(parsed.bars).toBe(2);
 });
 
 test.each([[], undefined])('a project without patterns receives an empty pattern A: %s', (patterns) => {
   const parsed = parseProject(projectFile({ ...emptyProject(), patterns, song: ['missing'] }));
-  expect(parsed.patterns).toEqual([{ id: expect.any(String), name: 'A', color: 0, bars: 1, cells: {} }]);
+  expect(parsed.patterns).toEqual([{ id: expect.any(String), name: 'A', color: 0, bars: 1, notes: {} }]);
   expect(parsed.patterns[0].id).not.toBe('');
   expect(parsed.song).toEqual([]);
 });
@@ -459,10 +534,7 @@ test('unknown fields are stripped at every level of the returned document', () =
     samples: Record<string, { name: string; data: string; extra: string }>;
   };
   delete raw.samples.extra;
-  for (const pattern of raw.project.patterns) {
-    delete pattern.cells.extra;
-    for (const steps of Object.values(pattern.cells)) delete (steps as Record<string, unknown>).extra;
-  }
+  for (const pattern of raw.project.patterns) delete pattern.notes.extra;
   expect(parseProject(JSON.stringify(raw))).toStrictEqual(original);
 });
 
@@ -471,9 +543,7 @@ test('dictionary ids such as __proto__ survive without prototype lookup or mutat
   original.channels[0].id = '__proto__';
   original.channels[0].sound.source.params.sample = '__proto__';
   original.samples = Object.fromEntries([['__proto__', { name: 'kick.wav', bytes: new Uint8Array([255]) }]]);
-  original.patterns = [{ ...newPattern('A'), cells: Object.fromEntries([
-    ['__proto__', { 0: { note: 60, vel: 1, len: 1 } }],
-  ]) }];
+  original.patterns = [{ ...newPattern('A'), notes: Object.fromEntries([['__proto__', [stepNote(0)]]]) }];
   original.song = [{ id: 's1', pattern: original.patterns[0].id, lane: 0, bar: 0, bars: 1 }];
   expect(parseProject(serializeProject(original))).toStrictEqual(original);
   const samples: Record<string, SampleData> = Object.create({ kick: { name: 'inherited', bytes: new Uint8Array() } });

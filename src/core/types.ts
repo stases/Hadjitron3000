@@ -41,19 +41,25 @@ export interface Channel {
   solo: boolean;
 }
 
-export interface Step {
+/** A note of a row. Times are in ticks, TICKS_PER_STEP to a step. */
+export interface Note {
+  id: string; // unique within the block
+  start: number; // ticks from the start of the block, integer, >= 0
+  len: number; // ticks, integer, >= 1
   note: number; // MIDI note number, 60 = C3
   vel: number; // 0..1
-  len: number; // length in steps, >= 1
 }
 
-/** A block: a few bars of steps for any of the project's sounds. The Track edits one, the Song arranges them. */
+/** A note before the store gives it an id. */
+export type NoteInit = Omit<Note, 'id'>;
+
+/** A block: a few bars of notes for any of the project's sounds. The Track edits one, the Song arranges them. */
 export interface Pattern {
   id: string;
   name: string;
   color: number; // index into the colour palette, 0..7
-  bars: number; // 1..8, sixteen steps per bar
-  cells: Record<string, Record<number, Step>>; // channel id -> step index -> step
+  bars: number; // 1..MAX_BARS, sixteen steps per bar
+  notes: Record<string, Note[]>; // channel id -> its notes, sorted by start, then pitch
 }
 
 /** A block placed on the song timeline. Blocks in different lanes play together. */
@@ -65,12 +71,12 @@ export interface Placement {
   bars: number; // length on the timeline: a shorter block repeats, a longer one is cut off
 }
 
-/** A block on its own, outside a project: its steps together with the sounds that play them. */
+/** A block on its own, outside a project: its notes together with the sounds that play them. */
 export interface Block {
   name: string;
   color: number;
   bars: number;
-  tracks: { sound: Sound; steps: Record<number, Step> }[];
+  tracks: { sound: Sound; notes: Note[] }[];
   samples: Record<string, SampleData>; // the samples its sounds use
 }
 

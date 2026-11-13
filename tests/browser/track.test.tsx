@@ -9,6 +9,8 @@ import { OUT, paramSpec } from '../../src/core/modules';
 import type { FloatSpec } from '../../src/core/modules';
 import { fromNorm, toNorm } from '../../src/core/params';
 import { loopProject as demoProject } from '../support/loopProject';
+import { stepsOf } from '../support/steps';
+import type { Note } from '../../src/core/types';
 import {
   addPattern, addPlacement, openProject, removePattern, selectStep, setPatternBars, setPatternColor, setPlaying,
   setScope, undo, useApp,
@@ -52,7 +54,8 @@ afterEach(async () => {
 const state = () => useApp.getState();
 const pattern = () => state().project.patterns.find((p) => p.id === state().patternId)!;
 const channelId = (row: number) => state().project.channels[row].id;
-const cellsOf = (row: number) => pattern().cells[channelId(row)] ?? {};
+const notesOf = (row: number) => pattern().notes[channelId(row)] ?? [];
+const cellsOf = (row: number) => stepsOf(notesOf(row));
 const lanes = () => [...host.querySelectorAll<HTMLElement>('.h-track-lane')];
 const cell = (row: number, col: number) => lanes()[row].querySelectorAll<HTMLElement>('.h-track-cell')[col];
 const stepsIn = (row: number) => [...lanes()[row].querySelectorAll<HTMLElement>('.h-track-step')];
@@ -126,11 +129,15 @@ test('clicking an empty cell adds a step, plays it and selects it; clicking it a
   expect(state().step).toBeNull();
 });
 
-test('dragging sideways from an empty cell paints steps on the empty cells it passes', async () => {
+test('dragging sideways from an empty cell paints steps on the empty cells it passes, in one undo step', async () => {
   const before = Object.keys(cellsOf(CLAP)).length;
+  const past = state().past.length;
   await drag(centre(cell(CLAP, 0)), centre(cell(CLAP, 1)), centre(cell(CLAP, 3)), centre(cell(CLAP, 6)));
   for (const i of [0, 1, 2, 3, 5, 6]) expect(cellsOf(CLAP)[i]).toEqual({ note: 60, vel: 0.8, len: 1 });
   expect(Object.keys(cellsOf(CLAP))).toHaveLength(before + 6);
+  expect(state().past.length).toBe(past + 1);
+  undo();
+  expect(Object.keys(cellsOf(CLAP))).toHaveLength(before);
 });
 
 test('dragging a step up changes its note, plays each note, and is one undo step', async () => {
@@ -229,9 +236,9 @@ test('the block bar picks, recolours, adds, copies, clears and deletes blocks an
   expect(pattern().name).toBe('C');
   expect(blockSelect().textContent).toBe('C');
   expect(used()).toBe('Not in the song yet');
-  expect(pattern().cells).toEqual(state().project.patterns[0].cells);
+  expect(pattern().notes).toEqual(state().project.patterns[0].notes);
   await click(button('Clear'));
-  expect(pattern().cells).toEqual({});
+  expect(pattern().notes).toEqual({});
   expect(stepsIn(KICK)).toHaveLength(0);
   await click(addButton());
   expect(pattern().name).toBe('D');
@@ -364,4 +371,88 @@ test('Add sound asks the shell, and files dropped on the view are handed to it',
   data.items.add(file);
   cell(KICK, 2).dispatchEvent(new DragEvent('drop', { dataTransfer: data, bubbles: true, cancelable: true }));
   expect(dropFiles).toHaveBeenCalledWith([file]);
+});
+
+/** A row of the block on screen set to these notes, as the piano roll could leave it. */
+function setRow(row: number, notes: Note[]) {
+  flushSync(() => openProject({
+    ...state().project,
+    patterns: state().project.patterns.map((p) =>
+      p.id === state().patternId ? { ...p, notes: { ...p.notes, [channelId(row)]: notes } } : p),
+  }, null));
+}
+
+const KEYS: Note[] = [
+  { id: 'c', start: 0, len: 48, note: 60, vel: 0.8 },
+  { id: 'e', start: 0, len: 24, note: 64, vel: 0.6 },
+  { id: 'g', start: 0, len: 24, note: 67, vel: 0.6 },
+  { id: 'late', start: 52, len: 12, note: 70, vel: 0.9 },
+  { id: 'next', start: 96, len: 24, note: 72, vel: 0.9 },
+];
+
+test('a chord shows its lowest note and how many more, and an off-grid note shows its offset', () => {
+  setRow(KALIMBA, KEYS);
+  const keys = stepsIn(KALIMBA);
+  expect(keys).toHaveLength(3);
+  const [chord, late, next] = keys;
+  expect(chord.textContent).toBe('+2C3');
+  expect(chord.querySelector('.h-track-more')!.textContent).toBe('+2');
+  expect(chord.getBoundingClientRect().right).toBe(cell(KALIMBA, 1).getBoundingClientRect().right);
+  expect(chord.querySelector('.h-track-offset')).toBeNull();
+  expect(late.getBoundingClientRect().left).toBe(cell(KALIMBA, 2).getBoundingClientRect().left);
+  expect(late.textContent).toBe('A#3');
+  const mark = late.querySelector<HTMLElement>('.h-track-offset')!;
+  expect(mark.getBoundingClientRect().left - late.getBoundingClientRect().left).toBe(4);
+  expect(next.querySelector('.h-track-offset')).toBeNull();
+});
+
+test('ordinary editing keeps a chord and an off-grid note whole', async () => {
+  setRow(KALIMBA, KEYS);
+  const { x, y } = centre(cell(KALIMBA, 0));
+  await drag({ x, y }, { x, y: y - 4 }, { x, y: y - 8 });
+  expect(notesOf(KALIMBA).map((n) => [n.id, n.start, n.note])).toEqual([
+    ['c', 0, 62], ['e', 0, 66], ['g', 0, 69], ['late', 52, 70], ['next', 96, 72],
+  ]);
+  expect(stepsIn(KALIMBA)[0].textContent).toBe('+2D3');
+
+  const edge = () => {
+    const r = stepsIn(KALIMBA)[0].getBoundingClientRect();
+    return { x: Math.round(r.right) - 2, y: Math.round(r.top + r.height / 2) };
+  };
+  // The key cannot grow over the late note's step; made one step long, only the long note is cut.
+  await drag(edge(), { x: centre(cell(KALIMBA, 5)).x, y: edge().y });
+  expect(notesOf(KALIMBA).slice(0, 3).map((n) => n.len)).toEqual([48, 24, 24]);
+  const past = state().past.length;
+  await drag(edge(), { x: centre(cell(KALIMBA, 0)).x - 40, y: edge().y });
+  expect(notesOf(KALIMBA).slice(0, 3).map((n) => n.len)).toEqual([24, 24, 24]);
+  expect(state().past.length).toBe(past + 1);
+
+  const wheel = (col: number) => {
+    const { x, y } = centre(cell(KALIMBA, col));
+    document.elementFromPoint(x, y)!
+      .dispatchEvent(new WheelEvent('wheel', { deltaY: -100, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+  };
+  wheel(2);
+  expect(notesOf(KALIMBA).find((n) => n.id === 'late')).toEqual({ ...KEYS[3], vel: 0.95 });
+
+  // Painting passes over the chord and the off-grid note without touching them.
+  await drag(centre(cell(KALIMBA, 1)), centre(cell(KALIMBA, 3)));
+  expect(notesOf(KALIMBA).map((n) => [n.start, n.note])).toEqual([
+    [0, 62], [0, 66], [0, 69], [24, 62], [52, 70], [72, 62], [96, 72],
+  ]);
+
+  // A click takes out everything that starts in the step: the whole chord.
+  await click(cell(KALIMBA, 0));
+  expect(notesOf(KALIMBA).map((n) => n.start)).toEqual([24, 52, 72, 96]);
+  await click(cell(KALIMBA, 2));
+  expect(notesOf(KALIMBA).map((n) => n.start)).toEqual([24, 72, 96]);
+});
+
+test('the inspector names a chord and moves it whole', async () => {
+  setRow(KALIMBA, KEYS);
+  flushSync(() => selectStep({ channelId: channelId(KALIMBA), index: 0 }));
+  expect(host.querySelector('.h-track-which')!.textContent).toBe('Step 1 of Kalimba, 3 notes');
+  const spin = host.querySelectorAll('.h-track-inspector .h-stepper')[0].querySelector('.h-spin.is-up')!;
+  await click(spin);
+  expect(notesOf(KALIMBA).slice(0, 3).map((n) => n.note)).toEqual([61, 65, 68]);
 });

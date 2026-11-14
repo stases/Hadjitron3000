@@ -983,10 +983,12 @@ export function redo(): void {
   }));
 }
 
+/** Open a project in the view that is showing; in the Song view Play goes on playing the song. */
 export function openProject(project: Project, file: FileRef | null): void {
   forgetLastChange();
   const { view, octave } = useApp.getState();
-  useApp.setState({ ...initialState(project, file), view, octave }, true);
+  const scope = view === 'song' ? 'song' : 'pattern';
+  useApp.setState({ ...initialState(project, file), view, scope, octave }, true);
 }
 
 export function markSaved(file: FileRef): void {

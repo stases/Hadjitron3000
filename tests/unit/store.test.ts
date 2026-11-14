@@ -1674,3 +1674,13 @@ test('setSample loads a sample into a Sampler or Grains source and leaves other 
   expect(sound(grains).source.params.sample).toBe('s123');
   expect(project().samples).toEqual({ s123: sample });
 });
+
+test('a project opened in the Song view plays as a song, and in any other view as a block', () => {
+  app.setView('song');
+  app.openProject(emptyProject(), null);
+  expect(state().view).toBe('song');
+  expect(state().scope).toBe('song');
+  app.setView('factory');
+  app.openProject(emptyProject(), null);
+  expect(state().scope).toBe('pattern');
+});

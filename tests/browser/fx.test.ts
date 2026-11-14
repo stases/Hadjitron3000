@@ -4,7 +4,9 @@ import { expect, test } from 'vitest';
 import { renderSound, ringOut } from '../../src/audio';
 import type { ModuleInst, Params, Sound } from '../../src/core/types';
 import { preset } from '../../src/presets';
-import { adsr, amplitudeAt, db, effect, freq, maxJump, notes, peak, project, rms, slice, sound } from './helpers';
+import {
+  adsr, amplitudeAt, db, effect, expectEnergy, freq, maxJump, notes, peak, project, rms, slice, sound,
+} from './helpers';
 
 const flat = adsr(0.002, 0.1, 1, 0.02);
 const sine = (chain: ModuleInst[], extra: Params = {}) =>
@@ -49,8 +51,8 @@ test('sounds made before these effects render exactly as before', async () => {
   for (const [name, length, left, right] of pinned) {
     const pcm = await renderSound(preset(name), {}, { note: 48, dur: 0.5 });
     expect(pcm.channels[0].length, name).toBe(length);
-    expect(pcm.channels[0].reduce((s, v) => s + v * v, 0), name).toBeCloseTo(left, 6);
-    expect(pcm.channels[1].reduce((s, v) => s + v * v, 0), name).toBeCloseTo(right, 6);
+    expectEnergy(pcm.channels[0], left, name);
+    expectEnergy(pcm.channels[1], right, name);
   }
 });
 

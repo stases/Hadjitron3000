@@ -4,7 +4,9 @@ import { expect, test } from 'vitest';
 import { Engine, renderProject, ringOut } from '../../src/audio';
 import { parseProject, serializeProject } from '../../src/core/fileformat';
 import type { Channel, ModuleInst, Pcm, Project } from '../../src/core/types';
-import { adsr, amplitudeAt, db, effect, mod, oldDemo, peak, project, rms, slice, sound, SR, wav } from './helpers';
+import {
+  adsr, amplitudeAt, db, effect, expectEnergy, mod, oldDemo, peak, project, rms, slice, sound, SR, wav,
+} from './helpers';
 
 const blip = (pitch = 81) =>
   sound('osc', { wave: 'sine', pitch: pitch - 60 }, { amp: adsr(0.002, 0.1, 1, 0.02), out: { level: -12 } });
@@ -78,14 +80,13 @@ test('an old project, and one with default buses and no sends, render exactly as
     [busy(), 132300, 1220.819346603, 1986.448699010],
     [oldDemo(), 283667, 2877.251223941, 2678.784811694],
   ];
-  const energy = (d: Float32Array) => d.reduce((s, v) => s + v * v, 0);
   for (const [p, length, left, right] of pinned) {
     const sr = p.name === 'Welcome' ? 8000 : SR;
     const scope = p.song.length ? { kind: 'song' } as const : scopeOf(p);
     const pcm = await renderProject(p, scope, { tail: p.song.length ? undefined : 1, sampleRate: sr });
     expect(pcm.channels[0].length, p.name).toBe(length);
-    expect(energy(pcm.channels[0]), p.name).toBeCloseTo(left, 6);
-    expect(energy(pcm.channels[1]), p.name).toBeCloseTo(right, 6);
+    expectEnergy(pcm.channels[0], left, p.name);
+    expectEnergy(pcm.channels[1], right, p.name);
     // The same project read from a file written before the mixer, and with other buses that nobody sends to.
     const old = JSON.parse(serializeProject(p));
     delete old.project.mixer;

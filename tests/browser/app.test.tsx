@@ -81,6 +81,7 @@ const press = (key: string, init: KeyboardEventInit = {}, target: EventTarget = 
 };
 // Cmd on a Mac, Ctrl elsewhere, as the shortcuts expect.
 const MOD: KeyboardEventInit = IS_MAC ? { metaKey: true } : { ctrlKey: true };
+const SELECT_ALL = IS_MAC ? '{Meta>}a{/Meta}' : '{Control>}a{/Control}';
 const release = (key: string) =>
   document.body.dispatchEvent(new KeyboardEvent('keyup', { key, code: `Key${key.toUpperCase()}`, bubbles: true }));
 
@@ -360,13 +361,13 @@ test('the tempo follows dragging, the wheel and typing', async () => {
 
   await userEvent.dblClick(tempo);
   expect(document.activeElement).toBe($('input.h-app-bpm'));
-  await userEvent.keyboard('{Control>}a{/Control}98.26{Enter}');
+  await userEvent.keyboard(`${SELECT_ALL}98.26{Enter}`);
   expect(state().project.bpm).toBe(98.3);
   await expect.poll(() => $('.h-app-bpm').textContent).toBe('98.3');
 
   await userEvent.dblClick(tempo);
   expect(document.activeElement).toBe($('input.h-app-bpm'));
-  await userEvent.keyboard('{Control>}a{/Control}fast');
+  await userEvent.keyboard(`${SELECT_ALL}fast`);
   expect($<HTMLInputElement>('input.h-app-bpm').value).toBe('fast');
   await userEvent.keyboard('{Enter}');
   expect(await messageText()).toBe('The tempo must be a number from 40 to 240.');

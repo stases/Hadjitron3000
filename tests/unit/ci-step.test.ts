@@ -5,9 +5,11 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 
 // The script is plain JavaScript without types; the specifier is cast so TypeScript does not look for them.
-const { tellingLines, escape } = await import('../../scripts/ci-step.mjs' as string) as {
+const { tellingLines, escape, failedTest, failedList } = await import('../../scripts/ci-step.mjs' as string) as {
   tellingLines(lines: string[], count?: number): string[];
   escape(text: string): string;
+  failedTest(line: string): string | null;
+  failedList(names: string[]): string;
 };
 
 const script = fileURLToPath(new URL('../../scripts/ci-step.mjs', import.meta.url));
@@ -54,6 +56,28 @@ test('telling lines are few and short, and plain output still gives its last lin
   expect(tellingLines(['Building…', 'Something odd happened', ''])).toEqual(['Building… | Something odd happened']);
 });
 
+test('failed tests are found in vitest and Playwright output and listed in one message', () => {
+  expect(failedTest(' FAIL  |browser (chromium)| tests/browser/voice.test.ts > an old sound renders'))
+    .toBe('tests/browser/voice.test.ts > an old sound renders');
+  expect(failedTest('  1) [electron] › tests/e2e/electron.spec.ts:96:1 › the shell serves the app ──────────'))
+    .toBe('[electron] › tests/e2e/electron.spec.ts:96:1 › the shell serves the app');
+  expect(failedTest('\u001b[31m FAIL \u001b[39m tests/unit/a.test.ts > b')).toBe('tests/unit/a.test.ts > b');
+  expect(failedTest(' ✓ |unit| tests/unit/fileformat.test.ts (40 tests) 30ms')).toBeNull();
+  expect(failedTest('   × the transport schedules every step on time 1016ms')).toBeNull();
+  expect(failedList(['a > one', 'b > two'])).toBe('2 failed: a > one\nb > two');
+  const many = failedList(Array.from({ length: 100 }, (_, i) => `tests/browser/file${i}.test.ts > a test with a name`));
+  expect(many.length).toBeLessThan(1600);
+  expect(many).toMatch(/^100 failed: tests\/browser\/file0\.test\.ts/);
+  expect(many).toMatch(/…and \d+ more$/);
+});
+
+test('a failure printed again by a retry is shown once', () => {
+  const failure = VITEST.slice(4, 9);
+  const twice = [...failure, ...failure.map((line) => line.replace('16ms', '21ms (retry x1)'))];
+  const lines = tellingLines(twice);
+  expect(lines.filter((line) => line.includes('AssertionError'))).toHaveLength(1);
+});
+
 test('messages are escaped as workflow commands read them', () => {
   expect(escape('50% done\r\nnext')).toBe('50%25 done%0D%0Anext');
 });
@@ -69,6 +93,7 @@ test('a failed step prints error annotations and writes its tail to the job summ
   expect(result.status).toBe(3);
   expect(result.stdout).toContain('Running 3 tests');
   expect(result.stdout).toContain('::error title=Installed app%2C smoke test::Error: the window did not open');
+  expect(result.stdout).not.toContain('failed: ');
   const written = await readFile(summary, 'utf8');
   expect(written).toContain('### Installed app, smoke test failed (exit code 3)');
   expect(written).toContain('Running 3 tests\nError: the window did not open');

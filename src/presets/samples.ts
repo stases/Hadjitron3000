@@ -1,5 +1,8 @@
 // The factory's own recordings, made in code the first time a sound asks for them: a one-bar drum break and a pad
-// chord. Each is a WAV file kept like one the user loads, under the id its content hashes to (sampleId).
+// chord. Each is a WAV file kept like one the user loads, under a fixed id. The id is what the file hashed to
+// (sampleId) when it was first made, on an x64 machine, but it is a name, never checked against the content: another
+// processor may compute the last bits of the synthesis differently, and a project must find its factory sample by
+// the same id on every machine.
 
 import { rng } from '../audio/random';
 import { encodeWav } from '../core/wav';
@@ -105,7 +108,7 @@ function padChord(): Float32Array {
   return finish(out, sr, 0.8);
 }
 
-/** The factory samples by name: how to make each, and the id its WAV file hashes to. */
+/** The factory samples by name: how to make each, and its fixed id. */
 const FACTORY = {
   break: { name: 'Factory Break.wav', id: 'scf66f83913356e01', make: () => ({ rate: BREAK_RATE, data: drumBreak() }) },
   pad: { name: 'Factory Pad.wav', id: 's41341d4887d7311d', make: () => ({ rate: PAD_RATE, data: padChord() }) },

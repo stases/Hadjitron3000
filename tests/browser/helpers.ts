@@ -1,5 +1,6 @@
 // Measurements on rendered audio, small builders for test sounds and projects, and rendering notes of a sound.
 
+import { expect } from 'vitest';
 import { Engine } from '../../src/audio';
 import { AMP, MODULES } from '../../src/core/modules';
 import { defaultParams } from '../../src/core/params';
@@ -29,6 +30,18 @@ export function rms(d: Float32Array): number {
   let s = 0;
   for (const v of d) s += v * v;
   return Math.sqrt(s / Math.max(d.length, 1));
+}
+
+/**
+ * Check the energy (the sum of squares) of a render against the value pinned when it was measured on an x64 machine.
+ * Chromium on arm64, as on the Mac runners, computes the same audio a few millionths apart: the pinned renders came out
+ * 1.7e-6 to 4.2e-6 away, relative, and Windows on x64 matched exactly. A relative 2e-5 leaves a margin of about five
+ * over that, while almost any change to the sound itself moves its energy far more.
+ */
+export function expectEnergy(d: Float32Array, pinned: number, label = 'energy'): void {
+  let energy = 0;
+  for (const v of d) energy += v * v;
+  expect(Math.abs(energy - pinned) / pinned, `${label}: ${energy}, pinned ${pinned}`).toBeLessThan(2e-5);
 }
 
 export const db = (x: number) => 20 * Math.log10(x);

@@ -9,7 +9,8 @@ import { STOCK_SHAPES, encodeShape } from '../../src/core/shape';
 import type { ModInst, Params, Sound } from '../../src/core/types';
 import { preset } from '../../src/presets';
 import {
-  adsr, amplitudeAt, db, freq, maxJump, mod, notes, onset, peak, project, rms, slice, sound, SR, tone, wav,
+  adsr, amplitudeAt, db, expectEnergy, freq, maxJump, mod, notes, onset, peak, project, rms, slice, sound, SR, tone,
+  wav,
 } from './helpers';
 
 const flat = adsr(0.002, 0.1, 1, 0.02);
@@ -33,7 +34,7 @@ test('an old sound renders exactly as before the voice path existed', async () =
   for (const [name, length, energy] of pinned) {
     const left = (await renderSound(preset(name), {}, { note: 48, dur: 0.5 })).channels[0];
     expect(left.length, name).toBe(length);
-    expect(left.reduce((sum, v) => sum + v * v, 0), name).toBeCloseTo(energy, 6);
+    expectEnergy(left, energy, name);
   }
 });
 

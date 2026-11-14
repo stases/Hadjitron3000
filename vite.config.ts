@@ -10,6 +10,9 @@ export default defineConfig({
   test: {
     // A slow CI machine can miss the timing bounds of a few audio tests; each failure gets one more try there.
     retry: process.env.CI ? 1 : 0,
+    // Only the plain report: on GitHub, vitest would add an annotation for every failure and every retry of it, which
+    // uses up the few a step may have before scripts/ci-step.mjs lists the failed tests.
+    reporters: ['default'],
     projects: [
       {
         extends: true,

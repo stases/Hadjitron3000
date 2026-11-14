@@ -3,7 +3,7 @@
 import { expect, test } from 'vitest';
 import { renderProject } from '../../src/audio';
 import type { Placement, Project } from '../../src/core/types';
-import { adsr, amplitudeAt, db, oldDemo, peak, project, rms, slice, sound } from './helpers';
+import { adsr, amplitudeAt, db, expectEnergy, oldDemo, peak, project, rms, slice, sound } from './helpers';
 
 const song = { kind: 'song' } as const;
 const sine = () => sound('osc', { wave: 'sine' }, { amp: adsr(0.002, 0.1, 1, 0.05), out: { level: -6 } });
@@ -90,8 +90,7 @@ test('an existing project without lanes, fades or mutes renders exactly as befor
   // Length and energy of both channels of the demo song, measured on the commit before this one; the mixer has since
   // moved some of the demo's reverb to a bus, so this is the demo as it was then.
   const pcm = await renderProject(oldDemo(), song, { tail: 2 });
-  const energy = (d: Float32Array) => d.reduce((sum, v) => sum + v * v, 0);
   expect(pcm.channels[0].length).toBe(1432200);
-  expect(energy(pcm.channels[0])).toBeCloseTo(16811.317117581, 6);
-  expect(energy(pcm.channels[1])).toBeCloseTo(17061.309470188, 6);
+  expectEnergy(pcm.channels[0], 16811.317117581, 'left');
+  expectEnergy(pcm.channels[1], 17061.309470188, 'right');
 }, 60_000);

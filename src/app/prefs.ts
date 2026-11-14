@@ -16,11 +16,16 @@ export interface Prefs {
   bookPage: string;
   /** The Guide Book shows its contents beside the page. */
   bookContents: boolean;
+  /** The Guide Book opens in a window of its own instead of docked beside the views. */
+  bookDetached: boolean;
+  /** Where that window was and how big its inside was, in screen pixels; no place before it was ever moved. */
+  bookWindow: { width: number; height: number; left?: number; top?: number };
 }
 
 const KEY = 'hadjitron-prefs';
 const DEFAULTS: Prefs = {
   beginner: true, metronome: false, quantize: 24, scaleSnap: false, bookPage: '', bookContents: true,
+  bookDetached: false, bookWindow: { width: 440, height: 640 },
 };
 
 /** The stored preferences; a missing value or one of the wrong type gets its default. */
@@ -29,7 +34,7 @@ function load(): Prefs {
     const stored: unknown = JSON.parse(localStorage.getItem(KEY) ?? '{}');
     const saved = (stored && typeof stored === 'object' ? stored : {}) as Record<string, unknown>;
     return Object.fromEntries(Object.entries(DEFAULTS).map(([key, value]) =>
-      [key, typeof saved[key] === typeof value ? saved[key] : value])) as Prefs;
+      [key, typeof saved[key] === typeof value && saved[key] !== null ? saved[key] : value])) as Prefs;
   } catch {
     return { ...DEFAULTS };
   }

@@ -26,4 +26,4 @@ export { Slider } from './Slider';
 export { Stepper } from './Stepper';
 export { TabPage, Tabs } from './Tabs';
 export { TextField } from './TextField';
-export { TitleBar, Window } from './Window';
+export { TitleBar, TitleButton, Window } from './Window';

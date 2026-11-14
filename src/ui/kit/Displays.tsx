@@ -52,12 +52,15 @@ export function Display({ width, height, draw, deps = [], live }: DisplayProps) 
       drawRef.current(g, width, height);
     };
     paint();
-    if (!live) return;
-    let frame = requestAnimationFrame(function loop() {
+    // Frames come from the window the display is in, which may be another one than the app's, such as the Guide
+    // Book's own window: a window in the background slows its frames down.
+    const view = g.canvas.ownerDocument.defaultView;
+    if (!live || !view) return;
+    let frame = view.requestAnimationFrame(function loop() {
       paint();
-      frame = requestAnimationFrame(loop);
+      frame = view.requestAnimationFrame(loop);
     });
-    return () => cancelAnimationFrame(frame);
+    return () => view.cancelAnimationFrame(frame);
   }, [width, height, live, ...deps]);
 
   return (

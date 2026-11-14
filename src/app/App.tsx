@@ -12,6 +12,7 @@ import { MixerView } from '../ui/mixer';
 import { SongView } from '../ui/song';
 import { TrackView } from '../ui/track';
 import { Book } from './book/Book';
+import { useBook } from './book/bookStore';
 import { audioNotice, heardNow, onAudioNotice, position, sampleRate } from './audio';
 import { documentName, dropFiles } from './commands';
 import { Dialogs } from './Dialogs';
@@ -20,6 +21,7 @@ import { usePrefs } from './prefs';
 import { useRecord } from './record';
 import { Tour } from './tour/Tour';
 import { Transport } from './Transport';
+import { useWindowActive } from './windowActive';
 import './app.css';
 
 const TABS = [
@@ -87,13 +89,14 @@ function playText(state: AppState): [string, string] {
 function Status() {
   const hint = useHintText();
   const notice = useSyncExternalStore(onAudioNotice, audioNotice);
+  const bookNotice = useBook((s) => s.notice);
   const state = useApp();
   const rate = useSampleRate();
   useFrames(state.playing);
   const [what, detail] = playText(state);
   return (
     <StatusBar>
-      <StatusField>{hint || notice || 'Ready.'}</StatusField>
+      <StatusField>{hint || bookNotice || notice || 'Ready.'}</StatusField>
       <StatusField width={190}>
         <span className="h-app-where">
           <span className="h-app-where-what">{what}</span>
@@ -132,21 +135,6 @@ function useFileDrop(): boolean {
     };
   }, []);
   return over;
-}
-
-function useWindowActive(): boolean {
-  const [active, setActive] = useState(true);
-  useEffect(() => {
-    const on = () => setActive(true);
-    const off = () => setActive(false);
-    window.addEventListener('focus', on);
-    window.addEventListener('blur', off);
-    return () => {
-      window.removeEventListener('focus', on);
-      window.removeEventListener('blur', off);
-    };
-  }, []);
-  return active;
 }
 
 export function App() {

@@ -9,6 +9,8 @@ const devURL = process.env.HADJITRON_DEV_URL;
 const appURL = new URL(devURL || 'app://hadjitron/');
 const nativeFrame = process.argv.includes('--native-frame') || process.env.HADJITRON_NATIVE_FRAME === '1';
 let win;
+// The Guide Book's own window, while it is open.
+let book = null;
 let closeRegistered = false;
 let openRegistered = false;
 let closeSequence = 0;
@@ -295,6 +297,32 @@ function resetHandlers() {
   pendingClose = null;
 }
 
+// The page opens the Guide Book as a blank page of its own origin by this name, and draws the book into it.
+const BOOK_WINDOW = 'guide-book';
+
+function bookOptions() {
+  return {
+    title: 'Guide Book', icon: path.join(__dirname, '..', 'build', 'icon.png'),
+    minWidth: 380, minHeight: 360, useContentSize: true, autoHideMenuBar: true,
+    backgroundColor: '#d8d0be', frame: nativeFrame,
+    ...(process.platform === 'darwin' && !nativeFrame ? { roundedCorners: false } : {}),
+  };
+}
+
+function closeBookWindow() {
+  if (book && !book.isDestroyed()) book.destroy();
+  book = null;
+}
+
+function watchBook(child) {
+  book = child;
+  child.removeMenu();
+  child.on('closed', () => { if (book === child) book = null; });
+  child.webContents.on('will-frame-navigate', (event) => event.preventDefault());
+  child.webContents.on('will-redirect', (event) => event.preventDefault());
+  child.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1280, height: 800, minWidth: 1024, minHeight: 680,
@@ -321,10 +349,12 @@ function createWindow() {
     pendingClose = ++closeSequence;
     win.webContents.send('close-request', pendingClose);
   });
-  win.on('closed', () => { resetHandlers(); win = null; });
-  win.webContents.on('render-process-gone', resetHandlers);
+  win.on('closed', () => { resetHandlers(); closeBookWindow(); win = null; });
+  win.webContents.on('render-process-gone', () => { resetHandlers(); closeBookWindow(); });
   win.webContents.on('did-start-navigation', (event) => {
-    if (event.isMainFrame && !event.isSameDocument) resetHandlers();
+    if (!event.isMainFrame || event.isSameDocument) return;
+    resetHandlers();
+    closeBookWindow();
   });
   win.webContents.on('will-frame-navigate', (event) => {
     try {
@@ -336,10 +366,14 @@ function createWindow() {
     openExternal(event.url);
   });
   win.webContents.on('will-redirect', (event) => event.preventDefault());
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  win.webContents.setWindowOpenHandler(({ url, frameName }) => {
+    if (url === 'about:blank' && frameName === BOOK_WINDOW && !book) {
+      return { action: 'allow', overrideBrowserWindowOptions: bookOptions() };
+    }
     openExternal(url);
     return { action: 'deny' };
   });
+  win.webContents.on('did-create-window', watchBook);
   void win.loadURL(devURL || 'app://hadjitron/').catch(console.error);
 }
 

@@ -63,9 +63,20 @@
   margin-left: 2px;
 }
 
+.h-title-button.is-text {
+  width: auto;
+  margin-right: 2px;
+  padding: 1px 4px;
+  font: var(--font-small);
+}
+
 .h-title-button:active:hover {
   padding: 2px 1px 0 3px;
   box-shadow: var(--bevel-pressed);
+}
+
+.h-title-button.is-text:active:hover {
+  padding: 2px 3px 0 5px;
 }
 
 /* Frames */

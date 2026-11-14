@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
+import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { LEVEL_NAMES, levelOf } from '../../core/levels';
 import { MODULES } from '../../core/modules';
 import type { ParamSpec } from '../../core/modules';
@@ -7,22 +9,28 @@ import { DIVISIONS, fundamental, sweep, timebase } from '../../core/scope';
 import { songBars } from '../../core/sequencer';
 import { EnvelopeDisplay } from '../../ui/factory/EnvelopeDisplay';
 import { PARAM_HINTS } from '../../ui/factory/hints';
-import { Button, Icon, ListBox, Scope, TitleBar, Toolbar, useHint } from '../../ui/kit';
+import {
+  Button, Icon, ListBox, Scope, StatusBar, StatusField, TitleBar, TitleButton, Toolbar, useHint, useHintText,
+} from '../../ui/kit';
 import type { ListItem } from '../../ui/kit';
 import { cx } from '../../ui/kit/cx';
 import { renderedScope, sampleRate } from '../audio';
+import { useDialogs } from '../dialogStore';
 import { setPrefs, usePrefs } from '../prefs';
 import { nextStep, previousStep, useTour } from '../tour/tourStore';
+import { useWindowActive } from '../windowActive';
 import { CHAPTERS, PAGES, findPage, pageKey } from './pages';
 import type {
   ComparePiece, Example, ExamplePiece, KnobsPiece, Page, Piece, TermsPiece, WorkedPiece,
 } from './pages';
 import {
-  closeBook, finishWorked, hear, loadExample, startWorked, turnBy, turnTo, useBook,
+  attachBook, closeBook, detachBook, finishWorked, hear, loadExample, startWorked, turnBy, turnTo, useBook,
 } from './bookStore';
 import './book.css';
 
 const HINTS = {
+  detach: 'Puts the book in a window of its own, to move, size and put on another screen as you like.',
+  attach: 'Puts the book back beside the views.',
   contents: 'Shows or hides the list of chapters beside the page.',
   previous: 'Turns back to the page before.',
   next: 'Turns to the next page.',
@@ -318,17 +326,48 @@ function Contents({ chapter, page }: { chapter: number; page: number }) {
   );
 }
 
-/** The Guide Book: a window beside the views with the contents, the page, and Previous and Next. */
-export function Book() {
-  const open = useBook((s) => s.open);
+/** The book's own window: its title bar lights while it has the focus, and a dialog of the app holds it still. */
+function Detached({ win }: { win: Window }) {
+  const active = useWindowActive(win);
+  const modal = useDialogs((s) => s.dialog !== null || s.messages.length > 0);
+  const hint = useHintText();
+  useEffect(() => {
+    if (!modal) return;
+    const { body } = win.document;
+    const reading = win.document.hasFocus();
+    body.inert = true;
+    if (reading) window.focus();
+    return () => {
+      body.inert = false;
+      if (reading) win.focus();
+    };
+  }, [modal, win]);
+  return createPortal(
+    <Panel active={active} detached>
+      <StatusBar>
+        <StatusField>{hint || 'Ready.'}</StatusField>
+      </StatusBar>
+    </Panel>,
+    win.document.body,
+  );
+}
+
+function Panel({ active, detached, children }: { active?: boolean; detached?: boolean; children?: ReactNode }) {
   const key = usePrefs((p) => p.bookPage);
   const contents = usePrefs((p) => p.bookContents);
-  if (!open) return null;
   const { chapter, page } = findPage(key);
   const at = PAGES.findIndex((p) => p.chapter === chapter && p.page === page);
   return (
-    <div className="h-book" role="complementary" aria-label="Guide Book">
-      <TitleBar title="Guide Book" icon={<Icon name="book-open" />} controls={{ onClose: closeBook }} />
+    <div className={cx('h-book', detached && 'is-detached')} role="complementary" aria-label="Guide Book">
+      <TitleBar
+        title="Guide Book"
+        icon={<Icon name="book-open" />}
+        active={active}
+        buttons={detached
+          ? <TitleButton label="Attach" hint={HINTS.attach} onClick={attachBook} />
+          : <TitleButton label="Detach" hint={HINTS.detach} onClick={detachBook} />}
+        controls={{ onClose: closeBook }}
+      />
       <Toolbar className="h-book-tools">
         <Button pressed={contents} onClick={() => setPrefs({ bookContents: !contents })} hint={HINTS.contents}>
           Contents
@@ -345,6 +384,18 @@ export function Book() {
         {contents && <Contents chapter={chapter} page={page} />}
         <PageView chapter={chapter} page={CHAPTERS[chapter].pages[page]} />
       </div>
+      {children}
     </div>
   );
+}
+
+/**
+ * The Guide Book: a window docked beside the views with the contents, the page, and Previous and Next, or the same
+ * in a window of its own, drawn there through a portal.
+ */
+export function Book() {
+  const open = useBook((s) => s.open);
+  const win = useBook((s) => s.window);
+  if (!open) return null;
+  return win ? <Detached win={win} /> : <Panel />;
 }

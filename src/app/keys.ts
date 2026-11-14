@@ -24,10 +24,13 @@ const held = new Map<string, { channelId: string; note: number }>();
 
 const clampNote = (note: number) => Math.min(MAX_NOTE, Math.max(MIN_NOTE, note));
 
+/**
+ * A text field or the like has the keyboard. Asked by tag name: a key pressed in the Guide Book's own window comes
+ * from that window's elements, which are not instances of this window's element classes.
+ */
 function typing(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement
-    && (target.isContentEditable || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement
-      || target instanceof HTMLSelectElement);
+  const el = target as HTMLElement | null;
+  return !!el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
 }
 
 /** A dialog or an open menu has the keyboard. */
@@ -193,15 +196,15 @@ function onKeyUp(e: KeyboardEvent): void {
   release(e.code);
 }
 
-/** Install the handler on the window. Returns the function that removes it again. */
-export function installKeys(): () => void {
-  window.addEventListener('keydown', onKeyDown);
-  window.addEventListener('keyup', onKeyUp);
-  window.addEventListener('blur', releaseAll);
+/** Install the handler on a window, the app's or the Guide Book's own. Returns the function that removes it again. */
+export function installKeys(target: Window = window): () => void {
+  target.addEventListener('keydown', onKeyDown);
+  target.addEventListener('keyup', onKeyUp);
+  target.addEventListener('blur', releaseAll);
   return () => {
     releaseAll();
-    window.removeEventListener('keydown', onKeyDown);
-    window.removeEventListener('keyup', onKeyUp);
-    window.removeEventListener('blur', releaseAll);
+    target.removeEventListener('keydown', onKeyDown);
+    target.removeEventListener('keyup', onKeyUp);
+    target.removeEventListener('blur', releaseAll);
   };
 }

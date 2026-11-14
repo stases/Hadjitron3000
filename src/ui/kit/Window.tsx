@@ -1,5 +1,6 @@
 import type { CSSProperties, PointerEvent, ReactNode } from 'react';
 import { cx } from './cx';
+import { useHint } from './hint';
 import { Icon } from './Icon';
 
 export interface WindowControls {
@@ -13,11 +14,13 @@ interface TitleBarProps {
   icon?: ReactNode;
   active?: boolean;
   controls?: WindowControls;
+  /** The window's own buttons, such as a `TitleButton` with words on it, before the standard ones. */
+  buttons?: ReactNode;
   movable?: boolean;
   onPointerDown?: (e: PointerEvent<HTMLDivElement>) => void;
 }
 
-export function TitleBar({ title, icon, active = true, controls, movable, onPointerDown }: TitleBarProps) {
+export function TitleBar({ title, icon, active = true, controls, buttons, movable, onPointerDown }: TitleBarProps) {
   return (
     <div
       className={cx('h-titlebar', !active && 'is-inactive', movable && 'is-movable')}
@@ -26,28 +29,39 @@ export function TitleBar({ title, icon, active = true, controls, movable, onPoin
     >
       {icon && <span className="h-titlebar-icon">{icon}</span>}
       <span className="h-titlebar-text">{title}</span>
-      {controls && (
+      {(controls || buttons) && (
         <span className="h-titlebar-buttons" onDoubleClick={(e) => e.stopPropagation()}>
-          {controls.onMinimize && <TitleButton icon="minimize" label="Minimize" onClick={controls.onMinimize} />}
-          {controls.onMaximize && <TitleButton icon="maximize" label="Maximize" onClick={controls.onMaximize} />}
-          {controls.onClose && <TitleButton icon="close" label="Close" onClick={controls.onClose} />}
+          {buttons}
+          {controls?.onMinimize && <TitleButton icon="minimize" label="Minimize" onClick={controls.onMinimize} />}
+          {controls?.onMaximize && <TitleButton icon="maximize" label="Maximize" onClick={controls.onMaximize} />}
+          {controls?.onClose && <TitleButton icon="close" label="Close" onClick={controls.onClose} />}
         </span>
       )}
     </div>
   );
 }
 
-function TitleButton({ icon, label, onClick }: { icon: 'minimize' | 'maximize' | 'close'; label: string; onClick(): void }) {
+interface TitleButtonProps {
+  label: string;
+  /** Without an icon the button shows its label in words. */
+  icon?: 'minimize' | 'maximize' | 'close';
+  hint?: string;
+  onClick(): void;
+}
+
+export function TitleButton({ label, icon, hint, onClick }: TitleButtonProps) {
+  const hover = useHint(hint);
   return (
     <button
       type="button"
-      className={cx('h-title-button', icon === 'close' && 'is-close')}
-      aria-label={label}
+      className={cx('h-title-button', icon === 'close' && 'is-close', !icon && 'is-text')}
+      aria-label={icon && label}
       tabIndex={-1}
       onPointerDown={(e) => e.stopPropagation()}
       onClick={onClick}
+      {...hover.props}
     >
-      <Icon name={icon} />
+      {icon ? <Icon name={icon} /> : label}
     </button>
   );
 }

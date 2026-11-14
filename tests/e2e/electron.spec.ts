@@ -111,3 +111,71 @@ test('the shell serves the audio processors as scripts, and the crusher crushes 
     await quit(app);
   }
 });
+
+test('the Guide Book detaches into a window of its own and attaches again, and no other window opens', async () => {
+  const app = await launch();
+  try {
+    const page = await app.firstWindow();
+    await page.waitForLoadState('domcontentloaded');
+    // Start docked on the first page at the default size, whatever an earlier run left in the preferences.
+    await page.evaluate(() => {
+      const prefs = JSON.parse(localStorage.getItem('hadjitron-prefs') ?? '{}');
+      localStorage.setItem('hadjitron-prefs', JSON.stringify({ ...prefs, bookPage: '', bookDetached: false, bookWindow: undefined }));
+    });
+    await page.reload();
+    await page.waitForLoadState('domcontentloaded');
+    const welcome = page.getByRole('button', { name: 'Listen to the Demo' });
+    if (await welcome.isVisible()) await welcome.click();
+    const windows = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()
+      .map((w) => ({ title: w.getTitle(), menu: w.isMenuBarVisible(), size: w.getContentSize() })));
+
+    await page.locator('.h-menubar-item', { hasText: 'Help' }).click();
+    await page.locator('.h-menu-item', { hasText: 'Guide Book' }).click();
+    const [book] = await Promise.all([
+      app.waitForEvent('window'), page.locator('.h-book .h-title-button', { hasText: 'Detach' }).click(),
+    ]);
+    await expect(book.locator('.h-book-title')).toHaveText(/\w/);
+    await expect(page.locator('.h-book')).toHaveCount(0);
+    expect(await windows()).toContainEqual({ title: 'Guide Book', menu: false, size: [440, 640] });
+    await book.locator('.h-button', { hasText: 'Next' }).click();
+    expect(await book.locator('.h-book-title').textContent()).toBe('Sounds, blocks and songs');
+
+    // Only the book's window may open; anything else is refused as before, and the book's window stays on its page.
+    expect(await page.evaluate(() => window.open('', 'other') === null)).toBe(true);
+    expect(await page.evaluate(() => window.open('app://hadjitron/kit.html', 'book') === null)).toBe(true);
+    expect(await page.evaluate(() => window.open('app://hadjitron/kit.html', 'guide-book') === null)).toBe(true);
+    expect(await page.evaluate(() => window.open('', 'guide-book') === null)).toBe(true);
+    expect(book.url()).toBe('about:blank');
+    await expect(book.locator('.h-book-title')).toHaveText('Sounds, blocks and songs');
+    expect(await windows()).toHaveLength(2);
+
+    await book.locator('.h-title-button', { hasText: 'Attach' }).click();
+    await expect.poll(async () => (await windows()).length).toBe(1);
+    await expect(page.locator('.h-book .h-book-title')).toHaveText('Sounds, blocks and songs');
+
+    // Closing the book's window from outside, as its own close box does, closes the book.
+    await Promise.all([app.waitForEvent('window'), page.locator('.h-book .h-title-button').first().click()]);
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((w) => w.getTitle() === 'Guide Book')!
+      .close());
+    await expect.poll(async () => (await windows()).length).toBe(1);
+    await expect(page.locator('.h-book')).toHaveCount(0);
+    await page.locator('.h-menubar-item', { hasText: 'Help' }).click();
+    const [again] = await Promise.all([
+      app.waitForEvent('window'), page.locator('.h-menu-item', { hasText: 'Guide Book' }).click(),
+    ]);
+    await expect(again.locator('.h-book-title')).toHaveText('Sounds, blocks and songs');
+
+    // Reloading the app's page closes the book's window; the book opens detached again from the Help menu.
+    await page.reload();
+    await expect.poll(async () => (await windows()).length).toBe(1);
+    await page.locator('.h-menubar-item', { hasText: 'Help' }).click();
+    const [last] = await Promise.all([
+      app.waitForEvent('window'), page.locator('.h-menu-item', { hasText: 'Guide Book' }).click(),
+    ]);
+    await last.locator('.h-title-button', { hasText: 'Attach' }).click();
+    await expect.poll(async () => (await windows()).length).toBe(1);
+    await expect(page.locator('.h-book')).toHaveCount(1);
+  } finally {
+    await quit(app);
+  }
+});

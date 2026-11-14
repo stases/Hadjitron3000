@@ -48,6 +48,31 @@
   }
 }
 
+/* In a window of its own the book fills the window, with a status bar at its foot. Media queries here ask about the
+   book's window, since its document carries copies of these stylesheets. */
+.h-book.is-detached {
+  position: fixed;
+  inset: 0;
+  width: auto;
+  margin: 0;
+}
+
+.h-book.is-detached .h-book-contents {
+  width: 150px;
+}
+
+@media (max-width: 439px) {
+  .h-book.is-detached .h-book-contents {
+    width: 124px;
+  }
+}
+
+/* The window is narrow, so its status bar has room for two lines of a hint. */
+.h-book.is-detached .h-statusfield {
+  height: 36px;
+  white-space: normal;
+}
+
 .h-book-contents .h-list-label {
   overflow: hidden;
   text-overflow: ellipsis;

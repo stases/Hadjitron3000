@@ -39,6 +39,8 @@ import {
   TabPage,
   Tabs,
   TextField,
+  TitleBar,
+  TitleButton,
   Toolbar,
   Well,
   Window,
@@ -184,6 +186,15 @@ function ChromeSection() {
         <Window title="No buttons" style={{ width: 200 }}>
           <div className="g-pad">Without controls no buttons are drawn.</div>
         </Window>
+        <div className="h-window" style={{ width: 260 }}>
+          <TitleBar
+            title="Guide Book"
+            icon={<Icon name="book-open" />}
+            buttons={<TitleButton label="Detach" hint="A title button with a word on it." onClick={noop} />}
+            controls={{ onClose: noop }}
+          />
+          <div className="g-pad">A title button without an icon carries its word, as Detach does on the Guide Book.</div>
+        </div>
       </div>
     </GroupBox>
   );

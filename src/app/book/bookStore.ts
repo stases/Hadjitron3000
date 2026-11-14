@@ -1,5 +1,5 @@
-// The Guide Book's window: whether it is open, the page (kept in the preferences), loading and hearing examples,
-// and running the steps of a worked example.
+// The Guide Book's window: whether it is open, docked or in a window of its own, the page (kept in the preferences),
+// loading and hearing examples, and running the steps of a worked example.
 
 import { create } from 'zustand';
 import { ringOut } from '../../audio';
@@ -10,6 +10,7 @@ import { playRendered, stopRendered } from '../audio';
 import { addBlockToProject, confirmDiscard } from '../commands';
 import { setPrefs, usePrefs } from '../prefs';
 import { closeTour, startTour } from '../tour/tourStore';
+import { closeBookWindow, openBookWindow } from './bookWindow';
 import { CHAPTERS, PAGES, findPage, pageKey } from './pages';
 import type { Example, WorkedPiece } from './pages';
 
@@ -20,21 +21,53 @@ interface BookState {
   hearing: Example | null;
   /** How far the example being heard has been rendered, 0..1, until it starts to play; null when it plays. */
   rendering: number | null;
+  /** The book's own window while it is detached and open. */
+  window: Window | null;
+  /** What the status bar says when the book could not open a window of its own. */
+  notice: string;
 }
 
-export const useBook = create<BookState>(() => ({ open: false, hearing: null, rendering: null }));
+const BLOCKED = 'The browser would not open a window for the Guide Book, so it stays here; allow pop-ups to detach it.';
 
-/** Open the book where the reader left it, or at a page. */
+export const useBook = create<BookState>(() => ({
+  open: false, hearing: null, rendering: null, window: null, notice: '',
+}));
+
+/** Open the book where the reader left it, or at a page, docked or in its own window as it was last. */
 export function openBook(chapter?: string, page = 0): void {
   const c = CHAPTERS.find((ch) => ch.id === chapter);
   if (c) turnTo(pageKey(c, page));
+  if (usePrefs.getState().bookDetached && !useBook.getState().window) showWindow();
   useBook.setState({ open: true });
 }
 
 export function closeBook(): void {
   closeTour();
   stopHearing();
-  useBook.setState({ open: false });
+  closeBookWindow();
+  useBook.setState({ open: false, window: null, notice: '' });
+}
+
+/** Put the book in its own window; when the browser will not open one, it stays docked and says so. */
+function showWindow(): boolean {
+  const win = openBookWindow(closeBook);
+  if (!win) {
+    setPrefs({ bookDetached: false });
+    useBook.setState({ window: null, notice: BLOCKED });
+    return false;
+  }
+  useBook.setState({ window: win, notice: '' });
+  return true;
+}
+
+export function detachBook(): void {
+  if (showWindow()) setPrefs({ bookDetached: true });
+}
+
+export function attachBook(): void {
+  closeBookWindow();
+  useBook.setState({ window: null });
+  setPrefs({ bookDetached: false });
 }
 
 /** Show a page; steps under way on the page left end, and so does an example being heard. */

@@ -11,7 +11,8 @@ import { closeBook, finishWorked, openBook, startWorked, turnTo, useBook } from 
 import { MAKE_A_SONG, MAKE_A_SOUND } from '../../src/app/book/chapters/01-first-steps';
 import { CHAPTERS, pageKey } from '../../src/app/book/pages';
 import type { Example, WorkedPiece } from '../../src/app/book/pages';
-import { usePrefs } from '../../src/app/prefs';
+import { installKeys } from '../../src/app/keys';
+import { setPrefs, usePrefs } from '../../src/app/prefs';
 import { restoreSession, saveSession } from '../../src/app/session';
 import { closeTour, showStep, useTour } from '../../src/app/tour/tourStore';
 import { platform } from '../../src/platform';
@@ -47,7 +48,9 @@ beforeEach(async () => {
   await page.viewport(1280, 800);
   store.openProject(demoProject(), null);
   store.setView('song');
-  usePrefs.setState({ beginner: true, bookPage: '', bookContents: true });
+  usePrefs.setState({
+    beginner: true, bookPage: '', bookContents: true, bookDetached: false, bookWindow: { width: 440, height: 640 },
+  });
   useFolds.setState({}, true);
   vi.spyOn(platform.library, 'list').mockResolvedValue([]);
 });
@@ -503,4 +506,164 @@ describe('every step of every worked example points at a control that is on scre
       }
     }, 60_000);
   }
+});
+
+describe('the book in a window of its own', () => {
+  const win = () => useBook.getState().window!;
+  const $w = <T extends Element = HTMLElement>(sel: string) => win().document.querySelector<T>(sel);
+  const $$w = (sel: string) => [...win().document.querySelectorAll<HTMLElement>(sel)];
+  const windowButton = (label: string) => $$w('.h-book .h-button, .h-book .h-title-button')
+    .find((b) => b.textContent === label)!;
+  const titleButton = (label: string) => $$('.h-book .h-title-button').find((b) => b.textContent === label)!;
+  const status = () => $('.h-statusfield')!.textContent;
+  const windowCount = () => $w('.h-book-step.is-current .h-book-count')?.textContent;
+
+  async function detach(): Promise<void> {
+    await userEvent.click(titleButton('Detach'));
+    await expect.poll(() => $w('.h-book-title')?.textContent).toBeTruthy();
+  }
+
+  test('Detach moves the book into its own window and gives the views its width; Attach brings it back', async () => {
+    renderApp();
+    flushSync(() => openBook('first-steps', 1));
+    const docked = $('.h-app-views')!.getBoundingClientRect().width;
+    await detach();
+    expect($('.h-book')).toBeNull();
+    expect($('.h-app-views')!.getBoundingClientRect().width).toBeGreaterThan(docked + 300);
+    expect(win().document.title).toBe('Guide Book');
+    expect(getComputedStyle($w('.h-book')!).position).toBe('fixed');
+    expect($w('.h-book-title')!.textContent).toBe(CHAPTERS[0].pages[1].title);
+    expect(usePrefs.getState().bookDetached).toBe(true);
+
+    flushSync(() => windowButton('Next').click());
+    expect($w('.h-book-title')!.textContent).toBe(CHAPTERS[0].pages[2].title);
+    const third = $$w('.h-book-contents .h-list-row').find((r) => r.textContent === `3. ${CHAPTERS[2].title}`)!;
+    flushSync(() => third.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })));
+    expect($w('.h-book-title')!.textContent).toBe(CHAPTERS[2].pages[0].title);
+
+    const opened = win();
+    flushSync(() => windowButton('Attach').click());
+    await expect.poll(() => opened.closed).toBe(true);
+    expect(useBook.getState().open).toBe(true);
+    expect(pageTitle()).toBe(CHAPTERS[2].pages[0].title);
+    expect(titleButton('Detach')).toBeTruthy();
+    expect(JSON.parse(localStorage.getItem('hadjitron-prefs')!).bookDetached).toBe(false);
+  });
+
+  test('the detached book loads an example after the offer to save in the main window, and hears one', async () => {
+    renderApp();
+    store.setBpm(101);
+    flushSync(() => openBook('first-steps', 1));
+    await detach();
+    flushSync(() => windowButton('Load this example').click());
+    await expect.poll(() => $('.h-message-text')?.textContent).toBe('Save changes to Welcome?');
+    expect(win().document.body.inert).toBe(true);
+    await userEvent.click($$('.h-message-buttons .h-button').find((b) => b.textContent === "Don't Save")!);
+    await expect.poll(() => state().project.bpm).toBe(126);
+    await expect.poll(() => win().document.body.inert).toBe(false);
+
+    flushSync(() => turnTo(pageKey(CHAPTERS.find((c) => c.id === 'effects')!, 1)));
+    const hear = () => $$w('.h-book-side .h-button').find((b) => /Hear it|Stop/.test(b.textContent!))!;
+    flushSync(() => hear().click());
+    await expect.poll(() => vi.mocked(audio.playRendered).mock.calls.length).toBe(1);
+    await expect.poll(() => hear().textContent).toBe('Stop');
+    flushSync(() => hear().click());
+    expect(audio.stopRendered).toHaveBeenCalled();
+    await expect.poll(() => hear().textContent).toBe('Hear it');
+  });
+
+  test('a guided step in the detached book frames its control in the main window', async () => {
+    renderApp();
+    flushSync(() => openBook('first-steps', 3));
+    await detach();
+    await startWorked(MAKE_A_SONG);
+    await expect.poll(windowCount).toBe('Step 1 of 14');
+    const framed = (name: string) => {
+      const t = target(name)?.getBoundingClientRect();
+      const f = $('.h-tour-frame')?.getBoundingClientRect();
+      return !!t && !!f && f.left === Math.round(t.left) - 3 && f.top === Math.round(t.top) - 3;
+    };
+    await expect.poll(() => framed('grid')).toBe(true);
+    flushSync(() => $$w('.h-book-step.is-current .h-button').find((b) => b.textContent === 'Next')!.click());
+    await expect.poll(windowCount).toBe('Step 2 of 14');
+    await expect.poll(() => framed('row-Kick')).toBe(true);
+
+    await finishWorked(MAKE_A_SONG);
+    expect(state().project.song).toHaveLength(3);
+    await expect.poll(() => $('.h-tour-frame')).toBeNull();
+  });
+
+  test('keys pressed in the book window reach the app, except the reading keys, which scroll the page', async () => {
+    renderApp();
+    flushSync(() => openBook('first-steps', 0));
+    await detach();
+    const key = (k: string, code = k, init: KeyboardEventInit = {}) => flushSync(() => win().document.body
+      .dispatchEvent(new KeyboardEvent('keydown', { key: k, code, bubbles: true, cancelable: true, ...init })));
+    key(' ', 'Space');
+    expect(state().playing).toBe(true);
+    key(' ', 'Space');
+    expect(state().playing).toBe(false);
+    store.setBpm(99);
+    key('z', 'KeyZ', { ctrlKey: true, metaKey: true });
+    expect(state().project.bpm).toBe(126);
+
+    const page = $w('.h-book-page')!;
+    page.style.height = '200px';
+    key('PageDown');
+    expect(page.scrollTop).toBeGreaterThan(0);
+    key('Home');
+    expect(page.scrollTop).toBe(0);
+    store.setView('track');
+    const step = { channelId: state().project.channels[0].id, index: 0 };
+    store.selectStep(step);
+    key('ArrowRight');
+    expect(state().step).toEqual(step);
+    const removeKeys = installKeys();
+    flushSync(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })));
+    removeKeys();
+    expect(state().step).toEqual({ ...step, index: 1 });
+  });
+
+  test('closing the window closes the book, which opens again detached at the size it had', async () => {
+    renderApp();
+    flushSync(() => openBook());
+    await detach();
+    const { innerWidth: width, innerHeight: height } = win();
+    win().close();
+    await expect.poll(() => useBook.getState().open).toBe(false);
+    expect(useBook.getState().window).toBeNull();
+    expect($('.h-book')).toBeNull();
+    const stored = JSON.parse(localStorage.getItem('hadjitron-prefs')!);
+    expect(stored.bookDetached).toBe(true);
+    expect(stored.bookWindow).toMatchObject({ width, height });
+
+    setPrefs({ bookWindow: { width: 500, height: 600, left: 40, top: 30 } });
+    const open = vi.spyOn(window, 'open');
+    flushSync(() => openBook());
+    expect(open.mock.lastCall![2]).toBe('popup,width=500,height=600,left=40,top=30');
+    expect($('.h-book')).toBeNull();
+    expect($w('.h-book')).not.toBeNull();
+    flushSync(closeBook);
+    expect(useBook.getState().window).toBeNull();
+    expect(usePrefs.getState().bookDetached).toBe(true);
+  });
+
+  test('a blocked pop-up leaves the book docked and says so in the status bar', async () => {
+    vi.spyOn(window, 'open').mockReturnValue(null);
+    renderApp();
+    flushSync(() => openBook());
+    await userEvent.click(titleButton('Detach'));
+    expect($('.h-book')).not.toBeNull();
+    expect(useBook.getState().window).toBeNull();
+    expect(usePrefs.getState().bookDetached).toBe(false);
+    await userEvent.hover($('.h-app-views')!);
+    await expect.poll(status).toMatch(/^The browser would not open a window for the Guide Book/);
+
+    flushSync(closeBook);
+    expect(status()).not.toMatch(/Guide Book/);
+    flushSync(() => setPrefs({ bookDetached: true }));
+    flushSync(() => openBook());
+    expect($('.h-book')).not.toBeNull();
+    expect(usePrefs.getState().bookDetached).toBe(false);
+  });
 });

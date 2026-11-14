@@ -9,7 +9,7 @@ import { Automated, cut, dbToGain, follow, glide, schedule, type Placed, type Pl
 import { Bus, mix, type Slot } from './mix';
 import { EFFECT_BUILDERS, type Effect } from './modules/effects';
 import { modSource, type ModSource } from './modules/modulators';
-import { SOURCE_BUILDERS, type Follower, type SourceVoice } from './modules/sources';
+import { SOURCE_BUILDERS, prepareSource, type Follower, type SourceVoice } from './modules/sources';
 import { voiceFilter, type VoiceFilter } from './modules/voicefilter';
 
 const MAX_VOICES = 24;
@@ -155,6 +155,7 @@ export class ChannelGraph {
     this.gain = new GainNode(ctx, { gain: audible && !fadeIn ? 1 : 0 });
     if (fadeIn) glide(this.gain.gain, audible ? 1 : 0, ctx.currentTime, MUTE_TAU);
     this.tremolo.connect(this.level).connect(this.panner).connect(this.gain).connect(slot.input);
+    prepareSource(ctx, sound.source.type);
 
     let next: AudioNode = this.tremolo;
     for (const m of [...sound.chain].reverse()) {

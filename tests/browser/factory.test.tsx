@@ -323,7 +323,7 @@ test('the add lists and the source list are grouped by level in beginner mode an
   expect(await addList('modulator')).toEqual(['BASICS', 'Envelope', 'LFO', 'SHAPING', 'Drift']);
   await userEvent.click(unit('Source').querySelector('[role="combobox"]')!);
   expect([...document.querySelector('.h-select-list')!.children].map((el) => el.textContent)).toEqual([
-    'Basics', 'Oscillator', 'Noise', 'Sampler', 'Shaping', 'FM Pair',
+    'Basics', 'Oscillator', 'Noise', 'Sampler', 'Shaping', 'FM Pair', 'More…',
   ]);
   await userEvent.keyboard('{Escape}');
 
@@ -334,7 +334,7 @@ test('the add lists and the source list are grouped by level in beginner mode an
   ]);
   expect(await addList('modulator')).toEqual(['Envelope', 'LFO', 'Drift']);
   await userEvent.click(unit('Source').querySelector('[role="combobox"]')!);
-  expect(optionTexts()).toEqual(['Oscillator', 'FM Pair', 'Noise', 'Sampler']);
+  expect(optionTexts()).toEqual(['Oscillator', 'FM Pair', 'Noise', 'Sampler', 'Grains']);
   expect(document.querySelector('.h-select-heading')).toBeNull();
 });
 
@@ -628,4 +628,70 @@ test('the compressor shows its gain reduction, and a synced phaser greys out its
   flushSync(() => setParam(id, phaser, 'sync', '1bar'));
   expect(rate().getAttribute('aria-disabled')).toBe('true');
   expect(lit('Phaser', 'Shaping')).toBe(true);
+});
+
+const toneSample = (name: string) => {
+  const n = 44100;
+  const tone = Float32Array.from({ length: n }, (_, i) => Math.sin(i / 10) * (1 - i / n));
+  return { name, bytes: encodeWav({ sampleRate: 44100, channels: [tone, tone] }) };
+};
+
+test('Grains shows its sample with Position, Size and Density at hand and the rest folded as Shaping', async () => {
+  const id = state().channelId!;
+  flushSync(() => setSourceType(id, 'grains'));
+  expect(knobs('Source')).toEqual(['Position', 'Size', 'Density']);
+  expect(unit('Source').textContent).toContain('Load...');
+  await expect.poll(() => unit('Source').textContent).toContain('Drop an audio file here or press Load.');
+  expect(folds('Source').map((b) => b.textContent)).toEqual(['Shaping']);
+  await userEvent.click(fold('Source', 'Shaping'));
+  const shaping = ['Pitch', 'Fine', 'Spray', 'Amount', 'Width', 'Reverse', 'Glide', 'Octaves', 'Gate'];
+  expect(knobs('Source')).toEqual(['Position', 'Size', 'Density', ...shaping]);
+  expect(unit('Source').querySelector('.h-rack-section')!.textContent).toContain('Octaves');
+  expect(sections('Source')).toContain('Shaping');
+  expect(unit('Source').querySelector('[aria-label="Pitch Spray"]')!.textContent).toContain('Octaves');
+  pro();
+  expect(knobs('Source')).toEqual(['Position', 'Size', 'Density', ...shaping]);
+
+  const canvas = () => unit('Source').querySelector('canvas')!;
+  setSample(id, 'grain-tone', toneSample('grain.wav'));
+  await expect.poll(() => unit('Source').textContent).toContain('grain.wav');
+  const centred = canvas().toDataURL();
+  // Opening the fold scrolled the narrow test page sideways.
+  canvas().scrollIntoView({ inline: 'start' });
+  const r = canvas().getBoundingClientRect();
+  const y = Math.round(r.top + r.height / 2);
+  await userEvent.pointer([
+    { coords: { x: Math.round(r.left + r.width / 10), y } }, { keys: '[MouseLeft>]' },
+    { coords: { x: Math.round(r.left + (3 * r.width) / 5), y } }, { keys: '[/MouseLeft]' },
+  ]);
+  expect(sound().source.params.position).toBeCloseTo(0.6, 1);
+  expect(canvas().toDataURL()).not.toBe(centred);
+  const moved = canvas().toDataURL();
+  flushSync(() => setParam(id, 'source', 'spray', 0.5));
+  expect(canvas().toDataURL()).not.toBe(moved);
+});
+
+test('the sampler slices in its Shaping section, with Sensitivity only for Hits, lines on the display and the lit slice', async () => {
+  const id = state().channelId!;
+  flushSync(() => setSourceType(id, 'sample'));
+  await userEvent.click(fold('Source', 'Shaping'));
+  const section = () => unit('Source').querySelector('.h-rack-section')!.textContent;
+  expect(section()).toContain('Slices');
+  const toTrack = () => [...unit('Source').querySelectorAll<HTMLButtonElement>('.h-button')]
+    .find((b) => b.textContent === 'Slices to Track')!;
+  expect(toTrack().disabled).toBe(true);
+
+  const canvas = () => unit('Source').querySelector('canvas')!;
+  setSample(id, 'slice-tone', toneSample('slices.wav'));
+  await expect.poll(() => unit('Source').textContent).toContain('slices.wav');
+  const whole = canvas().toDataURL();
+  flushSync(() => setParam(id, 'source', 'slices', '8'));
+  expect(canvas().toDataURL()).not.toBe(whole);
+  expect(toTrack().disabled).toBe(false);
+  expect(knobs('Source')).not.toContain('Sensitivity');
+  const lines = canvas().toDataURL();
+  tapped.note = 62;
+  await expect.poll(() => canvas().toDataURL()).not.toBe(lines);
+  flushSync(() => setParam(id, 'source', 'slices', 'hits'));
+  expect(knobs('Source')).toContain('Sensitivity');
 });

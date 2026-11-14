@@ -1,0 +1,58 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Cloud Pad",
+    "source": {
+      "id": "source",
+      "type": "grains",
+      "params": {
+        "position": 0.35,
+        "size": 0.18,
+        "density": 6,
+        "spray": 0.12,
+        "pspray": 10,
+        "width": 0.8,
+        "reverse": 0.25
+      }
+    },
+    "amp": {
+      "attack": 1.2,
+      "decay": 1,
+      "sustain": 1,
+      "release": 2.5
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "space",
+        "params": {
+          "size": 7,
+          "tone": 6000,
+          "mix": 0.3
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "drift",
+        "per": "note",
+        "params": {
+          "rate": 0.08,
+          "smooth": 1
+        },
+        "target": {
+          "module": "source",
+          "param": "position"
+        },
+        "amount": 0.3
+      }
+    ],
+    "out": {
+      "level": -3,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

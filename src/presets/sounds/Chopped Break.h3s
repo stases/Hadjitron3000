@@ -1,0 +1,28 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Chopped Break",
+    "source": {
+      "id": "source",
+      "type": "sample",
+      "params": {
+        "slices": "8",
+        "mode": "oneshot"
+      }
+    },
+    "amp": {
+      "attack": 0,
+      "decay": 0.3,
+      "sustain": 1,
+      "release": 0.05
+    },
+    "chain": [],
+    "mods": [],
+    "out": {
+      "level": -6,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

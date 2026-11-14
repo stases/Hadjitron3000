@@ -2,5 +2,6 @@
 
 import './comb';
 import './crusher';
+import './grains';
 import './space';
 import './tape';

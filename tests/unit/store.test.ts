@@ -1644,3 +1644,33 @@ test('a row replaced again and again with one take is one undo step, until somet
   expect(pattern().notes).not.toHaveProperty(a);
   expect(state().past.length).toBe(before + 2);
 });
+
+test('replaceRow puts new notes in place of a row\'s in one undo step, lengthening the block when asked', () => {
+  const id = app.addChannel(newSound('sample'));
+  const p = pattern().id;
+  put(p, id, 3, 50);
+  const before = project();
+  const notes: NoteInit[] = [0, 1, 2, 3].map((k) => ({ start: k * 16 * T, len: 16 * T, note: 60 + k, vel: 0.8 }));
+  app.replaceRow(p, id, notes, 4);
+  expect(pattern().bars).toBe(4);
+  expect(row(id)).toEqual(notes);
+  app.undo();
+  expect(project()).toBe(before);
+  // A block is never made shorter, nor longer than the longest; notes past its end are left out.
+  app.replaceRow(p, id, notes, 2);
+  expect(pattern().bars).toBe(2);
+  expect(row(id)).toEqual(notes.slice(0, 2));
+  app.replaceRow(p, id, notes, 1);
+  expect(pattern().bars).toBe(2);
+  app.replaceRow(p, id, notes, MAX_BARS + 5);
+  expect(pattern().bars).toBe(MAX_BARS);
+});
+
+test('setSample loads a sample into a Sampler or Grains source and leaves other sources alone', () => {
+  const grains = app.addChannel(newSound('grains'));
+  const osc = app.addChannel(newSound('osc'));
+  app.setSample(grains, 's123', sample);
+  app.setSample(osc, 's456', sample);
+  expect(sound(grains).source.params.sample).toBe('s123');
+  expect(project().samples).toEqual({ s123: sample });
+});

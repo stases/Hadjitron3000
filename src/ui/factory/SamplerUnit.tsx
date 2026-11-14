@@ -1,189 +1,58 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { PointerEvent } from 'react';
-import { loadSample, loadSampleFile } from '../../app/commands';
-import { decodeSample, sampleBuffer } from '../../audio';
+import { useEffect, useState } from 'react';
+import { slicesToTrack } from '../../app/commands';
+import { soundingNote } from '../../app/audio';
+import { sliceTimes } from '../../audio';
 import { MODULES, paramSpec } from '../../core/modules';
-import { formatValue } from '../../core/params';
 import type { ModuleInst } from '../../core/types';
-import { setParam, useApp } from '../../state/store';
-import { Button, Display, RackUnit, setHint, tokenColor, useHint } from '../kit';
+import { Button, RackUnit, tokenColor } from '../kit';
 import { Control, SourceSelect, paramCell } from './controls';
-import { PARAM_HINTS } from './hints';
+import { SLICE_HINTS } from './hints';
 import { useLevels } from './levels';
 import type { Cell } from './levels';
+import { STRIP, Waveform, column, loadCell, useDecoded } from './Waveform';
 
-const WAVE_W = 500;
-const WAVE_H = 76;
-/** The strip at the top of the display that holds the file name and the direction arrow. */
-const STRIP = 16;
-
-/** Lowest and highest sample of every pixel column, over all channels. */
-function peaks(buffer: AudioBuffer, columns: number): Float32Array {
-  const out = new Float32Array(columns * 2);
-  const data = Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c));
-  for (let x = 0; x < columns; x++) {
-    const i0 = Math.floor((x * buffer.length) / columns);
-    const i1 = Math.max(i0 + 1, Math.floor(((x + 1) * buffer.length) / columns));
-    let lo = 0;
-    let hi = 0;
-    for (const d of data) {
-      for (let i = i0; i < i1 && i < d.length; i++) {
-        lo = Math.min(lo, d[i]);
-        hi = Math.max(hi, d[i]);
-      }
-    }
-    out[x * 2] = lo;
-    out[x * 2 + 1] = hi;
-  }
-  return out;
-}
-
-function useDecoded(id: string, bytes: Uint8Array | undefined): AudioBuffer | null | undefined {
-  const [result, setResult] = useState<{ id: string; buffer: AudioBuffer | null }>();
+/** The note a channel sounds, read on every frame while `on`, or null. */
+function useSounding(channelId: string, on: boolean): number | null {
+  const [note, setNote] = useState<number | null>(null);
   useEffect(() => {
-    if (!id || !bytes || sampleBuffer(id)) return;
-    let live = true;
-    decodeSample(id, bytes).then(
-      (buffer) => live && setResult({ id, buffer }),
-      () => live && setResult({ id, buffer: null }),
-    );
-    return () => {
-      live = false;
-    };
-  }, [id, bytes]);
-  if (!id) return undefined;
-  if (!bytes) return null;
-  return sampleBuffer(id) ?? (result?.id === id ? result.buffer : undefined);
-}
-
-function Waveform({ channelId, source }: { channelId: string; source: ModuleInst }) {
-  const id = source.params.sample as string;
-  const sample = useApp((s) => (id ? s.project.samples[id] : undefined));
-  const buffer = useDecoded(id, sample?.bytes);
-  const start = source.params.start as number;
-  const end = source.params.end as number;
-  const reverse = source.params.reverse as boolean;
-  const columns = useMemo(() => buffer && peaks(buffer, WAVE_W), [buffer]);
-  const drag = useRef<'start' | 'end' | null>(null);
-  const hint = buffer
-    ? 'Drag the two markers to choose the part of the sample that plays, or drop another audio file here.'
-    : 'Drop an audio file here to load it into the sampler.';
-  const hover = useHint(hint);
-
-  const at = (e: PointerEvent<HTMLDivElement>) => {
-    const canvas = e.currentTarget.querySelector('canvas')!.getBoundingClientRect();
-    return Math.min(1, Math.max(0, (e.clientX - canvas.left) / (WAVE_W - 1)));
-  };
-  const move = (e: PointerEvent<HTMLDivElement>) => {
-    if (!drag.current) return;
-    const t = Math.round(at(e) * 1000) / 1000;
-    const value = drag.current === 'start' ? Math.min(t, end) : Math.max(t, start);
-    const spec = paramSpec(MODULES.sample, drag.current)!;
-    setParam(channelId, 'source', drag.current, value);
-    setHint(`${spec.label}: ${formatValue(spec, value)}`);
-  };
-  const stop = () => {
-    if (!drag.current) return;
-    drag.current = null;
-    setHint(hover.over.current ? hint : null);
-  };
-
-  const message = !id
-    ? 'Drop an audio file here or press Load.'
-    : buffer === null
-      ? 'This file could not be read. Try another one.'
-      : null;
-  return (
-    <div
-      className="h-factory-wave"
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => {
-        e.preventDefault();
-        const file = e.dataTransfer.files[0];
-        if (file) void loadSampleFile(channelId, file);
-      }}
-      onPointerDown={(e) => {
-        if (!columns || e.button !== 0) return;
-        const t = at(e);
-        drag.current = Math.abs(t - start) <= Math.abs(t - end) && (t <= end || start !== end) ? 'start' : 'end';
-        e.currentTarget.setPointerCapture(e.pointerId);
-        move(e);
-      }}
-      onPointerMove={move}
-      onPointerUp={stop}
-      onLostPointerCapture={stop}
-      {...hover.props}
-    >
-      <Display
-        width={WAVE_W}
-        height={WAVE_H}
-        deps={[columns, start, end, reverse]}
-        draw={(g, w, h) => {
-          if (!columns) return;
-          const mid = STRIP + Math.floor((h - STRIP) / 2);
-          const half = Math.floor((h - STRIP) / 2) - 1;
-          const xs = Math.round(start * (w - 1));
-          const xe = Math.round(end * (w - 1));
-          g.fillStyle = tokenColor('--amber-dim');
-          for (let x = 0; x < w; x += 2) g.fillRect(x, mid, 1, 1);
-          const bright = tokenColor('--amber');
-          const dim = tokenColor('--amber-dim');
-          for (let x = 0; x < w; x++) {
-            const top = mid - Math.round(columns[x * 2 + 1] * half);
-            const bottom = mid - Math.round(columns[x * 2] * half);
-            g.fillStyle = x >= xs && x <= xe ? bright : dim;
-            g.fillRect(x, top, 1, bottom - top + 1);
-          }
-          for (let x = 0; x < w; x += 2) g.fillRect(x, STRIP - 1, 1, 1);
-          g.fillStyle = bright;
-          for (const [x, dir] of [[xs, 1], [xe, -1]]) {
-            g.fillRect(x, STRIP, 1, h - STRIP);
-            for (let i = 0; i < 4; i++) g.fillRect(dir > 0 ? x : x - 3 + i, STRIP + i, 4 - i, 1);
-          }
-          if (reverse && xe - xs > 16) {
-            const cx = Math.round((xs + xe) / 2);
-            const y = Math.floor(STRIP / 2) - 1;
-            g.fillStyle = tokenColor('--amber-mid');
-            g.fillRect(cx - 4, y, 9, 1);
-            g.fillRect(cx - 3, y - 1, 1, 3);
-            g.fillRect(cx - 2, y - 2, 1, 5);
-          }
-        }}
-      />
-      {sample && buffer && <span className="h-factory-wave-name">{sample.name}</span>}
-      {message && <span className="h-factory-wave-message">{message}</span>}
-    </div>
-  );
+    if (!on) return;
+    let frame = requestAnimationFrame(function loop() {
+      setNote(soundingNote(channelId));
+      frame = requestAnimationFrame(loop);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [channelId, on]);
+  return on ? note : null;
 }
 
 /** The sampler's Source unit; `play` are the cells of the play controls, which follow its own. */
 export function SamplerUnit({ channelId, source, play }: { channelId: string; source: ModuleInst; play: Cell[] }) {
+  const p = source.params;
+  const buffer = useDecoded(p.sample as string);
+  const slices = buffer ? sliceTimes(buffer, p) : null;
+  const sounding = useSounding(channelId, !!slices);
+  // The slice a sounding note plays lights up; the lowest one, when several sound.
+  const lit = slices && sounding !== null && sounding >= 60 && sounding - 60 < slices.length - 1 ? sounding - 60 : -1;
+  const share = (t: number) => (buffer ? t / buffer.duration : 0);
+  const xs = column(p.start as number);
+  const xe = column(p.end as number);
+  const lines = slices?.slice(1, -1).map((t) => column(share(t))) ?? [];
+  const litFrom = lit >= 0 ? column(share(slices![lit])) : 0;
+  const litTo = lit >= 0 ? column(share(slices![lit + 1])) : 0;
+
   const props = (pid: string) => ({
     owner: channelId,
     moduleId: 'source',
     type: 'sample',
     spec: paramSpec(MODULES.sample, pid)!,
-    params: source.params,
+    params: p,
   });
   const cells: Cell[] = [
-    {
-      level: 1,
-      changed: false,
-      node: (
-        <div key="sample" className="h-factory-cell is-wide">
-          <div className="h-param">
-            <span className="h-param-label">Sample</span>
-            <Button onClick={() => void loadSample(channelId)} hint={PARAM_HINTS.sample.sample}>
-              Load...
-            </Button>
-          </div>
-        </div>
-      ),
-    },
+    loadCell(channelId, 'sample'),
     ...['pitch', 'fine', 'start', 'end'].map((pid) => paramCell(props(pid))),
     {
       level: 2,
-      changed: !!source.params.loop || !!source.params.reverse,
+      changed: !!p.loop || !!p.reverse,
       node: (
         <div key="loop" className="h-factory-cell is-wide is-stack">
           <Control {...props('loop')} />
@@ -193,6 +62,22 @@ export function SamplerUnit({ channelId, source, play }: { channelId: string; so
     },
     paramCell(props('xfade')),
     paramCell(props('mode')),
+    paramCell(props('slices')),
+    ...(p.slices === 'hits' ? [paramCell(props('sens'))] : []),
+    {
+      level: 2,
+      changed: false,
+      node: (
+        <div key="track" className="h-factory-cell is-wide is-track">
+          <div className="h-param">
+            <span className="h-param-label">Track</span>
+            <Button disabled={!slices} onClick={() => void slicesToTrack(channelId)} hint={SLICE_HINTS.toTrack}>
+              Slices to Track
+            </Button>
+          </div>
+        </div>
+      ),
+    },
     ...play,
   ];
   const { row, folds } = useLevels('sample', cells);
@@ -201,7 +86,42 @@ export function SamplerUnit({ channelId, source, play }: { channelId: string; so
       <div className="h-factory-sampler">
         <div className="h-factory-row">
           <SourceSelect channelId={channelId} type="sample" />
-          <Waveform channelId={channelId} source={source} />
+          <Waveform
+            channelId={channelId}
+            source={source}
+            buffer={buffer}
+            deps={[xs, xe, p.reverse, lines.join(), litFrom, litTo]}
+            shade={(x) => {
+              if (x < xs || x > xe) return '--amber-dim';
+              return lit < 0 || (x >= litFrom && x < litTo) ? '--amber' : '--amber-mid';
+            }}
+            overlay={(g, _w, h) => {
+              g.fillStyle = tokenColor('--amber');
+              for (const x of lines) for (let y = STRIP + 1; y < h; y += 2) g.fillRect(x, y, 1, 1);
+              for (const [x, dir] of [[xs, 1], [xe, -1]]) {
+                g.fillRect(x, STRIP, 1, h - STRIP);
+                for (let i = 0; i < 4; i++) g.fillRect(dir > 0 ? x : x - 3 + i, STRIP + i, 4 - i, 1);
+              }
+              if (p.reverse && xe - xs > 16) {
+                const cx = Math.round((xs + xe) / 2);
+                const y = Math.floor(STRIP / 2) - 1;
+                g.fillStyle = tokenColor('--amber-mid');
+                g.fillRect(cx - 4, y, 9, 1);
+                g.fillRect(cx - 3, y - 1, 1, 3);
+                g.fillRect(cx - 2, y - 2, 1, 5);
+              }
+            }}
+            grab={(t) => {
+              const start = p.start as number;
+              const end = p.end as number;
+              return Math.abs(t - start) <= Math.abs(t - end) && (t <= end || start !== end)
+                ? { param: 'start', limit: (v) => Math.min(v, end) }
+                : { param: 'end', limit: (v) => Math.max(v, start) };
+            }}
+            hint={slices
+              ? 'Drag the two markers to choose the part of the sample that is sliced; the lit slice is playing.'
+              : 'Drag the two markers to choose the part of the sample that plays.'}
+          />
         </div>
         <div className="h-factory-row">{row}</div>
       </div>

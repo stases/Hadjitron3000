@@ -1,8 +1,12 @@
 // Decoded sample audio, shared by every engine (live and offline).
 
+import { detectOnsets, sliceBounds, type Onset } from '../core/slices';
+import type { Params } from '../core/types';
+
 const decoded = new Map<string, AudioBuffer>();
 const pending = new Map<string, Promise<AudioBuffer>>();
 const reversed = new WeakMap<AudioBuffer, AudioBuffer>();
+const onsets = new WeakMap<AudioBuffer, Onset[]>();
 const looped = new WeakMap<AudioBuffer, Map<string, AudioBuffer>>();
 // The last few seamless loops of each buffer are kept.
 const LOOP_CACHE = 4;
@@ -43,6 +47,21 @@ export function reversedBuffer(buf: AudioBuffer): AudioBuffer {
     reversed.set(buf, rev);
   }
   return rev;
+}
+
+/**
+ * Where a sampler cuts its region into slices, in seconds of the buffer: the start, every cut and the end; null
+ * when Slices is off. The hits of a buffer are found once and kept.
+ */
+export function sliceTimes(buf: AudioBuffer, p: Params): number[] | null {
+  const slices = (p.slices ?? 'off') as string;
+  let found = slices === 'hits' ? onsets.get(buf) : [];
+  if (!found) {
+    found = detectOnsets(Array.from({ length: buf.numberOfChannels }, (_, c) => buf.getChannelData(c)), buf.sampleRate);
+    onsets.set(buf, found);
+  }
+  const [start, end] = [p.start as number, p.end as number].map((share) => share * buf.duration);
+  return sliceBounds(start, end, slices, found, p.sens as number);
 }
 
 /**

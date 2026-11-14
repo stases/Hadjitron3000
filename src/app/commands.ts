@@ -1,20 +1,24 @@
 // Everything the menus, the toolbar and the views can ask the app to do.
 // Commands talk to the platform (files, dialogs) and the store; views only call them.
 
-import { decodeSample, renderSound } from '../audio';
+import { decodeSample, renderSound, sampleBuffer, sliceTimes } from '../audio';
 import { extractBlock } from '../core/block';
-import { PATTERN_NAMES } from '../core/defaults';
+import { MAX_BARS, PATTERN_NAMES } from '../core/defaults';
 import {
   BLOCK_EXT, FormatError, PROJECT_EXT, SOUND_EXT, parseBlock, parseProject, parseSound, sampleId, serializeBlock,
   serializeProject, serializeSound,
 } from '../core/fileformat';
+import { barOf } from '../core/meter';
+import { playsSample } from '../core/modules';
+import { sliceNotes } from '../core/slices';
 import { encodeWav } from '../core/wav';
 import type { Block, SampleData } from '../core/types';
 import type { FileFilter, Library, OpenedFile, SavedFile } from '../platform/api';
 import { platform } from '../platform';
 import { starterProject } from '../presets/projects';
 import {
-  addChannel, addSampleChannel, insertBlock, markSaved, openProject as loadProject, setSample, setSourceType, useApp,
+  addChannel, addSampleChannel, insertBlock, markSaved, openProject as loadProject, replaceRow, setSample,
+  setSourceType, useApp,
 } from '../state/store';
 import type { AppState } from '../state/store';
 import { ask, fail, openDialog, reason } from './dialogStore';
@@ -223,17 +227,17 @@ async function loadAudioInto(channelId: string, name: string, bytes: Uint8Array)
   const audio = await readAudio(name, bytes);
   const channel = channelOf(channelId);
   if (!audio || !channel) return;
-  if (channel.sound.source.type !== 'sample') setSourceType(channelId, 'sample');
+  if (!playsSample(channel.sound.source.type)) setSourceType(channelId, 'sample');
   setSample(channelId, audio.id, audio.sample);
 }
 
-/** Ask for an audio file and load it into a sampler channel. */
+/** Ask for an audio file and load it into a channel's Sampler or Grains (any other source becomes a Sampler). */
 export async function loadSample(channelId: string): Promise<void> {
   const file = await guard(() => platform.openFile({ title: 'Load Sample', filters: [AUDIO_FILTER] }), 'open');
   if (file) await loadAudioInto(channelId, file.name, file.bytes);
 }
 
-/** Load a dropped audio file into a sampler channel. */
+/** Load a dropped audio file into a channel, as loadSample does. */
 export async function loadSampleFile(channelId: string, file: File): Promise<void> {
   let bytes: Uint8Array;
   try {
@@ -242,6 +246,43 @@ export async function loadSampleFile(channelId: string, file: File): Promise<voi
     return fail(`${file.name} could not be read${reason(error)}.`);
   }
   await loadAudioInto(channelId, file.name, bytes);
+}
+
+/**
+ * Lay a sampler's slices out as notes of its row in the current block, in place of the notes there: one for each
+ * slice, where it falls in the recording at the project's tempo. When they need more bars than the block has, ask
+ * whether to make it longer. One undo step.
+ */
+export async function slicesToTrack(channelId: string): Promise<void> {
+  const { project, patternId } = useApp.getState();
+  const pattern = project.patterns.find((p) => p.id === patternId);
+  const params = channelOf(channelId)?.sound.source.params;
+  const buffer = params && sampleBuffer(params.sample as string);
+  const bounds = buffer && sliceTimes(buffer, params);
+  if (!pattern || !bounds) return;
+  const rate = 2 ** (((params.pitch as number) * 100 + (params.fine as number)) / 1200);
+  const { notes, ticks } = sliceNotes(bounds, rate, project.bpm);
+  const bars = (n: number) => `${n} ${n === 1 ? 'bar' : 'bars'}`;
+  const needed = Math.ceil(ticks / barOf(project.meter).ticks);
+  let length = pattern.bars;
+  if (needed > pattern.bars) {
+    const longest = Math.min(needed, MAX_BARS);
+    const answer = await ask({
+      title: 'Slices to Track',
+      icon: 'question',
+      text: `The ${notes.length} slices take ${bars(needed)} at ${project.bpm} BPM, but ${pattern.name} is `
+        + `${bars(pattern.bars)} long. Make it ${bars(longest)} long?`
+        + (needed > MAX_BARS ? ` A block holds at most ${bars(MAX_BARS)}; the slices after that are left out.` : ''),
+      buttons: [
+        { label: 'Lengthen', value: 'longer', primary: true },
+        { label: 'Keep Length', value: 'keep' },
+        { label: 'Cancel', value: 'cancel' },
+      ],
+    });
+    if (answer === 'cancel') return;
+    if (answer === 'longer') length = longest;
+  }
+  replaceRow(patternId, channelId, notes, length);
 }
 
 /** Write a file into a library under a name, asking before replacing one that is already there. */

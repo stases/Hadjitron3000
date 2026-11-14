@@ -3,9 +3,12 @@
 import { noteFreq } from '../../core/notes';
 import { decodeShape, shapeHarmonics } from '../../core/shape';
 import type { Params } from '../../core/types';
+import { glide } from '../automation';
 import { mix } from '../mix';
+import type { GrainOptions } from '../processors/grains';
 import { noiseBuffer, type NoiseColor } from '../random';
-import { reversedBuffer, sampleBuffer, seamlessLoop } from '../samples';
+import { reversedBuffer, sampleBuffer, seamlessLoop, sliceTimes } from '../samples';
+import { loadProcessors, processorsLoaded } from '../worklet';
 
 /**
  * A parameter that moves with the voice's pitch when it glides: by `k` cents per cent (a detune), or, as a period,
@@ -23,7 +26,7 @@ export interface SourceVoice {
   followers: Follower[];
   /** A one-shot sample plays for this long whatever the note length. */
   length?: number;
-  /** Follow a new drawing of a drawn wave while the note sounds. */
+  /** Follow new source parameters while the note sounds: a new drawing of a drawn wave, the grains' knobs. */
   redraw?(p: Params, t: number): void;
 }
 
@@ -201,16 +204,23 @@ const noiseSource: SourceBuilder = (ctx, p, { t0, serial }) => {
   return { output: src, nodes: [src], targets: {}, followers: [] };
 };
 
+/**
+ * The sampler plays its region pitched by the key from C3, or with Slices one slice per note from C3 up, each at the
+ * sample's own pitch.
+ */
 const sample: SourceBuilder = (ctx, p, { note, t0 }) => {
   const original = sampleBuffer(p.sample as string);
   if (!original) return null;
   const len = original.duration;
-  let a = (p.start as number) * len;
-  let b = (p.end as number) * len;
+  const slices = sliceTimes(original, p);
+  const slice = note - 60;
+  if (slices && (slice < 0 || slice >= slices.length - 1)) return null;
+  let a = slices ? slices[slice] : (p.start as number) * len;
+  let b = slices ? slices[slice + 1] : (p.end as number) * len;
   if (b <= a) return null;
   const buffer = p.reverse ? reversedBuffer(original) : original;
   if (p.reverse) [a, b] = [len - b, len - a];
-  const rate = 2 ** ((note - 60) / 12);
+  const rate = slices ? 1 : 2 ** ((note - 60) / 12);
   const loop = p.loop as boolean;
   // A crossfaded loop is a buffer of its own that holds just the loop.
   const seamless = loop && (p.xfade as number) > 0 ? seamlessLoop(buffer, a, b, p.xfade as number) : null;
@@ -218,8 +228,9 @@ const sample: SourceBuilder = (ctx, p, { note, t0 }) => {
   const src = new AudioBufferSourceNode(ctx, {
     buffer: seamless ?? buffer, playbackRate: rate, detune: cents(p), loop, loopStart: a, loopEnd: b,
   });
+  // A slice does not follow the key, so it does not glide from one to the next either.
   const voice: SourceVoice = {
-    output: src, nodes: [src], targets: { pitch: [src.detune] }, followers: [follow(src.detune)],
+    output: src, nodes: [src], targets: { pitch: [src.detune] }, followers: slices ? [] : [follow(src.detune)],
   };
   if (loop) {
     src.start(t0, a);
@@ -235,4 +246,72 @@ const sample: SourceBuilder = (ctx, p, { note, t0 }) => {
   return voice;
 };
 
-export const SOURCE_BUILDERS: Readonly<Record<string, SourceBuilder>> = { osc, fm, noise: noiseSource, sample };
+/** The contexts that already hold each sample's channels for the grains processors, by sample id. */
+const sharedSamples = new WeakMap<BaseAudioContext, Set<string>>();
+
+/** The grains processor's parameters from the source's, in its own units. */
+const grainValues = (p: Params): Record<string, number> => ({
+  position: p.position as number,
+  spray: p.spray as number,
+  size: p.size as number,
+  density: p.density as number,
+  pspray: p.pspray as number,
+  octaves: p.octaves ? 1 : 0,
+  width: p.width as number,
+  reverse: p.reverse as number,
+});
+
+/**
+ * A cloud of grains from one processor, which a gate opens at the start of the note and closes when the voice is
+ * stopped after its release. The first voice of a context to play a sample hands the processor its channels, which
+ * stay there for every later voice; until the processors are loaded a voice is silent.
+ */
+const grains: SourceBuilder = (ctx, p, { note, t0, serial }) => {
+  const id = p.sample as string;
+  const buffer = sampleBuffer(id);
+  if (!buffer) return null;
+  if (!processorsLoaded(ctx)) {
+    void loadProcessors(ctx);
+    return null;
+  }
+  const shared = sharedSamples.get(ctx) ?? new Set<string>();
+  const channels = Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c));
+  const options: GrainOptions = {
+    sample: id,
+    channels: shared.has(id) ? undefined : channels,
+    rate: buffer.sampleRate,
+    ratio: 2 ** ((note - 60) / 12),
+    seed: Math.imul(serial + 1, 0x9e3779b9),
+  };
+  let node: AudioWorkletNode;
+  try {
+    node = new AudioWorkletNode(ctx, 'grains', { outputChannelCount: [2], processorOptions: options });
+  } catch (err) {
+    console.warn('The grains processor could not be started.', err);
+    return null;
+  }
+  shared.add(id);
+  sharedSamples.set(ctx, shared);
+  const param = (key: string) => node.parameters.get(key)!;
+  for (const [key, value] of Object.entries(grainValues(p))) param(key).value = value;
+  param('detune').value = cents(p);
+  const gate = new ConstantSourceNode(ctx);
+  gate.connect(param('gate'));
+  gate.start(t0);
+  return {
+    output: node,
+    nodes: [gate],
+    targets: { position: [param('position')], spray: [param('spray')], pitch: [param('detune')] },
+    followers: [follow(param('detune'))],
+    redraw(p, t) {
+      for (const [key, value] of Object.entries(grainValues(p))) glide(param(key), value, t);
+    },
+  };
+};
+
+/** Get ready, when a channel is built, for the voices of its source: grains need the processors. */
+export function prepareSource(ctx: BaseAudioContext, type: string): void {
+  if (type === 'grains') void loadProcessors(ctx);
+}
+
+export const SOURCE_BUILDERS: Readonly<Record<string, SourceBuilder>> = { osc, fm, noise: noiseSource, sample, grains };

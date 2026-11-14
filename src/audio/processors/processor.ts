@@ -51,11 +51,13 @@ export function readCubic(buf: Float32Array, mask: number, w: number, delay: num
 
 /**
  * A stereo processor. `render` gets both input channels (silence when nothing is connected) and fills both
- * outputs. It runs until the page sends any message, which the effect does once its channel has gone.
+ * outputs. It runs until the page sends any message, which the effect does once its channel has gone, or until it
+ * sets `running` to false itself.
  */
 export abstract class Processor extends scope.AudioWorkletProcessor {
   protected readonly sampleRate = scope.sampleRate;
-  private running = true;
+  /** False stops the processor after this block. */
+  protected running = true;
   private silence = new Float32Array(128);
 
   constructor() {
@@ -80,6 +82,7 @@ export abstract class Processor extends scope.AudioWorkletProcessor {
   ): void;
 }
 
-export function register(name: string, processor: typeof Processor): void {
+/** Register a processor; one that takes options gets those its node was made with. */
+export function register(name: string, processor: new (options: never) => Processor): void {
   scope.registerProcessor(name, processor);
 }

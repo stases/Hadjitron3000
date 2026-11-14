@@ -16,6 +16,7 @@ import { Button, Icon, Knob, ParamControl, RackUnit, openMenu } from '../kit';
 import type { MenuItem } from '../kit';
 import { SendKnob, SourceSelect, paramCell, paramCells } from './controls';
 import { EnvelopeDisplay } from './EnvelopeDisplay';
+import { GrainsUnit } from './GrainsUnit';
 import { MOD_HINTS } from './hints';
 import { addMenu, useLevels, useShown } from './levels';
 import type { Cell } from './levels';
@@ -221,6 +222,8 @@ export function Rack({ channel }: { channel: Channel }) {
     <div className="h-factory-rack">
       {sound.source.type === 'sample' ? (
         <SamplerUnit channelId={channelId} source={sound.source} play={play} />
+      ) : sound.source.type === 'grains' ? (
+        <GrainsUnit channelId={channelId} source={sound.source} play={play} />
       ) : (
         <LevelUnit
           name="Source"

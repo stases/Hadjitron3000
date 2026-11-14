@@ -52,6 +52,8 @@ A row of automation in the Song is a display too, 40 pixels high with its bevel,
 
 A display you draw on, the drawn wave, has no handles: the pointer is the pen, and the line, a one-pixel `--amber` trace over a dotted `--amber-dim` centre line and quarter marks, follows it at once. The buttons that act on the drawing stand beside the display, not on it.
 
+A sample waveform is drawn in columns of one pixel under a strip that carries the file's name. What plays is `--amber` and the rest `--amber-dim`. The sampler's region has a one-pixel `--amber` line at each end with a small flag pointing inwards, and with Slices a dotted `--amber` line at every cut. While a note plays a slice, that slice stays `--amber` and the rest of the region drops to `--amber-mid`, so the light moves along the waveform as a sliced loop plays. On a Grains waveform Position is a line with a flag on the strip, and the stretch that Spray reaches around it is `--amber` between two short ticks, against the rest of the sample in `--amber-dim`. Dragging on a waveform moves the nearest marker; the pointer stays the plain arrow.
+
 ## Controls
 
 Buttons are 23px high with 10px of side padding; small square buttons are 19 to 25px. The menu bar, the title bar and the status bar are 20px high. The cursor is always the plain arrow; buttons do not get a hand.

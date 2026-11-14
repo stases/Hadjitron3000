@@ -10,7 +10,7 @@ import { cleanPoints, refKey, refSpec, validLocks } from '../core/automation';
 import { MAX_TICKS, barOf, barsToHold, meterText, readMeter } from '../core/meter';
 import { BUS_LEVEL, DUCK_AMOUNT, DUCK_RELEASE, MAX_BUS_NAME, rackChain } from '../core/mixer';
 import type { MixerRack, Owner } from '../core/mixer';
-import { MODULES, moduleDef, moduleParams, paramSpec } from '../core/modules';
+import { MODULES, moduleDef, moduleParams, paramSpec, playsSample } from '../core/modules';
 import { MAX_NOTE, MIN_NOTE, cleanNotes, compareNotes, noteExtras } from '../core/notes';
 import { inScale, nearestInScale, readScale } from '../core/scale';
 import type { NoteExtras } from '../core/notes';
@@ -378,10 +378,11 @@ export function setParam(owner: Owner, moduleId: string, paramId: string, value:
   }, key);
 }
 
+/** Load a sample into a channel whose source plays one (the Sampler or Grains). */
 export function setSample(channelId: string, id: string, sample: SampleData): void {
   edit((p) => {
     const sound = p.channels.find((c) => c.id === channelId)?.sound;
-    if (sound?.source.type !== 'sample') return;
+    if (!sound || !playsSample(sound.source.type)) return;
     if (!Object.hasOwn(p.samples, id)) p.samples[id] = sample;
     sound.source.params.sample = id;
   });
@@ -545,6 +546,25 @@ export function addNotes(
     edit(write, undefined, {}, take);
   }
   return added;
+}
+
+/**
+ * Replace the notes of a row with new ones, in one change, and give the block `bars` bars when that is more than it
+ * has (up to MAX_BARS). Notes that start past the end of the block are left out.
+ */
+export function replaceRow(patternId: string, channelId: string, notes: readonly NoteInit[], bars: number): void {
+  const { project } = useApp.getState();
+  const pattern = project.patterns.find((p) => p.id === patternId);
+  if (!pattern || !project.channels.some((c) => c.id === channelId) || !Number.isFinite(bars)) return;
+  const length = clamp(Math.max(pattern.bars, Math.round(bars)), 1, MAX_BARS);
+  const end = length * barOf(project.meter).ticks;
+  const row = cleanNotes(notes.filter((n) => finiteNote(n) && n.start < end));
+  edit((p) => {
+    const target = p.patterns.find((pattern) => pattern.id === patternId)!;
+    target.bars = length;
+    if (row.length > 0) target.notes[channelId] = row;
+    else delete target.notes[channelId];
+  });
 }
 
 /** Give notes of a row new values, matched by id, all at once; nothing happens when two would share start and pitch. */

@@ -37,8 +37,11 @@ export function loadProcessors(ctx: BaseAudioContext): Promise<boolean> {
   return load;
 }
 
-/** The loading of the processors into a context, if an effect has started it; the engine waits for it. */
+/** The loading of the processors into a context, if an effect or a source has started it; the engine waits for it. */
 export const processorsLoading = (ctx: BaseAudioContext): Promise<boolean> | undefined => loads.get(ctx);
+
+/** Whether the processors are in a context, so a processor node can be made there right now. */
+export const processorsLoaded = (ctx: BaseAudioContext): boolean => loaded.has(ctx);
 
 /**
  * An effect made of one processor. `values` gives the value of each of its parameters from the module's

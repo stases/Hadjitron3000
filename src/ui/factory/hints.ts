@@ -69,6 +69,21 @@ export const PARAM_HINTS: Readonly<Record<string, Readonly<Record<string, string
     xfade: 'Blends the end of the loop into its start, so rain or room tone goes round without a click at the seam.',
     reverse: 'Plays the sample backwards.',
     mode: 'One shot plays the whole sample on every hit; Gate stops it when the key is let go.',
+    slices: 'Cuts the part between the markers into equal slices, or at every hit, and plays one per key from C3 up.',
+    sens: 'How small a hit still starts a slice of its own: turn it up to catch the ghost notes too.',
+  },
+  grains: {
+    sample: 'Opens an audio file for the grains to be taken from.',
+    position: 'Where in the sample the grains come from; move it slowly to stretch a sound without bending its pitch.',
+    size: 'How long each grain is: short ones buzz and crackle, long ones blur into a smooth wash.',
+    density: 'How many grains sound at once: below one they patter, a few make a cloud, many a dense haze.',
+    pitch,
+    fine,
+    spray: 'How far around Position the grains are scattered; a little blurs the sound, a lot shuffles the sample.',
+    pspray: 'How far each grain is detuned at random, up or down: a little shimmers, a lot sounds like a swarm.',
+    octaves: 'Rounds each grain\'s random detune to whole octaves, so the cloud sparkles an octave up and down.',
+    width: 'How far the grains are scattered between left and right.',
+    reverse: 'How many of the grains play backwards.',
   },
   amp: adsr('the volume'),
   filter: {
@@ -176,6 +191,11 @@ export const PARAM_HINTS: Readonly<Record<string, Readonly<Record<string, string
     level: 'How loud this sound plays in the mix.',
     pan: 'Where the sound sits between the left and the right speaker.',
   },
+};
+
+/** The status bar for the sampler's slices. */
+export const SLICE_HINTS = {
+  toTrack: 'Writes one note per slice into this sound\'s row of the block, in place of its notes, to rearrange them.',
 };
 
 /** The status bar for the modulator's own controls. */

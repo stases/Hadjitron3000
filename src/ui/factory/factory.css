@@ -162,6 +162,11 @@
   height: 38px;
 }
 
+.h-factory-cell.is-track {
+  /* Clear of the caption of a knob before it that is wider than its cell, such as Sensitivity. */
+  padding-left: 12px;
+}
+
 .h-factory-cell.is-stack {
   gap: 4px;
 }

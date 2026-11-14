@@ -2,5 +2,5 @@ export { Engine } from './engine';
 export { Metronome } from './metronome';
 export { Transport, outputDelay } from './transport';
 export { encodeMp3, renderProject, renderSound, renderStems, ringOut } from './render';
-export { decodeSample, sampleBuffer } from './samples';
+export { decodeSample, sampleBuffer, sliceTimes } from './samples';
 export { loadProcessors } from './worklet';

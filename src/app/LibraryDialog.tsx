@@ -5,7 +5,8 @@ import { SOURCES } from '../core/modules';
 import type { Block, SampleData, Sound } from '../core/types';
 import { platform } from '../platform';
 import type { Library } from '../platform/api';
-import { PRESET_GROUPS, preset } from '../presets';
+import { PRESET_GROUPS, preset, presetSamples } from '../presets';
+import { factorySample } from '../presets/samples';
 import { factoryBlocks } from '../presets/projects';
 import { addChannel, replaceSound } from '../state/store';
 import { Button, Dialog, ListBox } from '../ui/kit';
@@ -109,7 +110,7 @@ function LibraryDialog({ title, noun, library, factory, initial, action, canPlay
 }
 
 const SOURCE_ICONS: Record<string, IconName> = {
-  osc: 'wave-sawtooth', fm: 'wave-sine', noise: 'noise', sample: 'sample',
+  osc: 'wave-sawtooth', fm: 'wave-sine', noise: 'noise', sample: 'sample', grains: 'grains',
 };
 const NEW_SAMPLER = 'new:sample';
 
@@ -124,8 +125,15 @@ const SOUND_ITEMS: ListItem[] = [
 
 async function loadSound(id: string): Promise<{ sound: Sound; samples: Record<string, SampleData> } | null> {
   const [kind, name] = [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)];
-  if (kind === 'new') return { sound: newSound(name, SOURCES.find((s) => s.type === name)!.label), samples: {} };
-  if (kind === 'preset') return { sound: preset(name), samples: {} };
+  if (kind === 'new') {
+    const sound = newSound(name, SOURCES.find((s) => s.type === name)!.label);
+    if (name !== 'grains') return { sound, samples: {} };
+    // A new cloud starts on the factory pad, so it plays at once; Load... swaps in another sample.
+    const { id, sample } = factorySample('pad');
+    sound.source.params.sample = id;
+    return { sound, samples: { [id]: sample } };
+  }
+  if (kind === 'preset') return { sound: preset(name), samples: presetSamples(name) };
   try {
     return parseSound(new TextDecoder().decode(await platform.library.read(name)));
   } catch (error) {

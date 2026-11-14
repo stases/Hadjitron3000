@@ -1,6 +1,8 @@
 import { expect, test } from 'vitest';
-import { renderSound } from '../../src/audio';
-import { adsr, amplitudeAt, finite, freq, maxJump, peak, rms, slice, sound, tone, wav } from './helpers';
+import { decodeSample, renderSound, sliceTimes } from '../../src/audio';
+import { preset, presetSamples } from '../../src/presets';
+import { BREAK_BPM } from '../../src/presets/samples';
+import { SR, adsr, amplitudeAt, finite, freq, maxJump, peak, rms, slice, sound, tone, wav } from './helpers';
 
 const flat = adsr(0.002, 0.1, 1, 0.02);
 
@@ -142,4 +144,69 @@ test('one-shot plays the region out; gate stops at the note end', async () => {
 test('a missing sample is silent without an error', async () => {
   const pcm = await renderSound(sound('sample', { sample: 'nope' }), {}, { dur: 0.2, tail: 0.1 });
   expect(peak(pcm.channels[0])).toBe(0);
+});
+
+// A ramp from 0 to 1 over a second: every sample says where in the file it is.
+const ramp = { ramp: { name: 'ramp.wav', bytes: wav(Float32Array.from({ length: SR }, (_, i) => i / SR)) } };
+const sliced = (params: Record<string, unknown> = {}) =>
+  sound('sample', { sample: 'ramp', slices: '8', mode: 'oneshot', ...params } as never, { amp: adsr(0, 0.1, 1, 0.01) });
+// A mono sound reaches each side 3 dB down; the amp envelope takes a millisecond to open even at no attack.
+const side = (d: Float32Array, t: number) => d[Math.round(t * SR)] / Math.SQRT1_2;
+
+test('equal slices start at their line and end at the next, one per key from C3 up, at the sample\'s pitch', async () => {
+  for (const k of [0, 3, 7]) {
+    const d = (await renderSound(sliced(), ramp, { note: 60 + k, vel: 1, dur: 0.05 })).channels[0];
+    expect(side(d, 0.002), `slice ${k + 1}`).toBeCloseTo(k / 8 + 0.002, 3);
+    expect(side(d, 0.1), `slice ${k + 1}`).toBeCloseTo(k / 8 + 0.1, 3);
+    expect(peak(slice(d, 0.126, 0.2)), `slice ${k + 1}`).toBe(0);
+  }
+  for (const note of [59, 68]) {
+    expect(peak((await renderSound(sliced(), ramp, { note, vel: 1, dur: 0.05, tail: 0.2 })).channels[0])).toBe(0);
+  }
+  // Pitch still applies: an octave up plays the slice twice as fast.
+  const up = (await renderSound(sliced({ pitch: 12 }), ramp, { note: 62, vel: 1, dur: 0.05 })).channels[0];
+  expect(side(up, 0.05)).toBeCloseTo(0.25 + 0.1, 3);
+  expect(peak(slice(up, 0.064, 0.2))).toBe(0);
+});
+
+test('slices cut the region between Start and End, play while held in Gate, and backwards with Reverse', async () => {
+  const region = (await renderSound(sliced({ start: 0.5, slices: '4' }), ramp, { note: 61, vel: 1, dur: 0.05 })).channels[0];
+  expect(side(region, 0.002)).toBeCloseTo(0.627, 3);
+  expect(peak(slice(region, 0.126, 0.2))).toBe(0);
+  const gate = (await renderSound(sliced({ mode: 'gate' }), ramp, { note: 60, vel: 1, dur: 0.05 })).channels[0];
+  expect(gate.length / SR).toBeLessThan(0.05 + 1.25 * 0.01 + 0.06);
+  expect(peak(slice(gate, 0.07, 0.2))).toBe(0);
+  const back = (await renderSound(sliced({ reverse: true }), ramp, { note: 61, vel: 1, dur: 0.05 })).channels[0];
+  expect(side(back, 0.002)).toBeCloseTo(0.248, 3);
+  expect(side(back, 0.1)).toBeCloseTo(0.15, 3);
+});
+
+test('with Slices off, and in a sound from before slices, the sampler plays exactly as it did', async () => {
+  const old = sampler({ start: 0.2, end: 0.7, pitch: 3 });
+  delete old.source.params.slices;
+  delete old.source.params.sens;
+  const before = (await renderSound(old, halves, { note: 64, vel: 1, dur: 0.5 })).channels[0];
+  const now = (await renderSound(sampler({ start: 0.2, end: 0.7, pitch: 3, slices: 'off' }), halves, {
+    note: 64, vel: 1, dur: 0.5,
+  })).channels[0];
+  expect(now).toEqual(before);
+});
+
+test('Hits cuts the factory break at its hits, and a note plays from its hit', async () => {
+  const samples = presetSamples('Chopped Break');
+  const [[id, data]] = Object.entries(samples);
+  const buffer = await decodeSample(id, data.bytes);
+  const bounds = sliceTimes(buffer, { start: 0, end: 1, slices: 'hits', sens: 0.5 })!;
+  const steps = [0, 2, 4, 6, 7, 8, 10, 11, 12, 14, 15].map((s) => (s * 60) / BREAK_BPM / 4);
+  expect(bounds).toHaveLength(steps.length + 1);
+  steps.forEach((t, k) => expect(Math.abs(bounds[k] - t), `hit ${k}`).toBeLessThan(0.003));
+  // The fifth hit, a soft kick, is the region from its line to the next.
+  const hits = { ...preset('Chopped Break'), amp: adsr(0, 0.1, 1, 0.01) };
+  hits.source.params = { ...hits.source.params, slices: 'hits' };
+  const region = { slices: 'off', start: bounds[4] / buffer.duration, end: bounds[5] / buffer.duration };
+  const plain = { ...hits, source: { ...hits.source, params: { ...hits.source.params, ...region } } };
+  const a = (await renderSound(hits, samples, { note: 64, vel: 1, dur: 0.05 })).channels[0];
+  const b = (await renderSound(plain, samples, { note: 60, vel: 1, dur: 0.05 })).channels[0];
+  expect(peak(a.map((v, i) => v - b[i]))).toBeLessThan(1e-3);
+  expect(rms(a)).toBeGreaterThan(0.02);
 });

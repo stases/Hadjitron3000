@@ -122,6 +122,16 @@ const WAVES = [
   ['sawtooth', 'Saw'],
   ['square', 'Square'],
 ] as const;
+// The sampler's slices: equal ones of the region, or one at every hit found in it.
+const SLICES = [
+  ['off', 'Off'],
+  ['2', '2'],
+  ['4', '4'],
+  ['8', '8'],
+  ['16', '16'],
+  ['32', '32'],
+  ['hits', 'Hits'],
+] as const;
 // The oscillator also plays a cycle drawn by hand, its `shape` (or `shape2`).
 const OSC_WAVES = [...WAVES, ['draw', 'Draw', 3]] as const;
 // One cycle per note value at the tempo (SYNC_BEATS), or Free for a rate of its own; LFOs and the phaser use it.
@@ -212,6 +222,33 @@ export const SOURCES: readonly ModuleDef[] = [
           ['gate', 'Gate'],
         ]),
       ),
+      // Cuts the region into equal slices, or at the hits found in it, and plays one slice per note from C3 up.
+      shaping(c('slices', 'Slices', SLICES)),
+      // How small a hit still makes a slice, when Slices is Hits.
+      shaping(f('sens', 'Sensitivity', 0, 1, 0.5, { unit: '%' })),
+    ],
+  },
+  {
+    // A cloud of short overlapping pieces of a sample, taken from around Position while the note sounds.
+    type: 'grains',
+    kind: 'source',
+    label: 'Grains',
+    level: 3,
+    params: [
+      { kind: 'sample', id: 'sample', label: 'Sample' },
+      f('position', 'Position', 0, 1, 0.5, { unit: '%', mod: percent }),
+      f('size', 'Size', 0.01, 1, 0.12, { taper: 'log', unit: 's' }),
+      // How many grains sound at once: the cloud stays as smooth and as loud whatever the size.
+      f('density', 'Density', 0.25, 60, 4, { taper: 'log', unit: 'x' }),
+      shaping(pitch),
+      fine,
+      shaping(f('spray', 'Spray', 0, 1, 0.1, { unit: '%', mod: percent })),
+      shaping(f('pspray', 'Pitch Spray', 0, 1200, 0, { taper: 'cube', unit: 'ct' })),
+      // Rounds every grain's random detune to whole octaves.
+      shaping(b('octaves', 'Octaves', false)),
+      shaping(f('width', 'Width', 0, 1, 0.5, { unit: '%' })),
+      // The share of grains played backwards.
+      shaping(f('reverse', 'Reverse', 0, 1, 0, { unit: '%' })),
     ],
   },
 ];
@@ -568,6 +605,9 @@ export function moduleParams(sound: Sound, moduleId: string): Params | undefined
 export function paramSpec(def: ModuleDef, paramId: string): ParamSpec | undefined {
   return def.params.find((p) => p.id === paramId);
 }
+
+/** Whether a source plays a loaded sample (the Sampler and Grains). */
+export const playsSample = (type: string) => !!MODULES[type]?.params.some((p) => p.kind === 'sample');
 
 /** The modules built inside every note; only their parameters can be moved by a per-note modulator. */
 export const inVoice = (moduleId: string) => moduleId === 'source' || moduleId === 'filter';

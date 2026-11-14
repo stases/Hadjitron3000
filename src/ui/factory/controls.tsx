@@ -15,15 +15,23 @@ import { sourceItems, useShown } from './levels';
 import type { Cell } from './levels';
 import { ShapeEditor } from './ShapeEditor';
 
-/** In the module table both delay controls are called "time"; side by side they read SYNC and TIME. */
-const LABELS: Readonly<Record<string, Readonly<Record<string, string>>>> = { delay: { sync: 'Sync', time: 'Time' } };
+/**
+ * In the module table both delay controls are called "time"; side by side they read SYNC and TIME. The grains'
+ * Pitch Spray reads AMOUNT under its group's caption.
+ */
+const LABELS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  delay: { sync: 'Sync', time: 'Time' },
+  grains: { pspray: 'Amount' },
+};
 
 /**
  * Controls that only work in some settings: Time and Rate with Sync at Free, Pulse with a square wave, the
- * sampler's Crossfade with Loop on, and the arpeggiator's Rate, Octaves and Gate while it is on.
+ * sampler's Crossfade with Loop on, the arpeggiator's Rate, Octaves and Gate while it is on, and the grains'
+ * Octaves with some Pitch Spray.
  */
 const IDLE: Readonly<Record<string, Readonly<Record<string, (p: Params) => boolean>>>> = {
   sample: { xfade: (p) => !p.loop },
+  grains: { octaves: (p) => p.pspray === 0 },
   delay: { time: (p) => p.sync !== 'free' },
   lfo: { rate: (p) => p.sync !== 'free' },
   phaser: { rate: (p) => p.sync !== 'free' },
@@ -35,6 +43,7 @@ const IDLE: Readonly<Record<string, Readonly<Record<string, (p: Params) => boole
 const GROUPS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   osc: { wave2: 'Osc 2', pitch2: 'Osc 2', fine2: 'Osc 2', mix2: 'Osc 2', sub: 'Sub', subOct: 'Sub' },
   play: { mode: 'Play', glide: 'Play', arp: 'Play', rate: 'Play', octaves: 'Play', gate: 'Play' },
+  grains: { pspray: 'Pitch Spray', octaves: 'Pitch Spray' },
 };
 
 /** The wave parameter of each drawing: a drawing is shown next to its wave while that is set to Draw. */
@@ -131,7 +140,7 @@ export function SourceSelect({ channelId, type }: { channelId: string; type: str
           options={options}
           more={more}
           onChange={(v) => setSourceType(channelId, v)}
-          hint="What makes the sound: a tone, an FM pair, plain noise or a recording."
+          hint="What makes the sound: a tone, an FM pair, plain noise, a recording, or a cloud of grains of one."
         />
       </div>
     </div>

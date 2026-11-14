@@ -157,7 +157,9 @@ test('the Guide Book detaches into a window of its own and attaches again, and n
     ]);
     await expect(book.locator('.h-book-title')).toHaveText(/\w/);
     await expect(page.locator('.h-book')).toHaveCount(0);
-    expect(await windows()).toContainEqual({ title: 'Guide Book', menu: false, size: [440, 640] });
+    // A Mac's menu bar is the system's and always counts as visible; elsewhere the book's window has none.
+    const menu = process.platform === 'darwin';
+    expect(await windows()).toContainEqual({ title: 'Guide Book', menu, size: [440, 640] });
     await book.locator('.h-button', { hasText: 'Next' }).click();
     expect(await book.locator('.h-book-title').textContent()).toBe('Sounds, blocks and songs');
 

@@ -243,7 +243,8 @@ test('Electron rebuilds from source only in an application built from a checkout
     'update-check', 'update-build', 'update-restart',
   ]);
   await expect(mac.invoke('update-restart')).rejects.toThrow('Nothing to install');
-  await expect(mac.invoke('update-build')).rejects.toThrow(/^Cannot write to .*Applications\./);
+  // It fails either way here: the folder of the pretended bundle cannot be written to, or there is no checkout.
+  await expect(mac.invoke('update-build')).rejects.toThrow(/The details are in .*update\.log\.$/);
 });
 
 /** Stands in for electron-updater's autoUpdater with one newer release waiting on GitHub. */

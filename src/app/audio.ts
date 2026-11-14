@@ -9,7 +9,7 @@ import type { Owner } from '../core/mixer';
 import { heardTick } from '../core/record';
 import type { Clock } from '../core/record';
 import { tickTime } from '../core/sequencer';
-import type { Block, Channel, Project, SampleData, Sound } from '../core/types';
+import type { Block, Channel, PlayScope, Project, SampleData, Sound } from '../core/types';
 import { playScope, setPlaying, useApp } from '../state/store';
 import { LiveArp } from './arp';
 import { usePrefs } from './prefs';
@@ -17,8 +17,9 @@ import { usePrefs } from './prefs';
 const PREVIEW_ID = 'preview';
 const BLOCK_TAIL_SECONDS = 2;
 
-interface BlockAudition {
-  player: AudioBufferSourceNode | null; // null while the block is still being rendered
+interface Rendered {
+  player: AudioBufferSourceNode | null; // null while it is still being rendered
+  analyser: AnalyserNode | null;
 }
 
 let engine: Engine | null = null;
@@ -38,8 +39,10 @@ let notice = '';
 const noticeListeners = new Set<() => void>();
 // A library sound being auditioned. It lives in the engine only, never in the project.
 let preview: { channel: Channel; samples: Record<string, SampleData> } | null = null;
-// A library block being auditioned: rendered offline on its own, then played as one buffer.
-let blockAudition: BlockAudition | null = null;
+// A project rendered offline and played as one buffer: a library block, or an example of the Guide Book.
+let rendered: Rendered | null = null;
+const RENDERED_TAP = 32768;
+const renderedData = new Float32Array(RENDERED_TAP);
 
 /** The project as the engine should hear it: the document plus the sound being auditioned. */
 function heard(): Project {
@@ -244,31 +247,63 @@ function blockProject(block: Block): Project {
 
 /** Play a block that is not in the project once (browsing the block library). It is rendered first, then played. */
 export async function auditionBlock(block: Block): Promise<void> {
-  const e = boot();
-  stopBlock();
-  const playing: BlockAudition = { player: null };
-  blockAudition = playing;
-  const pcm = await renderProject(blockProject(block), { kind: 'pattern', patternId: 'block' }, {
-    tail: BLOCK_TAIL_SECONDS, sampleRate: e.ctx.sampleRate,
-  });
-  if (blockAudition !== playing) return;
-  const buffer = e.ctx.createBuffer(2, pcm.channels[0].length, pcm.sampleRate);
-  pcm.channels.forEach((data, i) => buffer.getChannelData(i).set(data));
-  playing.player = e.ctx.createBufferSource();
-  playing.player.buffer = buffer;
-  playing.player.connect(e.ctx.destination);
-  playing.player.start();
+  await playRendered(blockProject(block), { kind: 'pattern', patternId: 'block' }, BLOCK_TAIL_SECONDS);
 }
 
-function stopBlock(): void {
-  blockAudition?.player?.stop();
-  blockAudition = null;
+/**
+ * Render a project offline, its song or one block once with `tail` seconds after it, and play the result in place
+ * of the last one. Resolves to true once it plays, or false when another took its place first; `onProgress` follows
+ * the rendering and `onEnd` is called when it has played to its end.
+ */
+export async function playRendered(
+  project: Project, scope: PlayScope, tail: number,
+  opts: { onEnd?: () => void; onProgress?: (fraction: number) => void } = {},
+): Promise<boolean> {
+  const { onEnd, onProgress } = opts;
+  const e = boot();
+  stopRendered();
+  const playing: Rendered = { player: null, analyser: null };
+  rendered = playing;
+  const pcm = await renderProject(project, scope, {
+    tail, sampleRate: e.ctx.sampleRate, onProgress: onProgress && ((f) => rendered === playing && onProgress(f)),
+  });
+  if (rendered !== playing) return false;
+  const buffer = e.ctx.createBuffer(2, pcm.channels[0].length, pcm.sampleRate);
+  pcm.channels.forEach((data, i) => buffer.getChannelData(i).set(data));
+  const player = e.ctx.createBufferSource();
+  const analyser = e.ctx.createAnalyser();
+  analyser.fftSize = RENDERED_TAP;
+  player.buffer = buffer;
+  player.connect(analyser).connect(e.ctx.destination);
+  player.onended = () => {
+    if (rendered !== playing) return;
+    rendered = null;
+    onEnd?.();
+  };
+  player.start();
+  Object.assign(playing, { player, analyser });
+  return true;
+}
+
+/** Stop what `playRendered` plays, or keep it from starting. */
+export function stopRendered(): void {
+  rendered?.player?.stop();
+  rendered = null;
+}
+
+/** The latest output of what `playRendered` plays, for a scope; silence when nothing plays. */
+export function renderedScope(out: Float32Array): void {
+  out.fill(0);
+  if (!rendered?.analyser) return;
+  rendered.analyser.getFloatTimeDomainData(renderedData);
+  const n = Math.min(out.length, renderedData.length);
+  out.set(renderedData.subarray(renderedData.length - n), out.length - n);
 }
 
 /** Forget the auditioned sound and stop an auditioned block (closing a library). */
 export function endAudition(): void {
   preview = null;
-  stopBlock();
+  stopRendered();
   engine?.setProject(heard());
 }
 

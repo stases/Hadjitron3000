@@ -22,7 +22,7 @@ export function PlacementBar() {
   const fadeIn = placement?.fadeIn ?? 0;
   const fadeOut = placement?.fadeOut ?? 0;
   return (
-    <div className="h-song-bar">
+    <div className="h-song-bar" data-tour="placement-bar">
       <span className="h-song-which">
         {placement && name ? placementText(name, placement) : 'No block selected on the timeline'}
       </span>

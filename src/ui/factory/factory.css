@@ -68,6 +68,7 @@
   min-width: 0;
   overflow-y: auto;
   background: var(--face-lo);
+  container-type: inline-size;
 }
 
 .h-factory-empty {
@@ -219,9 +220,13 @@
 
 /* Sampler waveform */
 
+/* The full display and its bevel, narrower in a narrow rack, such as beside the Guide Book, to keep the whole sample
+   in view; Waveform draws as many columns as the box is wide. */
 .h-factory-wave {
   position: relative;
   flex: none;
+  width: 504px;
+  max-width: calc(100cqi - 76px);
 }
 
 .h-factory-wave-name,

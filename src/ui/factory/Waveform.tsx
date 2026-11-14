@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent } from 'react';
 import { loadSample, loadSampleFile } from '../../app/commands';
 import { decodeSample, sampleBuffer } from '../../audio';
@@ -10,8 +10,12 @@ import { Button, Display, setHint, tokenColor, useHint } from '../kit';
 import { PARAM_HINTS } from './hints';
 import type { Cell } from './levels';
 
+/** The widest the display draws, and the narrowest it shrinks to in a narrow rack, such as beside the Guide Book. */
 export const WAVE_W = 500;
+const MIN_W = 160;
 const WAVE_H = 76;
+/** The display's bevel on both sides. */
+const FRAME = 4;
 /** The strip at the top of the display that holds the file name and the direction arrow. */
 export const STRIP = 16;
 
@@ -58,8 +62,8 @@ export function useDecoded(id: string): AudioBuffer | null | undefined {
   return sampleBuffer(id) ?? (result?.id === id ? result.buffer : undefined);
 }
 
-/** The column of the display at a share of the sample. */
-export const column = (share: number) => Math.round(share * (WAVE_W - 1));
+/** The column of a display `width` pixels wide at a share of the sample. */
+export const column = (share: number, width: number) => Math.round(share * (width - 1));
 
 interface WaveformProps {
   channelId: string;
@@ -77,17 +81,31 @@ interface WaveformProps {
    */
   grab: (share: number) => { param: string; limit: (share: number) => number };
   hint: string;
+  /** How wide the display draws, which the unit keeps so its marks land on the right columns. */
+  width: number;
+  /** Told the width the row leaves for the display, whenever it changes. */
+  onWidth: (width: number) => void;
 }
 
 /**
  * A sample's waveform on an amber display, with its name; dragging on it moves the parameter that `grab` picks, and
  * an audio file dropped on it is loaded into the channel.
  */
-export function Waveform({ channelId, source, buffer, shade, overlay, deps, grab, hint }: WaveformProps) {
+export function Waveform({ channelId, source, buffer, shade, overlay, deps, grab, hint, width, onWidth }: WaveformProps) {
   const id = source.params.sample as string;
   const name = useApp((s) => (id ? s.project.samples[id]?.name : undefined));
-  const columns = useMemo(() => buffer && peaks(buffer, WAVE_W), [buffer]);
+  const columns = useMemo(() => buffer && peaks(buffer, width), [buffer, width]);
   const drag = useRef<ReturnType<WaveformProps['grab']> | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const el = box.current!;
+    const fit = () => onWidth(Math.max(MIN_W, Math.min(WAVE_W, el.clientWidth - FRAME)));
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [onWidth]);
   const fullHint = buffer
     ? `${hint} Drop another audio file here to load it.`
     : `Drop an audio file here to load it into the ${source.type === 'grains' ? 'grains' : 'sampler'}.`;
@@ -95,7 +113,7 @@ export function Waveform({ channelId, source, buffer, shade, overlay, deps, grab
 
   const at = (e: PointerEvent<HTMLDivElement>) => {
     const canvas = e.currentTarget.querySelector('canvas')!.getBoundingClientRect();
-    return Math.min(1, Math.max(0, (e.clientX - canvas.left) / (WAVE_W - 1)));
+    return Math.min(1, Math.max(0, (e.clientX - canvas.left) / (width - 1)));
   };
   const move = (e: PointerEvent<HTMLDivElement>) => {
     if (!drag.current) return;
@@ -118,6 +136,7 @@ export function Waveform({ channelId, source, buffer, shade, overlay, deps, grab
       : null;
   return (
     <div
+      ref={box}
       className="h-factory-wave"
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
@@ -137,7 +156,7 @@ export function Waveform({ channelId, source, buffer, shade, overlay, deps, grab
       {...hover.props}
     >
       <Display
-        width={WAVE_W}
+        width={width}
         height={WAVE_H}
         deps={[columns, ...deps]}
         draw={(g, w, h) => {

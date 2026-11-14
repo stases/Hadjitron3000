@@ -185,7 +185,7 @@ test('the menus list their commands and follow the store', async () => {
   expect(state().view).toBe('song');
   expect($('.h-tab.is-selected').textContent).toBe('Song');
   expect(labels(await openMenu('Help'))).toEqual([
-    'Tutorial: Make a Sound', 'Tutorial: Make a Song', 'Keyboard Shortcuts…', 'About Hadjitron 3000…',
+    'Guide Book…', 'Keyboard Shortcuts…', 'About Hadjitron 3000…',
   ]);
 });
 
@@ -203,8 +203,8 @@ test('Check for Updates lists the changes, builds with progress and then restart
   platform.updates = updates;
   renderApp();
   const help = await openMenu('Help');
-  expect(labels(help).slice(2)).toEqual(['Keyboard Shortcuts…', 'Check for Updates…', 'About Hadjitron 3000…']);
-  await userEvent.click(help[3]);
+  expect(labels(help).slice(1)).toEqual(['Keyboard Shortcuts…', 'Check for Updates…', 'About Hadjitron 3000…']);
+  await userEvent.click(help[2]);
   await expect.poll(() => $$('.h-app-update-changes li').map((li) => li.textContent)).toEqual(['Faster song', 'New pads']);
   expect($('.h-app-update').textContent).toContain('2 changes are waiting on GitHub (aaaaaaa → bbbbbbb)');
   await userEvent.click(button('Update and Restart'));

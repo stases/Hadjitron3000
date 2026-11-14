@@ -700,6 +700,10 @@
   font: var(--font-small);
 }
 
+.h-list-row.is-indented {
+  padding-left: 22px;
+}
+
 .h-list-row.is-selected {
   color: var(--sel-ink);
   background: var(--sel);

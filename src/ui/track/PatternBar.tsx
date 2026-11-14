@@ -28,7 +28,7 @@ export function PatternBar() {
   const beginner = usePrefs((p) => p.beginner);
   const deep = useShown()('grid', 3);
   return (
-    <div className="h-track-bar">
+    <div className="h-track-bar" data-tour="block-bar">
       <span className="h-track-label">Block</span>
       <Button
         square
@@ -69,15 +69,17 @@ export function PatternBar() {
         Delete
       </Button>
       <Separator vertical />
-      <span className="h-track-label">Bars</span>
-      <Stepper
-        value={pattern.bars}
-        min={1}
-        max={MAX_BARS}
-        onChange={(bars) => setPatternBars(patternId, bars)}
-        width={40}
-        hint="How long this block is, in bars of the song's time signature."
-      />
+      <span className="h-track-pair">
+        <span className="h-track-label">Bars</span>
+        <Stepper
+          value={pattern.bars}
+          min={1}
+          max={MAX_BARS}
+          onChange={(bars) => setPatternBars(patternId, bars)}
+          width={40}
+          hint="How long this block is, in bars of the song's time signature."
+        />
+      </span>
       <span className="h-track-used" {...usedHint.props}>
         {usedText(used)}
       </span>

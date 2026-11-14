@@ -1,0 +1,295 @@
+/* The Guide Book: a window docked beside the views, with the contents and a page of paper. */
+
+.h-book {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: 440px;
+  margin: 4px 2px 4px 0;
+  padding: 3px;
+  background: var(--face);
+  box-shadow: var(--bevel-window);
+}
+
+.h-book-tools {
+  padding: 4px 2px;
+}
+
+.h-book-spacer {
+  flex: 1;
+}
+
+.h-book-body {
+  display: flex;
+  flex: 1;
+  gap: 4px;
+  min-height: 0;
+}
+
+.h-book-contents {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: 150px;
+}
+
+.h-book-contents .h-listbox {
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 1199px) {
+  .h-book {
+    width: 380px;
+  }
+
+  .h-book-contents {
+    width: 124px;
+  }
+}
+
+.h-book-contents .h-list-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.h-book-page {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 8px 10px 12px;
+  background: var(--paper);
+  box-shadow: var(--bevel-sunken);
+}
+
+.h-book-page p {
+  margin: 0 0 8px;
+}
+
+.h-book-chapter {
+  font: var(--font-small);
+  color: var(--ink-soft);
+  text-transform: uppercase;
+}
+
+.h-book-page .h-book-chapter {
+  margin: 0 0 2px;
+}
+
+.h-book-title {
+  margin: 0 0 10px;
+  font: var(--font-ui);
+  letter-spacing: 1px;
+  text-shadow: 1px 0 0 currentColor;
+}
+
+.h-book-caption {
+  font: var(--font-small);
+  color: var(--ink-soft);
+  text-transform: uppercase;
+}
+
+/* An example, a worked example or a pair: a groove with a caption on its top edge. */
+
+.h-book-box {
+  position: relative;
+  margin: 16px 0 12px;
+  padding: 12px 8px 8px;
+  box-shadow: var(--bevel-ridge);
+}
+
+.h-book-box-label {
+  position: absolute;
+  top: -6px;
+  left: 8px;
+  padding: 0 3px;
+  font: var(--font-small);
+  text-transform: uppercase;
+  background: var(--paper);
+}
+
+.h-book-page .h-book-box-title {
+  margin: 0 0 6px;
+  letter-spacing: 1px;
+  text-shadow: 1px 0 0 currentColor;
+}
+
+.h-book-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.h-book-buttons + .h-book-buttons {
+  margin-top: 6px;
+}
+
+.h-book-rendering {
+  color: var(--ink-soft);
+}
+
+.h-book-picture {
+  margin-top: 8px;
+}
+
+.h-book-pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.h-book-side {
+  flex: 1;
+  min-width: 120px;
+}
+
+/* The steps of a worked example. */
+
+.h-book-steps {
+  margin: 10px 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.h-book-step {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+}
+
+.h-book-step.is-current {
+  background: var(--face-hi);
+  box-shadow: var(--bevel-well);
+}
+
+.h-book-step-mark {
+  flex: none;
+  width: 22px;
+  font: var(--font-mono);
+  color: var(--ink-soft);
+}
+
+.h-book-step-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.h-book-page .h-book-step-body p {
+  margin: 0 0 2px;
+}
+
+.h-book-page .h-book-step-title {
+  letter-spacing: 1px;
+  text-shadow: 1px 0 0 currentColor;
+}
+
+.h-book-step-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.h-book-count {
+  color: var(--ink-soft);
+}
+
+.h-book-done {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Back and Next keep together at the right, and move under the count together when the line is full. */
+.h-book-nav {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.h-book-step-foot .h-button {
+  min-width: 60px;
+}
+
+.h-book-page .h-book-result {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+/* What the knobs of a unit mean. */
+
+.h-book-knobs {
+  margin: 14px 0 12px;
+}
+
+.h-book-page .h-book-knobs .h-book-caption {
+  margin: 0 0 4px;
+}
+
+.h-book-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.h-book-table th,
+.h-book-table td {
+  padding: 4px 0;
+  vertical-align: top;
+  text-align: left;
+  font-weight: normal;
+  border-top: 1px solid var(--face-lo);
+}
+
+.h-book-table th {
+  width: 96px;
+  padding-right: 8px;
+}
+
+.h-book-knob,
+.h-book-level,
+.h-book-range {
+  display: block;
+  font: var(--font-small);
+}
+
+.h-book-knob {
+  text-transform: uppercase;
+}
+
+.h-book-level {
+  color: var(--sel);
+  text-transform: uppercase;
+}
+
+.h-book-range {
+  color: var(--ink-soft);
+}
+
+.h-book-figure {
+  margin: 8px 0 12px;
+}
+
+.h-book-figure figcaption {
+  margin-top: 4px;
+  color: var(--ink-soft);
+}
+
+.h-book-terms {
+  margin: 0;
+}
+
+.h-book-terms div {
+  margin: 0 0 8px;
+}
+
+.h-book-terms dt {
+  letter-spacing: 1px;
+  text-shadow: 1px 0 0 currentColor;
+}
+
+.h-book-terms dd {
+  margin: 0 0 0 12px;
+}
+

@@ -11,6 +11,7 @@ import { Icon, MenuBar, Separator, StatusBar, StatusField, TabPage, Tabs, Window
 import { MixerView } from '../ui/mixer';
 import { SongView } from '../ui/song';
 import { TrackView } from '../ui/track';
+import { Book } from './book/Book';
 import { audioNotice, heardNow, onAudioNotice, position, sampleRate } from './audio';
 import { documentName, dropFiles } from './commands';
 import { Dialogs } from './Dialogs';
@@ -174,18 +175,21 @@ export function App() {
       <Menus />
       <Separator />
       <Transport />
-      <div className="h-app-views">
-        <Tabs tabs={TABS} value={view} onChange={(id) => setView(id as View)} />
-        <TabPage>
-          <div className="h-app-view">
-            <ViewPage />
-          </div>
-        </TabPage>
-        {dropping && (
-          <div className="h-app-drop">
-            <div className="h-app-drop-card">Drop audio files, sounds, blocks or a project to add or open them.</div>
-          </div>
-        )}
+      <div className="h-app-main">
+        <div className="h-app-views">
+          <Tabs tabs={TABS} value={view} onChange={(id) => setView(id as View)} />
+          <TabPage>
+            <div className="h-app-view">
+              <ViewPage />
+            </div>
+          </TabPage>
+          {dropping && (
+            <div className="h-app-drop">
+              <div className="h-app-drop-card">Drop audio files, sounds, blocks or a project to add or open them.</div>
+            </div>
+          )}
+        </div>
+        <Book />
       </div>
       <Status />
       <Tour />

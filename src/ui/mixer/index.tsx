@@ -101,7 +101,12 @@ function ChannelStrip({ channel, others, active }: { channel: Channel; others: C
   const shaping = useShaping();
   const name = useHint(`${sound.name}. ${MIXER_HINTS.name}`);
   return (
-    <div className={cx('h-mixer-strip', active && 'is-active')} role="group" aria-label={sound.name}>
+    <div
+      className={cx('h-mixer-strip', active && 'is-active')}
+      role="group"
+      aria-label={sound.name}
+      data-tour={`strip-${sound.name}`}
+    >
       <div
         className="h-mixer-head"
         onPointerDown={() => selectChannel(id)}
@@ -178,7 +183,7 @@ function BusStrip({ index }: { index: 0 | 1 }) {
   const shown = useShownRack() === index;
   const head = useHint(MIXER_HINTS.bus(BUS_LETTERS[index], bus.name));
   return (
-    <div className="h-mixer-strip is-bus" role="group" aria-label={bus.name}>
+    <div className="h-mixer-strip is-bus" role="group" aria-label={bus.name} data-tour={`bus-${index}`}>
       <div className="h-mixer-head" {...head.props}>
         <span className="h-mixer-letter">{BUS_LETTERS[index]}</span>
         <span className="h-mixer-name">{bus.name}</span>
@@ -219,7 +224,7 @@ function MasterStrip() {
   const shown = useShownRack() === 'master';
   const head = useHint(MIXER_HINTS.masterStrip);
   return (
-    <div className="h-mixer-strip is-master" role="group" aria-label="Master">
+    <div className="h-mixer-strip is-master" role="group" aria-label="Master" data-tour="master">
       <div className="h-mixer-head" {...head.props}>
         <span className="h-mixer-name">Master</span>
       </div>

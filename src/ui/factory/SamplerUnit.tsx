@@ -9,7 +9,7 @@ import { Control, SourceSelect, paramCell } from './controls';
 import { SLICE_HINTS } from './hints';
 import { useLevels } from './levels';
 import type { Cell } from './levels';
-import { STRIP, Waveform, column, loadCell, useDecoded } from './Waveform';
+import { STRIP, WAVE_W, Waveform, column, loadCell, useDecoded } from './Waveform';
 
 /** The note a channel sounds, read on every frame while `on`, or null. */
 function useSounding(channelId: string, on: boolean): number | null {
@@ -34,11 +34,12 @@ export function SamplerUnit({ channelId, source, play }: { channelId: string; so
   // The slice a sounding note plays lights up; the lowest one, when several sound.
   const lit = slices && sounding !== null && sounding >= 60 && sounding - 60 < slices.length - 1 ? sounding - 60 : -1;
   const share = (t: number) => (buffer ? t / buffer.duration : 0);
-  const xs = column(p.start as number);
-  const xe = column(p.end as number);
-  const lines = slices?.slice(1, -1).map((t) => column(share(t))) ?? [];
-  const litFrom = lit >= 0 ? column(share(slices![lit])) : 0;
-  const litTo = lit >= 0 ? column(share(slices![lit + 1])) : 0;
+  const [width, setWidth] = useState(WAVE_W);
+  const xs = column(p.start as number, width);
+  const xe = column(p.end as number, width);
+  const lines = slices?.slice(1, -1).map((t) => column(share(t), width)) ?? [];
+  const litFrom = lit >= 0 ? column(share(slices![lit]), width) : 0;
+  const litTo = lit >= 0 ? column(share(slices![lit + 1]), width) : 0;
 
   const props = (pid: string) => ({
     owner: channelId,
@@ -71,7 +72,12 @@ export function SamplerUnit({ channelId, source, play }: { channelId: string; so
         <div key="track" className="h-factory-cell is-wide is-track">
           <div className="h-param">
             <span className="h-param-label">Track</span>
-            <Button disabled={!slices} onClick={() => void slicesToTrack(channelId)} hint={SLICE_HINTS.toTrack}>
+            <Button
+              disabled={!slices}
+              onClick={() => void slicesToTrack(channelId)}
+              hint={SLICE_HINTS.toTrack}
+              data-tour="slices-to-track"
+            >
               Slices to Track
             </Button>
           </div>
@@ -82,7 +88,7 @@ export function SamplerUnit({ channelId, source, play }: { channelId: string; so
   ];
   const { row, folds } = useLevels('sample', cells);
   return (
-    <RackUnit name="Source" folds={folds}>
+    <RackUnit name="Source" folds={folds} data-tour="unit-source">
       <div className="h-factory-sampler">
         <div className="h-factory-row">
           <SourceSelect channelId={channelId} type="sample" />
@@ -90,6 +96,8 @@ export function SamplerUnit({ channelId, source, play }: { channelId: string; so
             channelId={channelId}
             source={source}
             buffer={buffer}
+            width={width}
+            onWidth={setWidth}
             deps={[xs, xe, p.reverse, lines.join(), litFrom, litTo]}
             shade={(x) => {
               if (x < xs || x > xe) return '--amber-dim';

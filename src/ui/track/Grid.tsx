@@ -366,7 +366,11 @@ export function Grid() {
         ))}
         <div className="h-track-row">
           <div className="h-track-add">
-            <Button onClick={addSound} hint="Pick a sound from the library and add it as a new row.">
+            <Button
+              onClick={addSound}
+              hint="Pick a sound from the library and add it as a new row."
+              data-tour="add-sound"
+            >
               <Icon name="plus" /> Add sound…
             </Button>
           </div>

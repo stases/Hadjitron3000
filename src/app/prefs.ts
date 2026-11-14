@@ -12,10 +12,16 @@ export interface Prefs {
   quantize: number;
   /** New, dragged, recorded and step-entered notes land on the notes of the project's scale, when it has one. */
   scaleSnap: boolean;
+  /** The page of the Guide Book the reader was on, as "chapter/page"; empty before the book was ever opened. */
+  bookPage: string;
+  /** The Guide Book shows its contents beside the page. */
+  bookContents: boolean;
 }
 
 const KEY = 'hadjitron-prefs';
-const DEFAULTS: Prefs = { beginner: true, metronome: false, quantize: 24, scaleSnap: false };
+const DEFAULTS: Prefs = {
+  beginner: true, metronome: false, quantize: 24, scaleSnap: false, bookPage: '', bookContents: true,
+};
 
 /** The stored preferences; a missing value or one of the wrong type gets its default. */
 function load(): Prefs {

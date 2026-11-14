@@ -1,10 +1,11 @@
+import { useState } from 'react';
 import { MODULES } from '../../core/modules';
 import type { ModuleInst } from '../../core/types';
 import { RackUnit, tokenColor } from '../kit';
 import { SourceSelect, paramCell } from './controls';
 import { useLevels } from './levels';
 import type { Cell } from './levels';
-import { STRIP, Waveform, column, loadCell, useDecoded } from './Waveform';
+import { STRIP, WAVE_W, Waveform, column, loadCell, useDecoded } from './Waveform';
 
 /**
  * The Grains source unit: the sample with Position marked on it and the stretch Spray scatters the grains over lit
@@ -15,9 +16,10 @@ export function GrainsUnit({ channelId, source, play }: { channelId: string; sou
   const buffer = useDecoded(p.sample as string);
   const position = p.position as number;
   const spray = p.spray as number;
-  const x = column(position);
-  const from = column(Math.max(0, position - spray / 2));
-  const to = column(Math.min(1, position + spray / 2));
+  const [width, setWidth] = useState(WAVE_W);
+  const x = column(position, width);
+  const from = column(Math.max(0, position - spray / 2), width);
+  const to = column(Math.min(1, position + spray / 2), width);
   const cells: Cell[] = [
     loadCell(channelId, 'grains'),
     ...MODULES.grains.params
@@ -27,7 +29,7 @@ export function GrainsUnit({ channelId, source, play }: { channelId: string; sou
   ];
   const { row, folds } = useLevels('grains', cells);
   return (
-    <RackUnit name="Source" folds={folds}>
+    <RackUnit name="Source" folds={folds} data-tour="unit-source">
       <div className="h-factory-sampler">
         <div className="h-factory-row">
           <SourceSelect channelId={channelId} type="grains" />
@@ -35,6 +37,8 @@ export function GrainsUnit({ channelId, source, play }: { channelId: string; sou
             channelId={channelId}
             source={source}
             buffer={buffer}
+            width={width}
+            onWidth={setWidth}
             deps={[x, from, to]}
             shade={(c) => (c >= from && c <= to ? '--amber' : '--amber-dim')}
             overlay={(g, _w, h) => {

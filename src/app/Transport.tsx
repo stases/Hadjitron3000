@@ -84,6 +84,7 @@ function Tempo() {
     <div
       ref={root}
       className="h-app-tempo"
+      data-tour="tempo"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -143,7 +144,7 @@ function TimeSignature() {
   const shown = useShown()('transport', 3);
   const text = meterText(meter);
   return (
-    <>
+    <div className="h-app-meter" data-tour="meter">
       {beginner && (
         <FoldToggles
           row
@@ -165,7 +166,7 @@ function TimeSignature() {
           hint="Time signature: how many beats make a bar, for every block. Notes keep their places when it changes."
         />
       )}
-    </>
+    </div>
   );
 }
 
@@ -204,7 +205,13 @@ function Recorder() {
   const lit = useRecordLamp(on, playing);
   return (
     <>
-      <Button pressed={on} disabled={song} onClick={toggleRecord} hint={song ? SONG_HINT : RECORD_HINT}>
+      <Button
+        pressed={on}
+        disabled={song}
+        onClick={toggleRecord}
+        hint={song ? SONG_HINT : RECORD_HINT}
+        data-tour="record"
+      >
         <Led on={lit} color="red" />
         Rec
       </Button>
@@ -219,6 +226,7 @@ function Recorder() {
         square
         pressed={metronome}
         onClick={toggleMetronome}
+        data-tour="metronome"
         hint="Metronome: a click on every beat while playing, a higher one on the first beat of the bar (C)."
       >
         <Icon name="metronome" />

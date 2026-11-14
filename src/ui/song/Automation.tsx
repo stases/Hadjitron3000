@@ -98,11 +98,12 @@ function drawRow(
 const pointsOf = (id: string) => useApp.getState().project.automation.find((r) => r.id === id)?.points ?? [];
 
 /** One row of automation: its remove button at the left, then the display aligned bar for bar with the lanes. */
-const AutomationRow = memo(function AutomationRow({ row, project, count, width }: {
+const AutomationRow = memo(function AutomationRow({ row, project, count, width, tour }: {
   row: AutoRow;
   project: Project;
   count: number;
   width: number;
+  tour: string;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const drag = useRef<number | null>(null);
@@ -183,7 +184,7 @@ const AutomationRow = memo(function AutomationRow({ row, project, count, width }
   };
 
   return (
-    <div className="h-song-row h-song-autorow" role="group" aria-label={label}>
+    <div className="h-song-row h-song-autorow" role="group" aria-label={label} data-tour={tour}>
       <div className="h-song-head is-auto">
         <Button square small onClick={() => removeAutomation(row.id)} hint={HINTS.remove}>
           <Icon name="close" />
@@ -270,8 +271,8 @@ export function AutomationRows({ count, width }: { count: number; width: number 
   const add = useRef<HTMLDivElement>(null);
   return (
     <>
-      {deep && project.automation.map((row) => (
-        <AutomationRow key={row.id} row={row} project={project} count={count} width={width} />
+      {deep && project.automation.map((row, i) => (
+        <AutomationRow key={row.id} row={row} project={project} count={count} width={width} tour={`auto-${i + 1}`} />
       ))}
       <div className="h-song-row h-song-autorow is-add">
         <div className="h-song-adds" ref={add}>

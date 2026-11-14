@@ -19,6 +19,11 @@ export function toggleFold(type: string, level: Level): void {
   useFolds.setState((s) => ({ [`${type}/${level}`]: !s[`${type}/${level}`] }));
 }
 
+/** Open the section of a level in units of a type, if it is not open yet. */
+export function showFold(type: string, level: Level): void {
+  if (level > 1) useFolds.setState({ [`${type}/${level}`]: true });
+}
+
 /** Tells whether controls of a level are on screen in units of a type: always in pro mode and at Basics. */
 export function useShown(): (type: string, level: Level) => boolean {
   const beginner = usePrefs((p) => p.beginner);

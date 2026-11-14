@@ -372,13 +372,15 @@
 
 /* The selected placement */
 
+/* Beside the Guide Book the bar can be narrower than its controls, and wraps. */
 .h-song-bar {
   display: flex;
+  flex-wrap: wrap;
   grid-column: 1 / -1;
   align-items: center;
-  gap: 6px;
+  gap: 4px 6px;
   min-width: 0;
-  height: 26px;
+  min-height: 26px;
   white-space: nowrap;
 }
 
@@ -406,7 +408,8 @@
 }
 
 .h-song-help {
-  min-width: 0;
+  flex: 1 1 0;
+  min-width: 160px;
   margin-left: 10px;
   overflow: hidden;
   font: var(--font-small);

@@ -155,7 +155,7 @@ function InspectorRow({ which, notes, sound, setExtras, setLock, help, children 
     },
   ];
   return (
-    <div className="h-track-inspector">
+    <div className="h-track-inspector" data-tour="inspector">
       <div className="h-track-fields">
         <span className="h-track-group">
           <span className="h-track-which">{which}</span>

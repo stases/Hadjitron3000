@@ -348,7 +348,7 @@ const LaneHead = memo(function LaneHead({ lane, state }: { lane: number; state: 
   const hint = useHint(`Lane ${lane + 1}. Blocks in different lanes play at the same time.`);
   const level = formatValue(LEVEL, state.level);
   return (
-    <div className="h-song-head">
+    <div className="h-song-head" data-tour={`lane-${lane + 1}`}>
       <span className="h-song-number" {...hint.props}>
         {lane + 1}
       </span>

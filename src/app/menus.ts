@@ -19,7 +19,7 @@ import { setPrefs, toggleMetronome, toggleScaleSnap } from './prefs';
 import type { Prefs } from './prefs';
 import { toggleRecord } from './record';
 import { modKey } from './shortcuts';
-import { startLesson } from './tour/tourStore';
+import { openBook } from './book/bookStore';
 
 export function buildMenus(
   state: AppState, prefs: Prefs, record: boolean,
@@ -143,8 +143,11 @@ export function buildMenus(
     {
       label: 'Help',
       items: [
-        { label: 'Tutorial: Make a Sound', onSelect: () => void startLesson('sound') },
-        { label: 'Tutorial: Make a Song', onSelect: () => void startLesson('song') },
+        {
+          label: 'Guide Book…',
+          hint: 'A book about making music with Hadjitron 3000, from the first sound to finished tracks.',
+          onSelect: () => openBook(),
+        },
         'separator',
         { label: 'Keyboard Shortcuts…', onSelect: showShortcuts },
         ...(platform.updates ? [{ label: 'Check for Updates…', onSelect: checkForUpdates }] : []),

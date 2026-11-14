@@ -6,7 +6,7 @@ import { ColorChip, Icon } from './Icon';
 import type { IconName } from './icons';
 
 export type ListItem =
-  | { id: string; label: string; color?: number; icon?: IconName; detail?: string }
+  | { id: string; label: string; color?: number; icon?: IconName; detail?: string; indent?: boolean }
   | { header: string };
 
 interface ListBoxProps {
@@ -57,7 +57,7 @@ export function ListBox({ items, value, onChange, onActivate, height, hint }: Li
           ) : (
             <div
               key={item.id}
-              className={cx('h-list-row', item.id === value && 'is-selected')}
+              className={cx('h-list-row', item.id === value && 'is-selected', item.indent && 'is-indented')}
               role="option"
               aria-selected={item.id === value}
               onPointerDown={() => item.id !== value && onChange(item.id)}

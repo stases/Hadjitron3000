@@ -131,7 +131,7 @@ function ModUnit({ channelId, sound, mod, name }: { channelId: string; sound: So
   return (
     <LevelUnit
       name={name}
-      data-tour="unit-mod"
+      data-tour={`mod-${mod.type}`}
       led={{ on: mod.on !== false, onToggle: () => setModuleOn(channelId, mod.id, mod.on === false) }}
       onRemove={() => removeModule(channelId, mod.id)}
       type={mod.type}
@@ -262,6 +262,7 @@ export function Rack({ channel }: { channel: Channel }) {
       />
       <LevelUnit
         name="Output"
+        data-tour="unit-out"
         type={OUT.type}
         cells={[...paramCells(channelId, 'out', OUT.type, sound.out), ...sends]}
       />

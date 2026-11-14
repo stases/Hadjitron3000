@@ -135,7 +135,7 @@ export function RollBar() {
   const markHint = useHint('Paste puts copied notes here. Copy moves it right after the copied notes; '
     + 'click the ruler to move it yourself, or drag along it to choose a stretch for Randomise.');
   return (
-    <div className="h-track-bar h-roll-bar">
+    <div className="h-track-bar h-roll-bar" data-tour="roll-tools">
       <Button onClick={closeRoll} hint="Back to the step grid of all sounds. Esc does the same with no note selected.">
         Grid
       </Button>

@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 
 /** A fresh copy of the preferences module over the given storage. */
-const DEFAULTS = { beginner: true, metronome: false, quantize: 24, scaleSnap: false };
+const DEFAULTS = { beginner: true, metronome: false, quantize: 24, scaleSnap: false, bookPage: '', bookContents: true };
 
 async function load(storage: Partial<Storage>) {
   vi.stubGlobal('localStorage', storage);
@@ -45,7 +45,7 @@ test('a change is stored under one key and read back on the next start', async (
   expect(first.usePrefs.getState().beginner).toBe(false);
   expect(Object.keys(storage.data)).toEqual(['hadjitron-prefs']);
   const second = await load(storage);
-  expect(second.usePrefs.getState()).toEqual({ beginner: false, metronome: true, quantize: 16, scaleSnap: true });
+  expect(second.usePrefs.getState()).toEqual({ ...DEFAULTS, beginner: false, metronome: true, quantize: 16, scaleSnap: true });
 });
 
 test('broken storage leaves the defaults and never throws', async () => {

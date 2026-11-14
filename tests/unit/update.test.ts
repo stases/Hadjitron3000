@@ -3,8 +3,10 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test as base } from 'vitest';
 
+// Building from source is for a Mac, and these tests drive git and a POSIX shell; Windows updates from releases.
+const test = base.skipIf(process.platform === 'win32');
 const require = createRequire(import.meta.url);
 const updates = require('../../electron/update.cjs');
 const cacheDirectory = fileURLToPath(new URL('../../.cache/', import.meta.url));

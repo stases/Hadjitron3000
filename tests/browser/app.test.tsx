@@ -10,11 +10,12 @@ import * as commands from '../../src/app/commands';
 import { useDialogs } from '../../src/app/dialogStore';
 import { installKeys } from '../../src/app/keys';
 import { restoreSession, saveSession } from '../../src/app/session';
-import { SHORTCUT_GROUPS } from '../../src/app/shortcuts';
+import { IS_MAC, SHORTCUT_GROUPS, modKey } from '../../src/app/shortcuts';
 import { extractBlock } from '../../src/core/block';
 import { emptyProject, newSound } from '../../src/core/defaults';
 import { parseBlock, parseProject, serializeBlock } from '../../src/core/fileformat';
 import { platform } from '../../src/platform';
+import type { UpdateProgress } from '../../src/platform/api';
 import { PRESET_GROUPS } from '../../src/presets';
 import { EXAMPLES } from '../../src/presets/examples';
 import { demoProject, factoryBlocks, starterProject } from '../../src/presets/projects';
@@ -78,6 +79,8 @@ const press = (key: string, init: KeyboardEventInit = {}, target: EventTarget = 
   const code = key.length === 1 && /[a-z]/i.test(key) ? `Key${key.toUpperCase()}` : key === ' ' ? 'Space' : key;
   target.dispatchEvent(new KeyboardEvent('keydown', { key, code, bubbles: true, cancelable: true, ...init }));
 };
+// Cmd on a Mac, Ctrl elsewhere, as the shortcuts expect.
+const MOD: KeyboardEventInit = IS_MAC ? { metaKey: true } : { ctrlKey: true };
 const release = (key: string) =>
   document.body.dispatchEvent(new KeyboardEvent('keyup', { key, code: `Key${key.toUpperCase()}`, bubbles: true }));
 
@@ -121,7 +124,7 @@ test('the title bar buttons control the window when there is one', async () => {
   await userEvent.click($('[aria-label="Close"]'));
   expect(platform.window.minimize).toHaveBeenCalledOnce();
   expect(platform.window.close).toHaveBeenCalledOnce();
-  expect(labels(await openMenu('File'))).toContain('Quit');
+  expect(labels(await openMenu('File'))).toContain(IS_MAC ? 'Quit' : 'Exit');
 });
 
 test('the menus list their commands and follow the store', async () => {
@@ -177,7 +180,7 @@ test('the menus list their commands and follow the store', async () => {
   const view = await openMenu('View');
   expect(labels(view)).toEqual(['Factory', 'Track', 'Song', 'Mixer', 'Beginner Mode']);
   expect(view.slice(0, 4).map((el) => el.querySelector('.h-menu-shortcut')!.textContent))
-    .toEqual(['Ctrl+1', 'Ctrl+2', 'Ctrl+3', 'Ctrl+4']);
+    .toEqual(['1', '2', '3', '4'].map((key) => modKey(key)));
   await userEvent.click(view[3]);
   expect(state().view).toBe('mixer');
   expect($('.h-tab.is-selected').textContent).toBe('Mixer');
@@ -190,11 +193,12 @@ test('the menus list their commands and follow the store', async () => {
 });
 
 test('Check for Updates lists the changes, builds with progress and then restarts', async () => {
-  let progress!: (step: string) => void;
+  let progress!: (progress: UpdateProgress) => void;
   let finish!: () => void;
   const updates = {
+    kind: 'source' as const,
     check: vi.fn(async () => ({ current: 'aaaaaaa', latest: 'bbbbbbb', changes: ['Faster song', 'New pads'], blocked: null })),
-    build: vi.fn((onProgress: (step: string) => void) => {
+    build: vi.fn((onProgress: (progress: UpdateProgress) => void) => {
       progress = onProgress;
       return new Promise<void>((resolve) => (finish = resolve));
     }),
@@ -208,8 +212,9 @@ test('Check for Updates lists the changes, builds with progress and then restart
   await expect.poll(() => $$('.h-app-update-changes li').map((li) => li.textContent)).toEqual(['Faster song', 'New pads']);
   expect($('.h-app-update').textContent).toContain('2 changes are waiting on GitHub (aaaaaaa → bbbbbbb)');
   await userEvent.click(button('Update and Restart'));
-  progress('Building the application');
+  progress({ step: 'Building the application', value: 5 / 6 });
   await expect.poll(() => $('.h-app-update').textContent).toContain('Building the application…');
+  expect($('.h-app-update [role="progressbar"]').getAttribute('aria-valuenow')).toBe(String(5 / 6));
   expect($$('.h-dialog .h-button')).toEqual([]);
   expect(updates.restart).not.toHaveBeenCalled();
   finish();
@@ -219,6 +224,7 @@ test('Check for Updates lists the changes, builds with progress and then restart
 
 test('Check for Updates says when there is nothing new, and why it cannot update or reach GitHub', async () => {
   const updates = {
+    kind: 'source' as const,
     check: vi.fn(async () => ({
       current: 'aaaaaaa', latest: 'aaaaaaa', changes: [] as string[], blocked: null as string | null,
     })),
@@ -240,6 +246,74 @@ test('Check for Updates says when there is nothing new, and why it cannot update
   await expect.poll(() => document.querySelector('.h-app-update-error')?.textContent)
     .toBe('Could not reach GitHub.\noffline');
   expect(updates.build).not.toHaveBeenCalled();
+});
+
+test('Check for Updates from a release names the versions, downloads with progress and then restarts', async () => {
+  let progress!: (progress: UpdateProgress) => void;
+  let finish!: () => void;
+  const updates = {
+    kind: 'release' as const,
+    check: vi.fn(async () => ({ current: '0.1.0', latest: '0.2.0', changes: ['Faster song', 'New pads'], blocked: null })),
+    build: vi.fn((onProgress: (progress: UpdateProgress) => void) => {
+      progress = onProgress;
+      return new Promise<void>((resolve) => (finish = resolve));
+    }),
+    restart: vi.fn(),
+  };
+  platform.updates = updates;
+  renderApp();
+  commands.checkForUpdates();
+  await expect.poll(() => $$('.h-app-update-changes li').map((li) => li.textContent)).toEqual(['Faster song', 'New pads']);
+  const text = $('.h-app-update').textContent!;
+  expect(text).toContain('Version 0.2.0 is on GitHub; you have 0.1.0. What is new:');
+  expect(text).toContain('Updating downloads the new version, installs it and restarts.');
+  expect(text).not.toMatch(/build|Terminal/i);
+  await userEvent.click(button('Update and Restart'));
+  progress({ step: 'Downloading the new version', value: 0.4 });
+  await expect.poll(() => $('.h-app-update').textContent).toBe('Downloading the new version…');
+  expect($('.h-app-update [role="progressbar"]').getAttribute('aria-valuenow')).toBe('0.4');
+  expect($$('.h-dialog .h-button')).toEqual([]);
+  expect(updates.restart).not.toHaveBeenCalled();
+  finish();
+  await expect.poll(() => updates.restart).toHaveBeenCalledOnce();
+  expect(useDialogs.getState().dialog).toBeNull();
+});
+
+test('Check for Updates from a release says when it is up to date, and a failure in plain words', async () => {
+  const updates = {
+    kind: 'release' as const,
+    check: vi.fn(async () => ({ current: '0.2.0', latest: '0.2.0', changes: [] as string[], blocked: null })),
+    build: vi.fn(async () => {
+      throw new Error("Error invoking remote method 'update-build': Error: The download arrived damaged. Try again.");
+    }),
+    restart: vi.fn(),
+  };
+  platform.updates = updates;
+  renderApp();
+  commands.checkForUpdates();
+  await expect.poll(() => $('.h-app-update').textContent).toBe('You have the latest version (0.2.0).');
+  expect(button('Update and Restart')).toBeUndefined();
+  await userEvent.click(button('OK'));
+
+  updates.check.mockRejectedValueOnce(new Error("Error invoking remote method 'update-check': Error: GitHub could "
+    + 'not be reached. Check that the computer is online, then try again.'));
+  commands.checkForUpdates();
+  await expect.poll(() => document.querySelector('.h-app-update-error')?.textContent)
+    .toBe('GitHub could not be reached. Check that the computer is online, then try again.');
+  await userEvent.click(button('OK'));
+
+  // A newer release without notes is still offered; a broken download ends in the failed state.
+  updates.check.mockResolvedValueOnce({ current: '0.2.0', latest: '0.3.0', changes: [], blocked: null });
+  commands.checkForUpdates();
+  await expect.poll(() => $('.h-app-update').textContent).toContain('Version 0.3.0 is on GitHub; you have 0.2.0.');
+  expect($('.h-app-update').textContent).not.toContain('What is new');
+  await userEvent.click(button('Update and Restart'));
+  await expect.poll(() => document.querySelector('.h-app-update-error')?.textContent)
+    .toBe('The update did not finish. This version keeps working.\nThe download arrived damaged. Try again.');
+  expect(button('Update and Restart')).toBeUndefined();
+  expect(updates.restart).not.toHaveBeenCalled();
+  await userEvent.click(button('OK'));
+  expect(useDialogs.getState().dialog).toBeNull();
 });
 
 test('Beginner Mode in the View menu folds or shows the Factory controls and is remembered', async () => {
@@ -333,26 +407,28 @@ test('Space, undo and redo, and the view shortcuts', () => {
   press(' ');
   expect(state().playing).toBe(false);
   store.setBpm(90);
-  press('z', { ctrlKey: true });
+  press('z', MOD);
   expect(state().project.bpm).toBe(126);
-  press('Z', { ctrlKey: true, shiftKey: true });
+  press('Z', { ...MOD, shiftKey: true });
   expect(state().project.bpm).toBe(90);
-  press('z', { ctrlKey: true });
-  press('y', { ctrlKey: true });
+  press('z', MOD);
+  press('y', MOD);
   expect(state().project.bpm).toBe(90);
-  press('1', { ctrlKey: true, code: 'Digit1' });
+  press('1', { ...MOD, code: 'Digit1' });
   expect(state().view).toBe('factory');
-  press('2', { ctrlKey: true, code: 'Digit2' });
+  press('2', { ...MOD, code: 'Digit2' });
   expect(state().view).toBe('track');
   expect(state().scope).toBe('pattern');
-  press('3', { ctrlKey: true, code: 'Digit3' });
+  press('3', { ...MOD, code: 'Digit3' });
   expect(state().view).toBe('song');
   expect(state().scope).toBe('song');
   // The Mixer, like the Factory, leaves Play playing what it played.
-  press('4', { ctrlKey: true, code: 'Digit4' });
+  press('4', { ...MOD, code: 'Digit4' });
   expect(state().view).toBe('mixer');
   expect(state().scope).toBe('song');
-  expect(SHORTCUT_GROUPS[0].keys).toContainEqual(['Ctrl+1, Ctrl+2, Ctrl+3, Ctrl+4', 'Factory, Track, Song, Mixer']);
+  expect(SHORTCUT_GROUPS[0].keys).toContainEqual([
+    IS_MAC ? '⌘1, ⌘2, ⌘3, ⌘4' : 'Ctrl+1, Ctrl+2, Ctrl+3, Ctrl+4', 'Factory, Track, Song, Mixer',
+  ]);
 });
 
 test('the transport and the status bar say what Play plays, the block or the song', async () => {
@@ -429,7 +505,7 @@ test('no shortcut fires while a text field has the focus', () => {
   input.focus();
   press(' ', {}, input);
   press('a', {}, input);
-  press('z', { ctrlKey: true }, input);
+  press('z', MOD, input);
   input.remove();
   expect(state().playing).toBe(false);
   expect(audio.noteOn).not.toHaveBeenCalled();

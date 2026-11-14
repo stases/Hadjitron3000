@@ -1,7 +1,8 @@
 const { app, BrowserWindow, dialog, ipcMain, Menu, protocol, session, shell } = require('electron');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { validateLibraryName, appFilePath, contentType } = require('./paths.cjs');
+const { validateLibraryName, suggestedName, appFilePath, contentType } = require('./paths.cjs');
+const { releaseUpdates } = require('./release.cjs');
 const updates = require('./update.cjs');
 
 const dist = path.join(__dirname, '..', 'dist');
@@ -20,11 +21,15 @@ let lastDirectory = null;
 const pendingFiles = [];
 // Folders the user chose for an export, by the number the page writes into them with.
 const folders = new Map();
-// Updating needs an installed application (from `npm run app`) inside a .app bundle.
+// The application updates itself in one of two ways. Built from a git checkout by `npm run app` on a Mac, with
+// install.json next to this file, it pulls and rebuilds that checkout (update.cjs). Installed from the Setup .exe
+// of a release on Windows, it downloads the next release's installer (release.cjs). In development it does not.
 const install = app.isPackaged ? updates.readInstall(__dirname) : null;
 const bundle = install && process.platform === 'darwin' ? updates.bundleOf(app.getPath('exe')) : null;
+const fromRelease = app.isPackaged && !install && process.platform === 'win32';
+let updater = null;
 let updating = false;
-let builtApp = null;
+let updateReady = false;
 let restartPending = false;
 let deliveringFiles = false;
 
@@ -64,6 +69,8 @@ async function deliverFiles() {
   }
 }
 
+// Windows passes a double-clicked file as an argument, to a new process or, through the single instance lock, to
+// the running one; macOS sends open-file instead.
 function queueArguments(argv, cwd = process.cwd()) {
   if (process.platform === 'darwin') return;
   for (const arg of argv.slice(process.defaultApp ? 2 : 1)) {
@@ -113,7 +120,7 @@ function registerLibrary(channel, folder, extension) {
     return dir;
   }
   async function file(name) {
-    validateLibraryName(name);
+    validateLibraryName(name, process.platform);
     return path.join(await directory(), name + extension);
   }
   handle(`${channel}-list`, 0, async () => {
@@ -149,7 +156,7 @@ function registerRequests() {
     assert(opts && typeof opts === 'object');
     text(opts.title);
     text(opts.defaultName);
-    validateLibraryName(opts.defaultName);
+    const defaultName = validateLibraryName(suggestedName(opts.defaultName, process.platform), process.platform);
     filters(opts.filters);
     assert(opts.bytes instanceof Uint8Array);
     let file = opts.path;
@@ -159,7 +166,7 @@ function registerRequests() {
     } else {
       const result = await dialog.showSaveDialog(win, {
         title: opts.title,
-        defaultPath: path.join(await dialogDirectory(), opts.defaultName),
+        defaultPath: path.join(await dialogDirectory(), defaultName),
         filters: opts.filters,
       });
       if (result.canceled || !result.filePath) return null;
@@ -182,7 +189,7 @@ function registerRequests() {
   });
   handle('folder-write', 3, async (id, name, bytes) => {
     assert(folders.has(id), 'Unknown folder');
-    validateLibraryName(name);
+    validateLibraryName(name, process.platform);
     assert(/^[^.].*\.(wav|mp3)$/i.test(name), 'Invalid file name');
     assert(bytes instanceof Uint8Array);
     await fs.writeFile(path.join(folders.get(id), name), bytes);
@@ -206,41 +213,70 @@ function registerRequests() {
     if (allowed) win.destroy();
     else restartPending = false;
   });
-  if (bundle) registerUpdates();
+  if (updater) registerUpdates();
   handle('open-register', 0, () => {
     openRegistered = true;
     void deliverFiles();
   });
 }
 
+function sourceUpdater() {
+  let built = null;
+  return {
+    kind: 'source',
+    check: () => updates.check(install),
+    async build(progress, log) {
+      try {
+        await fs.access(path.dirname(bundle), fs.constants.W_OK);
+      } catch {
+        throw new Error(`Cannot write to ${path.dirname(bundle)}.`);
+      }
+      built = await updates.build(install, progress, log);
+    },
+    install: () => updates.swapAfterExit(process.pid, built, bundle),
+  };
+}
+
+function releaseUpdater(log) {
+  try {
+    return { kind: 'release', ...releaseUpdates(require('electron-updater').autoUpdater, log) };
+  } catch (error) {
+    console.error('Updates are off:', error);
+    return null;
+  }
+}
+
+const updateLog = () => path.join(app.getPath('userData'), 'update.log');
+const logUpdate = (text) => { void fs.appendFile(updateLog(), text + '\n').catch(() => {}); };
+
+function createUpdater() {
+  if (bundle) return sourceUpdater();
+  return fromRelease ? releaseUpdater(logUpdate) : null;
+}
+
 function registerUpdates() {
-  handle('update-check', 0, () => updates.check(install));
+  handle('update-check', 0, () => updater.check());
   handle('update-build', 0, async () => {
     assert(!updating, 'An update is already running');
-    try {
-      await fs.access(path.dirname(bundle), fs.constants.W_OK);
-    } catch {
-      throw new Error(`Cannot write to ${path.dirname(bundle)}.`);
-    }
     updating = true;
-    const logFile = path.join(app.getPath('userData'), 'update.log');
-    const log = (text) => { void fs.appendFile(logFile, text + '\n').catch(() => {}); };
     try {
-      await fs.writeFile(logFile, `Update started ${new Date().toISOString()}\n`);
-      builtApp = await updates.build(install, (step) => win?.webContents.send('update-progress', step), log);
+      await fs.writeFile(updateLog(), `Update started ${new Date().toISOString()}\n`).catch(() => {});
+      await updater.build((progress) => win?.webContents.send('update-progress', progress), logUpdate);
+      updateReady = true;
     } catch (error) {
-      throw new Error(`${error.message}\n\nThe full output is in ${logFile}.`);
+      logUpdate(error.stack ?? error.message);
+      throw new Error(`${error.message}\n\nThe details are in ${updateLog()}.`);
     } finally {
       updating = false;
     }
   });
   handle('update-restart', 0, () => {
-    assert(builtApp, 'Nothing to install');
+    assert(updateReady, 'Nothing to install');
     restartPending = true;
     win.close();
   });
   app.on('will-quit', () => {
-    if (restartPending && builtApp) updates.swapAfterExit(process.pid, builtApp, bundle);
+    if (restartPending && updateReady) updater.install();
   });
 }
 
@@ -302,7 +338,8 @@ const BOOK_WINDOW = 'guide-book';
 
 function bookOptions() {
   return {
-    title: 'Guide Book', icon: path.join(__dirname, '..', 'build', 'icon.png'),
+    // A packaged application's windows take the icon of its executable; build/ is not packed.
+    title: 'Guide Book', ...(app.isPackaged ? {} : { icon: path.join(__dirname, '..', 'build', 'icon.png') }),
     minWidth: 380, minHeight: 360, useContentSize: true, autoHideMenuBar: true,
     backgroundColor: '#d8d0be', frame: nativeFrame,
     ...(process.platform === 'darwin' && !nativeFrame ? { roundedCorners: false } : {}),
@@ -334,7 +371,7 @@ function createWindow() {
       backgroundThrottling: false, autoplayPolicy: 'no-user-gesture-required', spellcheck: false,
       additionalArguments: [
         ...(nativeFrame ? ['--hadjitron-native-frame'] : []),
-        ...(bundle ? ['--hadjitron-updates'] : []),
+        ...(updater ? [`--hadjitron-updates=${updater.kind}`] : []),
       ],
     },
   });
@@ -407,9 +444,13 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
   app.on('window-all-closed', () => app.quit());
+  // The Start menu shortcut carries the application's id; the window must carry the same one, or Windows shows a
+  // second taskbar button beside a pinned one.
+  if (process.platform === 'win32') app.setAppUserModelId('com.hadjitron.app');
   app.whenReady().then(() => {
     protocol.handle('app', serve);
     setPermissions();
+    updater = createUpdater();
     registerRequests();
     setMenu();
     createWindow();

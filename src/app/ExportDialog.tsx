@@ -27,7 +27,7 @@ const STEMS_HINT = 'One file per sound, all one length; added up they can differ
 export function stemNames(name: string, sounds: string[], ext: string): string[] {
   const used = new Set<string>();
   return sounds.map((sound) => {
-    const plain = `${name} - ${sound}`.replace(/[/\\:\0-\x1f]/g, '-').replace(/^\.+/, '');
+    const plain = `${name} - ${sound}`.replace(/[/\\:*?"<>|\0-\x1f]/g, '-').replace(/^\.+/, '');
     let unique = plain;
     for (let i = 2; used.has(unique.toLowerCase()); i++) unique = `${plain} ${i}`;
     used.add(unique.toLowerCase());

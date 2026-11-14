@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import type { Root } from 'react-dom/client';
 import { afterEach, expect, test, vi } from 'vitest';
 import { userEvent } from 'vitest/browser';
+import { IS_MAC } from '../../src/app/shortcuts';
 import { EFFECTS, MODS, SOURCES } from '../../src/core/modules';
 import type { FloatSpec, ParamSpec } from '../../src/core/modules';
 import { fromNorm, toNorm } from '../../src/core/params';
@@ -21,6 +22,8 @@ import {
 } from '../../src/ui/kit';
 import type { MenuItem } from '../../src/ui/kit';
 
+// Select all in a text field: Cmd+A on a Mac, Ctrl+A elsewhere.
+const MOD = IS_MAC ? 'Meta' : 'Control';
 let roots: { root: Root; host: HTMLElement }[] = [];
 
 function render(ui: ReactNode): HTMLElement {
@@ -179,12 +182,12 @@ test('stepper: spin buttons, arrow keys, dragging and typing a value', async () 
   await userEvent.dblClick(host.querySelector('.h-stepper-readout')!);
   const input = host.querySelector('input')!;
   expect(document.activeElement).toBe(input);
-  await userEvent.keyboard('{Control>}a{/Control}98.26{Enter}');
+  await userEvent.keyboard(`{${MOD}>}a{/${MOD}}98.26{Enter}`);
   expect(onValue).toHaveBeenLastCalledWith(98.5);
   expect(host.querySelector('input')).toBeNull();
 
   await userEvent.dblClick(host.querySelector('.h-stepper-readout')!);
-  await userEvent.keyboard('{Control>}a{/Control}50{Escape}');
+  await userEvent.keyboard(`{${MOD}>}a{/${MOD}}50{Escape}`);
   expect(onValue).toHaveBeenLastCalledWith(98.5);
   expect(host.querySelector('.h-stepper-readout')!.textContent).toBe('98.5');
 });

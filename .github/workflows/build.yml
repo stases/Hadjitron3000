@@ -1,0 +1,145 @@
+# Builds and tests Hadjitron 3000 on Windows and macOS. A tag v1.2.3 (made by `npm run release -- 1.2.3`) also
+# publishes the GitHub release that the Windows application updates from; a tag ci-anything is a test build without
+# a release; the Actions tab can start one by hand. Each test step runs through scripts/ci-step.mjs, which turns a
+# failure's most telling lines into error annotations and puts its last lines into the job summary.
+name: Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - 'ci-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    timeout-minutes: 75
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Check that the tag matches the version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error title=Version::The tag $GITHUB_REF_NAME does not match the version $version in package.json."
+            exit 1
+          fi
+      - name: Install packages
+        run: node scripts/ci-step.mjs "Install packages" "npm ci"
+      - name: Typecheck
+        run: node scripts/ci-step.mjs "Typecheck" "npm run typecheck"
+      - name: Unit tests
+        run: node scripts/ci-step.mjs "Unit tests" "npm test"
+      - name: Install Chromium for the browser tests
+        run: node scripts/ci-step.mjs "Install Chromium" "npx playwright install chromium"
+      - name: Browser tests
+        run: node scripts/ci-step.mjs "Browser tests" "npm run test:browser"
+      - name: Build
+        run: node scripts/ci-step.mjs "Build" "npm run build"
+      - name: End-to-end tests
+        run: node scripts/ci-step.mjs "End-to-end tests" "npm run test:e2e"
+      - name: Package the installer
+        run: node scripts/ci-step.mjs "Package the installer" "npx electron-builder --win --publish never"
+      - name: Install it silently
+        id: install
+        run: node scripts/ci-step.mjs "Install it silently" "node scripts/ci-windows-install.mjs install"
+      - name: Test the installed application
+        run: node scripts/ci-step.mjs "Test the installed application" "npx playwright test --project electron"
+      - name: Uninstall it
+        if: always() && steps.install.outcome == 'success'
+        run: node scripts/ci-step.mjs "Uninstall it" "node scripts/ci-windows-install.mjs uninstall"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Hadjitron-3000-Windows
+          path: |
+            release/Hadjitron-3000-Setup-*.exe
+            release/Hadjitron-3000-Setup-*.exe.blockmap
+            release/latest.yml
+          if-no-files-found: error
+
+  mac:
+    name: macOS
+    runs-on: macos-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Check that the tag matches the version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error title=Version::The tag $GITHUB_REF_NAME does not match the version $version in package.json."
+            exit 1
+          fi
+      - name: Install packages
+        run: node scripts/ci-step.mjs "Install packages" "npm ci"
+      - name: Typecheck
+        run: node scripts/ci-step.mjs "Typecheck" "npm run typecheck"
+      - name: Unit tests
+        run: node scripts/ci-step.mjs "Unit tests" "npm test"
+      - name: Install Chromium for the browser tests
+        run: node scripts/ci-step.mjs "Install Chromium" "npx playwright install chromium"
+      - name: Browser tests
+        run: node scripts/ci-step.mjs "Browser tests" "npm run test:browser"
+      - name: Build
+        run: node scripts/ci-step.mjs "Build" "npm run build"
+      - name: End-to-end tests
+        run: node scripts/ci-step.mjs "End-to-end tests" "npm run test:e2e"
+      - name: Package the disk image
+        run: node scripts/ci-step.mjs "Package the disk image" "npx electron-builder --mac --publish never"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Hadjitron-3000-macOS
+          path: release/*.dmg
+          if-no-files-found: error
+
+  release:
+    name: Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, mac]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Write the release notes from the commits since the previous release
+        run: |
+          previous=$(git describe --tags --abbrev=0 --match 'v*' "$GITHUB_REF_NAME^" 2>/dev/null || true)
+          if [ -n "$previous" ]; then
+            git log --no-merges --format=%s "$previous..$GITHUB_REF_NAME" \
+              | sed -e "/^Version ${GITHUB_REF_NAME#v}\$/d" -e 's/^/- /' > notes.md
+            [ -s notes.md ] || echo '- Nothing but the version number changed.' > notes.md
+          else
+            echo 'The first release.' > notes.md
+          fi
+          cat notes.md
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ls -l artifacts
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes-file notes.md artifacts/*

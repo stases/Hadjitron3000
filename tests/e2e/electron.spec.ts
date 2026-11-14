@@ -1,15 +1,33 @@
 import { _electron, expect, test } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
+import electronPath from 'electron';
+import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
-function launch(): Promise<ElectronApplication> {
+// The installed application to test instead of this checkout, as the Windows workflow does after installing it.
+const exe = process.env.HADJITRON_EXE;
+
+function environment(): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (value !== undefined && key !== 'ELECTRON_RUN_AS_NODE') env[key] = value;
   }
-  const args = process.platform === 'linux' ? ['.', '--no-sandbox'] : ['.'];
-  return _electron.launch({ args, env });
+  return env;
+}
+
+/** The program and the arguments that start the app with `files`, from this checkout or installed. */
+function command(files: string[] = []): [string, string[]] {
+  const sandbox = process.platform === 'linux' ? ['--no-sandbox'] : [];
+  if (exe) return [exe, [...sandbox, ...files]];
+  return [electronPath as unknown as string, ['.', ...sandbox, ...files]];
+}
+
+function launch(files: string[] = []): Promise<ElectronApplication> {
+  const [executablePath, args] = command(files);
+  return _electron.launch({ ...(exe && { executablePath }), args, env: environment() });
 }
 
 async function quit(app: ElectronApplication): Promise<void> {
@@ -28,6 +46,9 @@ test('the shell serves the app, persists sounds and blocks, and updates the docu
     await page.waitForLoadState('domcontentloaded');
     await expect(page).toHaveURL('app://hadjitron/');
     expect(await page.evaluate(() => window.hadji?.frame)).toBe('custom');
+    // The app draws its own menu bar; outside a Mac there is no native one for Alt to bring up.
+    if (process.platform !== 'darwin') expect(await app.evaluate(({ Menu }) => Menu.getApplicationMenu())).toBeNull();
+    await expect(page.locator('.h-menubar-item').first()).toHaveText('File');
     // MIDI is granted to the app (which asks for it without system exclusive messages); other permissions are refused.
     const permission = (descriptor: object) => page.evaluate(
       async (d) => (await navigator.permissions.query(d as PermissionDescriptor)).state, descriptor,
@@ -177,5 +198,57 @@ test('the Guide Book detaches into a window of its own and attaches again, and n
     await expect(page.locator('.h-book')).toHaveCount(1);
   } finally {
     await quit(app);
+  }
+});
+
+test('an installed Windows application asks GitHub for a newer release, and answers in a sentence', async () => {
+  test.skip(!exe || process.platform !== 'win32', 'Only the application installed from the Setup .exe updates this way');
+  const app = await launch();
+  try {
+    const page = await app.firstWindow();
+    await page.waitForLoadState('domcontentloaded');
+    expect(await page.evaluate(() => window.hadji?.updates?.kind)).toBe('release');
+    const version = await app.evaluate(({ app }) => app.getVersion());
+    // Whether a release exists yet or not, the check either names versions or fails with a readable sentence.
+    const result = await page.evaluate(() => window.hadji!.updates!.check()
+      .then((check) => ({ check, error: null }), (error: Error) => ({ check: null, error: error.message })));
+    if (result.check) {
+      expect(result.check.current).toBe(version);
+      expect(result.check.blocked).toBeNull();
+    } else {
+      const sentence = result.error!.replace(/^Error invoking remote method '[^']*': (?:\w*Error: )?/, '');
+      expect(sentence.length).toBeLessThanOrEqual(200);
+      expect(sentence).not.toMatch(/\n|\bat \S+:\d+/);
+    }
+  } finally {
+    await quit(app);
+  }
+});
+
+test('a project named on the command line opens, and so does one handed to the app while it runs', async () => {
+  test.skip(process.platform === 'darwin', 'A Mac hands files to the app with open-file instead');
+  const dir = mkdtempSync(path.join(tmpdir(), 'hadjitron-open-'));
+  const project = (name: string, bpm: number) => {
+    const file = path.join(dir, `${name}.h3k`);
+    const text = { format: 'hadjitron3000/project', version: 3, project: { name, bpm, channels: [] } };
+    writeFileSync(file, JSON.stringify(text));
+    return file;
+  };
+  const app = await launch([project('First song', 97)]);
+  try {
+    const page = await app.firstWindow();
+    const title = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle());
+    await expect.poll(title).toBe('First song - Hadjitron 3000');
+    await expect(page.locator('.h-app-bpm')).toHaveText('97.0');
+    // A second start, as a double-click on a file does, hands the file to the running app and ends.
+    const [program, args] = command([project('Second song', 133)]);
+    const second = spawn(program, args, { env: environment(), stdio: 'ignore' });
+    expect(await new Promise((resolve) => second.once('exit', resolve))).toBe(0);
+    await expect.poll(title).toBe('Second song - Hadjitron 3000');
+    await expect(page.locator('.h-app-bpm')).toHaveText('133.0');
+    expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
+  } finally {
+    await quit(app);
+    rmSync(dir, { recursive: true, force: true });
   }
 });

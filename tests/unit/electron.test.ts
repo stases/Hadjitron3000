@@ -24,8 +24,11 @@ afterEach(async () => {
 
 const EXE = '/Applications/Hadjitron 3000.app/Contents/MacOS/Hadjitron 3000';
 
-/** Load main.cjs and preload.cjs; `installed` is a folder holding install.json, as in a packaged .app. */
-async function shell(argv: string[] = [], platform = 'linux', installed: string | null = null) {
+/**
+ * Load main.cjs and preload.cjs. `installed` makes a packaged application from that folder, which holds install.json
+ * when it was built from source; `autoUpdater` stands in for electron-updater's, which is missing otherwise.
+ */
+async function shell(argv: string[] = [], platform = 'linux', installed: string | null = null, autoUpdater?: unknown) {
   type Handler = (event: unknown, ...args: unknown[]) => unknown;
   const handlers = new Map<string, Handler>();
   const renderer = new EventEmitter();
@@ -40,21 +43,25 @@ async function shell(argv: string[] = [], platform = 'linux', installed: string 
     isMinimized: () => false,
     loadURL: async () => {},
     show: vi.fn(),
+    close: vi.fn(),
     focus: vi.fn(),
   });
   const app = Object.assign(new EventEmitter(), {
     isPackaged: installed !== null,
     getPath: (name: string) => {
-      expect(['documents', 'exe']).toContain(name);
+      expect(['documents', 'exe', 'userData']).toContain(name);
       return name === 'exe' ? EXE : documents;
     },
     requestSingleInstanceLock: () => true,
+    setAppUserModelId: vi.fn(),
     whenReady: async () => {},
     quit: vi.fn(),
   });
   const openPath = vi.fn(async (_directory: string) => '');
   const showOpenDialog = vi.fn(async (_win: unknown, _opts: unknown) =>
     ({ canceled: true, filePaths: [] as string[] }));
+  const showSaveDialog = vi.fn(async (_win: unknown, _opts: { defaultPath: string }) =>
+    ({ canceled: true, filePath: '' }));
   type RequestHandler = (contents: unknown, permission: string, callback: (granted: boolean) => void,
     details: { requestingUrl: string }) => void;
   type CheckHandler = (contents: unknown, permission: string, origin: string) => boolean;
@@ -74,7 +81,7 @@ async function shell(argv: string[] = [], platform = 'linux', installed: string 
       windowOptions = options;
       return win;
     },
-    dialog: { showOpenDialog },
+    dialog: { showOpenDialog, showSaveDialog },
     session: {
       defaultSession: {
         setPermissionRequestHandler: (handler: RequestHandler) => { permissions.request = handler; },
@@ -94,15 +101,25 @@ async function shell(argv: string[] = [], platform = 'linux', installed: string 
     }),
   };
   for (const file of ['main.cjs', 'preload.cjs']) {
+    // The page's preload runs in the window, and sees the arguments the main process gave the window.
+    const extra = file === 'preload.cjs' ? await vi.waitFor(() => {
+      if (!windowOptions) throw new Error('No window yet');
+      return (windowOptions as { webPreferences: { additionalArguments: string[] } }).webPreferences.additionalArguments;
+    }) : [];
     runInNewContext(await readFile(path.join(electronDirectory, file), 'utf8'), {
-      require: (id: string) => id === 'electron' ? electron : require(id),
+      require: (id: string) => {
+        if (id === 'electron') return electron;
+        if (id !== 'electron-updater') return require(id);
+        if (!autoUpdater) throw new Error(`Cannot find module '${id}'`);
+        return { autoUpdater };
+      },
       __dirname: file === 'main.cjs' && installed ? installed : electronDirectory,
-      process: { argv: ['hadjitron', ...argv], env: {}, platform, cwd: () => documents },
+      process: { argv: ['hadjitron', ...argv, ...extra], env: {}, platform, cwd: () => documents },
       Uint8Array, URL, console,
     });
   }
   return {
-    app, bridge, invoke, event, openPath, showOpenDialog, permissions, webContents, handlers,
+    app, bridge, invoke, event, openPath, showOpenDialog, showSaveDialog, permissions, webContents, handlers, win,
     windowOptions: () => windowOptions,
   };
 }
@@ -204,7 +221,7 @@ test('Electron queues open-file blocks until the renderer registers', async () =
   await vi.waitFor(() => expect(opened).toHaveBeenCalledExactlyOnceWith({ name: 'block.h3b', path: file, bytes }));
 });
 
-test('Electron offers updates only in an installed application on a Mac', async () => {
+test('Electron rebuilds from source only in an application built from a checkout on a Mac', async () => {
   const flag = (options: unknown) =>
     (options as { webPreferences: { additionalArguments: string[] } }).webPreferences.additionalArguments;
   const plain = await shell([], 'darwin');
@@ -220,12 +237,90 @@ test('Electron offers updates only in an installed application on a Mac', async 
 
   const mac = await shell([], 'darwin', documents);
   await vi.waitFor(() => expect(mac.windowOptions()).toBeDefined());
-  expect(flag(mac.windowOptions())).toEqual(['--hadjitron-updates']);
+  expect(flag(mac.windowOptions())).toEqual(['--hadjitron-updates=source']);
+  expect(mac.bridge.updates!.kind).toBe('source');
   expect([...mac.handlers.keys()].filter((key) => key.startsWith('update-'))).toEqual([
     'update-check', 'update-build', 'update-restart',
   ]);
   await expect(mac.invoke('update-restart')).rejects.toThrow('Nothing to install');
-  await expect(mac.invoke('update-build')).rejects.toThrow('Cannot write to /Applications.');
+  await expect(mac.invoke('update-build')).rejects.toThrow(/^Cannot write to .*Applications\./);
+});
+
+/** Stands in for electron-updater's autoUpdater with one newer release waiting on GitHub. */
+function fakeAutoUpdater() {
+  const updater = Object.assign(new EventEmitter(), {
+    currentVersion: { version: '0.1.0' },
+    checkForUpdates: vi.fn(async () => ({
+      isUpdateAvailable: true, updateInfo: { version: '0.2.0', releaseNotes: '<ul><li>New pads</li></ul>' },
+    })),
+    downloadUpdate: vi.fn(async () => {
+      updater.emit('download-progress', { percent: 50 });
+      return [];
+    }),
+    quitAndInstall: vi.fn(),
+  });
+  return updater;
+}
+
+test('Electron updates from GitHub releases only in an installed Windows application', async () => {
+  const flag = (options: unknown) =>
+    (options as { webPreferences: { additionalArguments: string[] } }).webPreferences.additionalArguments;
+  const autoUpdater = fakeAutoUpdater();
+  const dev = await shell([], 'win32', null, autoUpdater);
+  await vi.waitFor(() => expect(dev.windowOptions()).toBeDefined());
+  expect(dev.app.setAppUserModelId).toHaveBeenCalledWith('com.hadjitron.app');
+  expect(flag(dev.windowOptions())).toEqual([]);
+  expect(dev.bridge.updates).toBeNull();
+
+  const installed = await shell([], 'win32', documents, autoUpdater);
+  await vi.waitFor(() => expect(installed.windowOptions()).toBeDefined());
+  expect(flag(installed.windowOptions())).toEqual(['--hadjitron-updates=release']);
+  const { bridge, app, win } = installed;
+  expect(bridge.updates!.kind).toBe('release');
+  expect(autoUpdater.checkForUpdates).not.toHaveBeenCalled();
+  expect(await bridge.updates!.check()).toEqual({
+    current: '0.1.0', latest: '0.2.0', changes: ['New pads'], blocked: null,
+  });
+  await expect(installed.invoke('update-restart')).rejects.toThrow('Nothing to install');
+  const progress = vi.fn();
+  await bridge.updates!.build(progress);
+  expect(progress.mock.calls.map(([p]) => p.value)).toEqual([0, 0.5]);
+  app.emit('will-quit');
+  expect(autoUpdater.quitAndInstall).not.toHaveBeenCalled();
+  bridge.updates!.restart();
+  await vi.waitFor(() => expect(win.close).toHaveBeenCalledOnce());
+  app.emit('will-quit');
+  expect(autoUpdater.quitAndInstall).toHaveBeenCalledExactlyOnceWith(false, true);
+
+  // Without electron-updater the application still starts, without updates; a build from source is not offered one.
+  const broken = await shell([], 'win32', documents);
+  await vi.waitFor(() => expect(broken.windowOptions()).toBeDefined());
+  expect(broken.bridge.updates).toBeNull();
+  await writeFile(path.join(documents, 'install.json'), JSON.stringify({ source: documents, path: '', commit: 'abc' }));
+  const source = await shell([], 'win32', documents, autoUpdater);
+  await vi.waitFor(() => expect(source.windowOptions()).toBeDefined());
+  expect(source.bridge.updates).toBeNull();
+});
+
+test('Electron on Windows refuses library names Windows cannot store and cleans a suggested name', async () => {
+  const windows = await shell([], 'win32');
+  for (const name of ['Bass?', 'a:b', 'Pad.', 'Pad ', 'CON', 'nul.txt', 'com1', 'x|y', 'a"b', '<a>', 'a*b']) {
+    await expect(windows.bridge.library.write(name, new Uint8Array([1])), name).rejects.toThrow('Invalid library name');
+  }
+  await windows.bridge.library.write('Console', new Uint8Array([1]));
+  expect(await windows.bridge.library.list()).toEqual(['Console']);
+  await windows.bridge.saveFile({
+    title: 'Save Project', defaultName: 'What? Night: 2.h3k', filters: [{ name: 'Project', extensions: ['h3k'] }],
+    bytes: new Uint8Array([1]),
+  });
+  expect(path.basename(windows.showSaveDialog.mock.calls[0][1].defaultPath)).toBe('What- Night- 2.h3k');
+
+  const mac = await shell([], 'darwin');
+  await mac.bridge.saveFile({
+    title: 'Save Project', defaultName: 'What? Night: 2.h3k', filters: [{ name: 'Project', extensions: ['h3k'] }],
+    bytes: new Uint8Array([1]),
+  });
+  expect(path.basename(mac.showSaveDialog.mock.calls[0][1].defaultPath)).toBe('What? Night: 2.h3k');
 });
 
 test('Electron grants MIDI to the app itself and refuses every other permission', async () => {

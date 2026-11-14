@@ -18,7 +18,7 @@ import { fitSelectionToScale, openRandomise } from '../ui/track/tools';
 import { setPrefs, toggleMetronome, toggleScaleSnap } from './prefs';
 import type { Prefs } from './prefs';
 import { toggleRecord } from './record';
-import { modKey } from './shortcuts';
+import { modKey, quitItem } from './shortcuts';
 import { openBook } from './book/bookStore';
 
 export function buildMenus(
@@ -52,7 +52,7 @@ export function buildMenus(
         'separator',
         { label: 'Import Audio…', onSelect: () => void importAudio() },
         { label: 'Export Audio…', shortcut: modKey('E'), onSelect: exportAudio },
-        ...(win ? ['separator' as const, { label: 'Quit', onSelect: () => win.close() }] : []),
+        ...(win ? ['separator' as const, { ...quitItem(), onSelect: () => win.close() }] : []),
       ],
     },
     {

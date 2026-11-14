@@ -19,11 +19,21 @@ function contentType(file) {
   return contentTypes[path.extname(file).toLowerCase()] || 'application/octet-stream';
 }
 
-function validateLibraryName(name) {
-  if (typeof name !== 'string' || !name || name === '.' || name === '..' || /[/\\\0]/.test(name)) {
+// Windows refuses these characters in a file name, a name that ends in a dot or a space, and the old device names
+// (with or without an extension).
+const WINDOWS_UNSAFE = /[<>:"|?*\x01-\x1f]|[. ]$|^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(\..*)?$/i;
+
+function validateLibraryName(name, platform = process.platform) {
+  if (typeof name !== 'string' || !name || name === '.' || name === '..' || /[/\\\0]/.test(name)
+    || (platform === 'win32' && WINDOWS_UNSAFE.test(name))) {
     throw new TypeError('Invalid library name');
   }
   return name;
+}
+
+/** A name the save dialog can suggest: on Windows the characters it refuses become dashes. */
+function suggestedName(name, platform = process.platform) {
+  return platform === 'win32' ? name.replace(/[<>:"|?*\x01-\x1f]/g, '-').replace(/[. ]+$/, '') || '-' : name;
 }
 
 function appFilePath(url, dist) {
@@ -42,4 +52,4 @@ function appFilePath(url, dist) {
   }
 }
 
-module.exports = { validateLibraryName, appFilePath, contentType };
+module.exports = { validateLibraryName, suggestedName, appFilePath, contentType };

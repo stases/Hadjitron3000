@@ -23,7 +23,7 @@ There are three fonts and each is used only at its design size, where every glyp
 | `--font-mono` | Departure Mono, 11px on a 14px line | values, readouts, note names in displays |
 | `--font-lcd` | Departure Mono, 22px on a 24px line | the tempo display |
 
-Text is never anti-aliased (`-webkit-font-smoothing: none`). Bold does not exist as a font weight; emphasis is a one-pixel smear, `text-shadow: 1px 0 0 currentColor`, used for the title bar and the selected tab. Captions under controls are upper case in `--font-small` with the value on the line below. Disabled text is `--lo` with a `1px 1px 0 var(--hi)` shadow so it looks engraved.
+Text is never anti-aliased (`-webkit-font-smoothing: none`, which only a Mac obeys; on Windows the system's own text smoothing draws the pixel fonts, at the sizes they were made for). Bold does not exist as a font weight; emphasis is a one-pixel smear, `text-shadow: 1px 0 0 currentColor`, used for the title bar and the selected tab. Captions under controls are upper case in `--font-small` with the value on the line below. Disabled text is `--lo` with a `1px 1px 0 var(--hi)` shadow so it looks engraved.
 
 ## Surfaces
 

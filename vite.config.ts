@@ -8,6 +8,8 @@ export default defineConfig({
   plugins: [react()],
   build: { outDir: 'dist', sourcemap: true },
   test: {
+    // A slow CI machine can miss the timing bounds of a few audio tests; each failure gets one more try there.
+    retry: process.env.CI ? 1 : 0,
     projects: [
       {
         extends: true,

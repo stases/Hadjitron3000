@@ -1,4 +1,4 @@
-// Updates for the installed application. `npm run app` builds the .app from a git checkout and writes
+// Updates for the application built from source on a Mac. `npm run app` builds the .app from a git checkout and writes
 // install.json next to this file: where the checkout is, the PATH to run git and npm with, and the commit
 // it was built from. Updating pulls the checkout, rebuilds the .app there and swaps it in after quitting.
 // The user's sounds, blocks and projects live outside the application and are never touched.
@@ -43,13 +43,16 @@ async function check(info) {
   return { current: info.commit.slice(0, 7), latest: latest.slice(0, 7), changes, blocked };
 }
 
-/** Pull, install and build. Resolves to the path of the new .app. */
+const STEPS = ['Fetching the new version', 'Installing packages', 'Building the application'];
+
+/** Pull, install and build, reporting each step and how far along it is. Resolves to the path of the new .app. */
 async function build(info, progress, log) {
-  progress('Fetching the new version');
+  const step = (index) => progress({ step: STEPS[index], value: (index + 0.5) / STEPS.length });
+  step(0);
   await run(info, 'git', ['pull', '--ff-only', '--quiet'], log);
-  progress('Installing packages');
+  step(1);
   await run(info, 'npm', ['install', '--no-audit', '--no-fund'], log);
-  progress('Building the application');
+  step(2);
   const out = await run(info, 'node', ['scripts/install-app.mjs', '--build-only'], log);
   const built = out.split('\n').pop();
   if (!built.endsWith('.app') || !fs.existsSync(built)) throw new Error('The build did not produce an application.');

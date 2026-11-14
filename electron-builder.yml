@@ -22,4 +22,32 @@ mac:
       name: Hadjitron 3000 Sound
     - ext: h3b
       name: Hadjitron 3000 Block
-publish: null
+win:
+  target:
+    - target: nsis
+      arch: x64
+  icon: build/icon.ico
+  # On Windows the name is the registry's class name and the description is what Explorer shows as the type.
+  fileAssociations:
+    - ext: h3k
+      name: Hadjitron3000.Project
+      description: Hadjitron 3000 Project
+    - ext: h3s
+      name: Hadjitron3000.Sound
+      description: Hadjitron 3000 Sound
+    - ext: h3b
+      name: Hadjitron3000.Block
+      description: Hadjitron 3000 Block
+nsis:
+  oneClick: true
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Hadjitron 3000
+  artifactName: Hadjitron-3000-Setup-${version}.${ext}
+# Where the Windows application looks for updates. The workflow attaches the files to the release itself, so
+# electron-builder is always run with --publish never; this entry only writes latest.yml and app-update.yml.
+publish:
+  provider: github
+  owner: stases
+  repo: Hadjitron3000

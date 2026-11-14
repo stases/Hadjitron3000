@@ -13,7 +13,7 @@ async function bytesOf(download: Download): Promise<Buffer> {
 }
 
 async function exportAs(page: Page, format: string): Promise<Download> {
-  await page.keyboard.press('Control+E');
+  await page.keyboard.press('ControlOrMeta+E');
   const dialog = page.getByRole('dialog', { name: 'Export Audio' });
   await dialog.locator('.h-select').nth(1).click();
   await page.locator('.h-select-option', { hasText: format }).click();
@@ -39,7 +39,7 @@ test('the demo project opens in the Song view on the first launch', async ({ pag
   await expect(tab(page)).toHaveText('Song');
   await expect(where(page)).toHaveText('Song · 16 bars');
   await expect(page.locator('.h-statusfield').first()).toHaveText('Ready.');
-  await page.keyboard.press('Control+2');
+  await page.keyboard.press('ControlOrMeta+2');
   await expect(tab(page)).toHaveText('Track');
   await expect(where(page)).toHaveText('Block Beat · 2 bars');
   await expect(page.locator('.h-track-used')).toHaveText('In the song 2 times');
@@ -61,7 +61,7 @@ test('exporting writes the song and a block as WAV and MP3 files', async ({ page
   // Sixteen bars at 126 BPM are 30.5 s.
   expect((await bytesOf(song)).length).toBeGreaterThan(30.4 * 44100 * 4);
 
-  await page.keyboard.press('Control+2');
+  await page.keyboard.press('ControlOrMeta+2');
   const wav = await exportAs(page, 'WAV, 16-bit');
   expect(wav.suggestedFilename()).toBe('Welcome - Beat.wav');
   const w = await bytesOf(wav);
@@ -81,7 +81,7 @@ test('exporting writes the song and a block as WAV and MP3 files', async ({ page
 });
 
 test('the block bar picks and renames blocks, and the Block Library adds one', async ({ page }) => {
-  await page.keyboard.press('Control+2');
+  await page.keyboard.press('ControlOrMeta+2');
   await blockSelect(page).click();
   await page.locator('.h-select-option', { hasText: 'Pads up' }).click();
   await expect(blockSelect(page)).toHaveText('Pads up');
@@ -103,7 +103,7 @@ test('the block bar picks and renames blocks, and the Block Library adds one', a
 
 test('saving downloads a project file, and Save Block As a block file', async ({ page }) => {
   const download = page.waitForEvent('download');
-  await page.keyboard.press('Control+S');
+  await page.keyboard.press('ControlOrMeta+S');
   const file = await download;
   expect(file.suggestedFilename()).toBe('Welcome.h3k');
   const json = JSON.parse((await bytesOf(file)).toString('utf8'));
@@ -127,7 +127,7 @@ test('reloading the page restores the project and the view', async ({ page }) =>
   await page.mouse.wheel(0, -100);
   await expect(bpm(page)).toHaveText('128.0');
   await expect(title(page)).toHaveText('Welcome* - Hadjitron 3000');
-  await page.keyboard.press('Control+1');
+  await page.keyboard.press('ControlOrMeta+1');
   await expect(tab(page)).toHaveText('Factory');
   await page.waitForTimeout(1500);
   page.on('dialog', (dialog) => void dialog.accept());

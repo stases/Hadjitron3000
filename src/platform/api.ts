@@ -24,26 +24,36 @@ export interface Folder {
   write(name: string, bytes: Uint8Array): Promise<void>;
 }
 
-/** A folder of named files of one kind (~/Documents/Hadjitron 3000/Sounds or /Blocks in Electron). */
+/** A folder of named files of one kind (Documents/Hadjitron 3000/Sounds or /Blocks in Electron). */
 export interface Library {
   list(): Promise<string[]>; // names without extension, sorted
   read(name: string): Promise<Uint8Array>;
   write(name: string, bytes: Uint8Array): Promise<void>;
   remove(name: string): Promise<void>;
-  reveal: (() => void) | null; // show the folder in Finder; null in the browser
+  reveal: (() => void) | null; // show the folder in Finder or Explorer; null in the browser
 }
 
 export interface UpdateCheck {
-  current: string; // short commit the application was built from
-  latest: string; // short commit on GitHub
-  changes: string[]; // commit subjects between the two, newest first
+  current: string; // what this application is: a short commit (built from source) or a version number (a release)
+  latest: string; // the newest on GitHub, in the same terms; equal to current when there is nothing new
+  changes: string[]; // what is new, newest first: commit subjects, or the lines of the release notes
   blocked: string | null; // why the program folder cannot be updated, if it cannot
 }
 
+export interface UpdateProgress {
+  step: string; // what is happening, e.g. "Downloading the new version"
+  value: number; // how far the whole update has got, 0 to 1
+}
+
 export interface Updates {
+  /**
+   * How the application updates: 'source' rebuilds it from the git checkout it was built from (a Mac), 'release'
+   * downloads the installer of the newest release on GitHub (Windows).
+   */
+  readonly kind: 'source' | 'release';
   check(): Promise<UpdateCheck>;
-  /** Pull, install and build the new application; reports each step. */
-  build(onProgress: (step: string) => void): Promise<void>;
+  /** Get the new application ready (pull and build it, or download its installer), reporting progress. */
+  build(onProgress: (progress: UpdateProgress) => void): Promise<void>;
   /** Close the window (offering to save) and restart into the new application. */
   restart(): void;
 }
@@ -75,7 +85,7 @@ export interface Platform {
   /** Window controls for the custom title bar; null when the host draws its own frame. */
   window: { minimize(): void; toggleMaximize(): void; close(): void } | null;
 
-  /** Updating the installed application from GitHub; null when not running as an installed .app. */
+  /** Updating the installed application from GitHub; null in development and in the browser. */
   updates: Updates | null;
 
   /** Tell the host the document name and whether it has unsaved changes. */
@@ -84,6 +94,6 @@ export interface Platform {
   /** Called before the window closes; resolve false to keep it open. */
   onCloseRequest(handler: () => Promise<boolean>): void;
 
-  /** Called when the host is asked to open a file (double-click in Finder, drop on the dock icon). */
+  /** Called when the host is asked to open a file (a double-click in Finder or Explorer, a drop on the dock icon). */
   onOpenFile(handler: (file: OpenedFile) => void): void;
 }

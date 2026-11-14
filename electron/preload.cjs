@@ -26,10 +26,15 @@ ipcRenderer.on('close-request', async (_event, id) => {
 });
 ipcRenderer.on('open-file', (_event, file) => openHandler?.(file));
 
+// 'source' on a Mac built from a git checkout, 'release' on Windows installed from a release, absent otherwise.
+const updateKind = /^--hadjitron-updates=(source|release)$/.exec(
+  process.argv.find((arg) => arg.startsWith('--hadjitron-updates=')) ?? '')?.[1];
+
 const updates = {
+  kind: updateKind,
   check: () => invoke('update-check'),
   build: async (onProgress) => {
-    const listener = (_event, step) => onProgress(step);
+    const listener = (_event, progress) => onProgress(progress);
     ipcRenderer.on('update-progress', listener);
     try {
       await invoke('update-build');
@@ -55,7 +60,7 @@ contextBridge.exposeInMainWorld('hadji', {
     toggleMaximize: () => notify('window-toggle-maximize'),
     close: () => notify('window-close'),
   },
-  updates: process.argv.includes('--hadjitron-updates') ? updates : null,
+  updates: updateKind ? updates : null,
   setDocument: (title, dirty) => notify('document-set', title, dirty),
   onCloseRequest: (handler) => {
     if (typeof handler !== 'function') throw new TypeError('Expected a close handler');

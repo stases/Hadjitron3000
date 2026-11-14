@@ -22,8 +22,9 @@ beforeEach(() => {
 });
 
 const require = createRequire(import.meta.url);
-const { validateLibraryName, appFilePath, contentType } = require('../../electron/paths.cjs') as {
-  validateLibraryName(name: unknown): string;
+const { validateLibraryName, suggestedName, appFilePath, contentType } = require('../../electron/paths.cjs') as {
+  validateLibraryName(name: unknown, platform?: string): string;
+  suggestedName(name: string, platform: string): string;
   appFilePath(url: unknown, dist: string): string | null;
   contentType(file: string): string;
 };
@@ -59,6 +60,29 @@ test.each(['', '.', '..', '../bass', 'folder/bass', 'folder\\bass', 'a\0b', null
     expect(() => validateLibraryName(name)).toThrow('Invalid library name');
   },
 );
+
+test.each(['Bass?', 'a:b', 'x|y', 'a"b', '<a>', 'a*b', 'tab\there', 'Pad.', 'Pad ', 'CON', 'con.h3s', 'Nul', 'COM1',
+  'lpt9.txt'])('on Windows rejects a name Windows cannot store: %s', (name) => {
+  expect(() => validateLibraryName(name, 'win32')).toThrow('Invalid library name');
+  expect(validateLibraryName(name, 'darwin')).toBe(name);
+});
+
+test.each(['Bass', 'Warm pad', 'a.b', '音色', 'Console', 'Concrete', 'com10', 'Pad (2)'])(
+  'on Windows accepts a library name: %s', (name) => {
+    expect(validateLibraryName(name, 'win32')).toBe(name);
+  },
+);
+
+test.each([
+  ['Night Drive.h3k', 'Night Drive.h3k'],
+  ['What? Night: 2.h3k', 'What- Night- 2.h3k'],
+  ['A <b> "c" | d*.wav', 'A -b- -c- - d-.wav'],
+  ['Trailing. ', 'Trailing'],
+  ['...', '-'],
+])('the save dialog suggests %s on Windows as %s', (name, windows) => {
+  expect(suggestedName(name, 'win32')).toBe(windows);
+  expect(suggestedName(name, 'darwin')).toBe(name);
+});
 
 test.each([
   ['app://hadjitron/', 'index.html'],

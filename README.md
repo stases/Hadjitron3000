@@ -24,7 +24,21 @@ Hadjitron 3000 is a small music machine for electronic and experimental music. Y
 
 ```
 +--------------------------------------------------------------------------+
-|  1. INSTALLATION ON A MACINTOSH                                          |
+|  1. INSTALLATION ON WINDOWS                                              |
++--------------------------------------------------------------------------+
+```
+
+Download `Hadjitron-3000-Setup-<version>.exe` from the newest release on the [Releases page](https://github.com/stases/Hadjitron3000/releases/latest) and open it. It installs the program for you alone, without asking for an administrator, puts Hadjitron 3000 in the Start menu and on the desktop, and opens it. From then on a double-click on a `.h3k`, `.h3s` or `.h3b` file opens it in the program. Hadjitron 3000 can be removed again under Settings, Apps, Installed apps; your sounds, blocks and projects stay.
+
+The installer is not signed with a certificate, so the first time Windows shows a blue window that says Windows protected your PC. That is Microsoft Defender SmartScreen saying it does not know this program yet, not that it found anything wrong with it. Click More info, check that the app is the Hadjitron-3000-Setup file you downloaded and the publisher is Unknown publisher, then click Run anyway. Before that the browser may warn that the file is not commonly downloaded; in Edge, open the three dots next to the download and choose Keep, then Keep anyway.
+
+To update, choose Check for Updates in the Help menu. It asks GitHub whether there is a newer release and lists what is new in it; nothing is downloaded until you ask. Update and Restart downloads the new installer, with a bar that shows how far it has got, offers to save your project, closes the program and installs the new version, which then opens by itself. Your sounds and blocks in Documents\Hadjitron 3000 and your saved projects are never touched. If the download fails, the program says why and the version you have keeps working; the details are in `update.log` in `%APPDATA%\Hadjitron 3000`.
+
+On Windows the keyboard shortcuts use Ctrl where a Mac uses Cmd, and File, Exit (or Alt+F4) closes the program. The window has the program's own title bar: drag it to move the window or to snap it to the edge of the screen, and double-click it to maximise. The layouts that Windows 11 offers when the pointer rests on a maximise button do not appear, because the program draws that button itself.
+
+```
++--------------------------------------------------------------------------+
+|  2. INSTALLATION ON A MACINTOSH                                          |
 +--------------------------------------------------------------------------+
 ```
 
@@ -52,11 +66,11 @@ The Guide Book, under Help, opens beside whatever view you are in and teaches so
 
 The application remembers the Hadjitron3000 folder it was built from, so leave that folder where it is. To update, choose Check for Updates in the Help menu. It asks GitHub what is new and lists the changes; Update and Restart fetches them into that folder, builds the new application, offers to save your project and opens the new version in place of the old one. Your sounds and blocks in Documents/Hadjitron 3000 and your saved projects are never touched. If something goes wrong on the way, the old version keeps working and the full story is in `update.log` in `~/Library/Application Support/Hadjitron 3000`.
 
-The application is not signed by Apple. A copy you built yourself opens normally; a copy that was downloaded or sent to you has to be opened once with a right-click and Open. `npm run dist` makes a disk image in the `release` folder for giving the program to someone else.
+The application is not signed by Apple. A copy you built yourself opens normally; a copy that was downloaded or sent to you has to be opened once with a right-click and Open. `npm run dist` makes a disk image in the `release` folder for giving the program to someone else. Each release on GitHub has such a disk image too, but a copy installed from it does not update itself.
 
 ```
 +--------------------------------------------------------------------------+
-|  2. THE TRACK                                                            |
+|  3. THE TRACK                                                            |
 +--------------------------------------------------------------------------+
 ```
 
@@ -72,7 +86,7 @@ A MIDI keyboard plugged in, before or while the program runs, plays the selected
 
 Each row has a mute button, a solo button and a level slider. Double-click the name of a row to open that sound in the Factory. Drop audio files anywhere on the window to add them as new rows.
 
-For chords, pads and notes between the steps, open a row in the piano roll with the small keyboard button on its header, or double-click a step that holds a chord. The roll takes the place of the grid, with a thin strip of every row above it so you can see the rest of the block and click another sound to switch to it. Pitch runs up the keys at the left (click one to hear it) and time runs across in the same columns as the grid. Click empty space to add a note and keep the button down to drag out its length; click on the same beat at another pitch to build a chord. Drag a note to move it, drag either end to make it start earlier or later or to change its length, and drag the bars in the amber lane at the bottom to set how hard each note plays. A click selects a note, Shift-click adds more, and dragging with Shift or the right button selects everything inside the rectangle; moving, the arrow keys, Delete and the bar at the bottom act on the whole selection. Snap sets the grid the notes stick to (sixteenths, thirty-seconds, two kinds of triplets, or off), and holding Alt while you drag ignores it. Copy puts a small teal mark in the ruler right after the copied notes and Paste puts them there, moving the mark on, so pasting again lays the copies end to end; click the ruler to put the mark somewhere else. Repeat (Cmd+D) copies the selection directly after itself. The Grid button or Esc goes back to the step grid, which shows the same notes.
+For chords, pads and notes between the steps, open a row in the piano roll with the small keyboard button on its header, or double-click a step that holds a chord. The roll takes the place of the grid, with a thin strip of every row above it so you can see the rest of the block and click another sound to switch to it. Pitch runs up the keys at the left (click one to hear it) and time runs across in the same columns as the grid. Click empty space to add a note and keep the button down to drag out its length; click on the same beat at another pitch to build a chord. Drag a note to move it, drag either end to make it start earlier or later or to change its length, and drag the bars in the amber lane at the bottom to set how hard each note plays. A click selects a note, Shift-click adds more, and dragging with Shift or the right button selects everything inside the rectangle; moving, the arrow keys, Delete and the bar at the bottom act on the whole selection. Snap sets the grid the notes stick to (sixteenths, thirty-seconds, two kinds of triplets, or off), and holding Alt while you drag ignores it. Copy puts a small teal mark in the ruler right after the copied notes and Paste puts them there, moving the mark on, so pasting again lays the copies end to end; click the ruler to put the mark somewhere else. Repeat (Cmd+D, or Ctrl+D on Windows) copies the selection directly after itself. The Grid button or Esc goes back to the step grid, which shows the same notes.
 
 A note can do more than sound once. Chance makes it play only on some of the times the block comes round, at the percentage you set, which keeps a hi-hat or a bleep from repeating itself exactly; the choice is the same every time you play the song, and in an export. Ratchet plays it two, three, four, six or eight times in quick succession inside its own length, for drum rolls and stutters. Slide lets the pitch glide into the note from the one before it on the row, as on an acid bass line. Hold turns a note into a drone: it keeps sounding to the end of its place in the song, without starting again when the block repeats there, and to the end of the block while the block plays on its own. Select one or more notes, in the grid or the roll, and set these in the bar at the bottom; in beginner mode Chance, Slide and Hold wait behind the Shaping button at its right end and Ratchet behind Deep, and their lamps light when a selected note uses one. Notes show what they do without being selected: a dithered note plays only sometimes, small ticks along its bottom are a ratchet, a slanted line at its left is a slide, and an arrow at its right with a line to the end of the row is a held note.
 
@@ -86,7 +100,7 @@ Randomise, in the Track menu and the roll's toolbar, fills the row with notes fo
 
 ```
 +--------------------------------------------------------------------------+
-|  3. THE SONG                                                             |
+|  4. THE SONG                                                             |
 +--------------------------------------------------------------------------+
 ```
 
@@ -115,7 +129,7 @@ In Techno the first four bars of the beat leave out the clap and the rim with So
 
 ```
 +--------------------------------------------------------------------------+
-|  4. THE FACTORY                                                          |
+|  5. THE FACTORY                                                          |
 +--------------------------------------------------------------------------+
 ```
 
@@ -156,7 +170,7 @@ Rumble Kick runs its kick into a dark reverb and a compressor, so every kick pus
 
 ```
 +--------------------------------------------------------------------------+
-|  5. THE MIXER                                                            |
+|  6. THE MIXER                                                            |
 +--------------------------------------------------------------------------+
 ```
 
@@ -172,7 +186,7 @@ Sends and ducking belong to the project, not to the sound: a sound saved to the 
 
 ```
 +--------------------------------------------------------------------------+
-|  6. FILES                                                                |
+|  7. FILES                                                                |
 +--------------------------------------------------------------------------+
 ```
 
@@ -188,9 +202,11 @@ Projects, sounds and blocks are plain JSON, so they are safe to keep in git or t
 
 ```
 +--------------------------------------------------------------------------+
-|  7. KEYS                                                                 |
+|  8. KEYS                                                                 |
 +--------------------------------------------------------------------------+
 ```
+
+On Windows, Ctrl takes the place of Cmd.
 
 | Key                    | What it does                              |
 | ---------------------- | ----------------------------------------- |
@@ -213,7 +229,7 @@ The full list is under Help, Keyboard Shortcuts.
 
 ```
 +--------------------------------------------------------------------------+
-|  8. FOR THE TINKERER                                                     |
+|  9. FOR THE TINKERER                                                     |
 +--------------------------------------------------------------------------+
 ```
 
@@ -227,10 +243,20 @@ The full list is under Help, Keyboard Shortcuts.
 | `npm test`             | Unit tests                                                |
 | `npm run test:browser` | Interface and audio tests in headless Chromium            |
 | `npm run test:e2e`     | End-to-end tests of the whole program                     |
-| `npm run dist`         | Build a disk image of the application into `release`      |
+| `npm run dist`         | Build the installer for this system into `release`        |
+| `npm run icon`         | Make the Windows icon `build/icon.ico` from `icon.png`    |
+| `npm run release`      | Set the version, commit and tag a release (see 10)        |
 
-The browser tests need `npx playwright install chromium` once. The macOS workflow under Actions runs all of the above on a Mac and attaches the disk image; start it by hand from the Actions tab.
+The browser tests need `npx playwright install chromium` once. `npm run dist` makes a disk image on a Mac and `Hadjitron-3000-Setup-<version>.exe` on Windows.
 
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) describes how the code is laid out and [docs/DESIGN.md](docs/DESIGN.md) the rules of the look. Every widget is on show at `kit.html` when `npm run web` is running.
 
 The pixel fonts are Fusion Pixel by TakWolf and Departure Mono by Helena Zhang, both under the SIL Open Font License.
+
+```
++--------------------------------------------------------------------------+
+|  10. RELEASING                                                           |
++--------------------------------------------------------------------------+
+```
+
+To publish a new version, commit everything and run `npm run release -- 1.2.0` with the new version number. It sets the version in `package.json` and `package-lock.json`, commits that as Version 1.2.0, tags it v1.2.0 and prints the command that pushes the commit and the tag; it pushes nothing itself. Once they are pushed, the Build workflow under Actions tests the program on Windows and macOS, builds the Windows installer and the Mac disk image, and publishes the release with both, the `latest.yml` the Windows program reads to find updates, and notes made from the commit subjects since the previous release. It stops if the tag and the version in `package.json` disagree. A tag that starts with `ci-`, such as `ci-try1`, builds and tests without publishing anything, and the workflow can also be started by hand from the Actions tab; the installer and the disk image are then kept with the run as artifacts.

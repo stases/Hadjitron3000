@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { position, tap } from '../../src/app/audio';
 import { installKeys } from '../../src/app/keys';
+import { IS_MAC, modKey } from '../../src/app/shortcuts';
 import { barOf } from '../../src/core/meter';
 import type { Note } from '../../src/core/types';
 import { openProject, redo, setPatternBars, setPlaying, undo, useApp } from '../../src/state/store';
@@ -28,6 +29,8 @@ vi.mock('../../src/app/commands', () => ({
 }));
 
 // Rows of the test loop: 0 Kick, 1 Clap, 2 Hat, 3 Sub Bass, 4 Kalimba, 5 Warm Pad, 6 Glass Pad, 7 Bell.
+// The shortcuts take Cmd on a Mac and Ctrl elsewhere.
+const MOD = IS_MAC ? 'Meta' : 'Control';
 const SUB = 3;
 const KALIMBA = 4;
 const BLOCK = 2 * 16 * 24;
@@ -259,14 +262,14 @@ test('click, Shift-click, rubber bands and select all choose notes; moving and D
   expect(selected()).toEqual([]);
   expect(notesOf(KALIMBA)).toEqual(before);
 
-  await userEvent.keyboard('{Control>}a{/Control}');
+  await userEvent.keyboard(`{${MOD}>}a{/${MOD}}`);
   expect(selected()).toEqual(['a', 'b', 'c', 'd']);
   // A click on one of several selected notes without moving it selects just that one; a drag moves them all.
   await drag(at(48, 62, 8), at(48 + 24, 63, 8));
   expect(plain(KALIMBA)).toEqual([[24, 24, 61], [72, 24, 63], [120, 24, 65], [168, 24, 66]]);
   await click(at(72, 63, 8));
   expect(selected()).toEqual(['b']);
-  await userEvent.keyboard('{Control>}a{/Control}{Delete}');
+  await userEvent.keyboard(`{${MOD}>}a{/${MOD}}{Delete}`);
   expect(notesOf(KALIMBA)).toEqual([]);
   undo();
   expect(notesOf(KALIMBA)).toHaveLength(4);
@@ -306,7 +309,7 @@ test('the snap places notes on sixteenths, thirty-seconds, triplets or anywhere,
 test('arrow keys nudge the selection by the snap or a bar, a semitone or an octave, inside the block', async () => {
   setRow(KALIMBA, [note('a', 0, 24, 60), note('b', 30, 24, 64)]);
   await openRow(KALIMBA);
-  await userEvent.keyboard('{Control>}a{/Control}');
+  await userEvent.keyboard(`{${MOD}>}a{/${MOD}}`);
   await userEvent.keyboard('{ArrowRight}');
   expect(plain(KALIMBA)).toEqual([[24, 24, 60], [54, 24, 64]]);
   await userEvent.keyboard('{ArrowUp}');
@@ -332,36 +335,36 @@ test('copy and paste put notes at the paste mark, cut takes them out, and repeat
   setRow(KALIMBA, [note('a', 0, 24, 60), note('b', 30, 12, 64)]);
   await openRow(KALIMBA);
   const mark = () => host.querySelector('.h-roll-bar .h-track-used')!.textContent;
-  await userEvent.keyboard('{Control>}ac{/Control}');
+  await userEvent.keyboard(`{${MOD}>}ac{/${MOD}}`);
   expect(mark()).toBe('Paste at 1.1.3');
   const past = state().past.length;
-  await userEvent.keyboard('{Control>}v{/Control}');
+  await userEvent.keyboard(`{${MOD}>}v{/${MOD}}`);
   expect(plain(KALIMBA)).toEqual([[0, 24, 60], [30, 12, 64], [48, 24, 60], [78, 12, 64]]);
   expect(selected()).toEqual(idsAt(KALIMBA, 48, 78).sort());
   expect(state().past.length).toBe(past + 1);
-  await userEvent.keyboard('{Control>}v{/Control}');
+  await userEvent.keyboard(`{${MOD}>}v{/${MOD}}`);
   expect(plain(KALIMBA).map((n) => n[0])).toEqual([0, 30, 48, 78, 96, 126]);
 
   // A click on the ruler moves the mark; Paste goes there.
   const ruler = host.querySelector('.h-roll-head .h-track-ticks .h-track-box')!.getBoundingClientRect();
   await click({ x: Math.round(ruler.left) + tickX(384, B) + 5, y: Math.round(ruler.top) + 8 });
   expect(mark()).toBe('Paste at 2.1.1');
-  await userEvent.keyboard('{Control>}v{/Control}');
+  await userEvent.keyboard(`{${MOD}>}v{/${MOD}}`);
   expect(plain(KALIMBA).slice(-2)).toEqual([[384, 24, 60], [414, 12, 64]]);
-  await userEvent.keyboard('{Control>}x{/Control}');
+  await userEvent.keyboard(`{${MOD}>}x{/${MOD}}`);
   expect(plain(KALIMBA).map((n) => n[0])).toEqual([0, 30, 48, 78, 96, 126]);
-  await userEvent.keyboard('{Control>}v{/Control}');
+  await userEvent.keyboard(`{${MOD}>}v{/${MOD}}`);
   expect(plain(KALIMBA).slice(-2).map((n) => n[0])).toEqual([432, 462]);
   // Notes that would land past the end of the block are left out.
   await click({ x: Math.round(ruler.left) + tickX(BLOCK - 24, B) + 5, y: Math.round(ruler.top) + 8 });
-  await userEvent.keyboard('{Control>}v{/Control}');
+  await userEvent.keyboard(`{${MOD}>}v{/${MOD}}`);
   expect(plain(KALIMBA).slice(-1)).toEqual([[BLOCK - 24, 24, 60]]);
   undo();
 
   setRow(KALIMBA, [note('c', 0, 24, 60), note('e', 0, 18, 64)]);
   await openRow(KALIMBA);
-  await userEvent.keyboard('{Control>}ad{/Control}');
-  await userEvent.keyboard('{Control>}d{/Control}');
+  await userEvent.keyboard(`{${MOD}>}ad{/${MOD}}`);
+  await userEvent.keyboard(`{${MOD}>}d{/${MOD}}`);
   expect(plain(KALIMBA)).toEqual([[0, 24, 60], [0, 18, 64], [24, 24, 60], [24, 18, 64], [48, 24, 60], [48, 18, 64]]);
   undo();
   expect(plain(KALIMBA)).toHaveLength(4);
@@ -392,7 +395,7 @@ test('the inspector shows and edits one selected note or several together', asyn
   await openRow(KALIMBA);
   const spin = (field: number, dir: 'up' | 'down') => centre(steppers()[field].querySelector(`.h-spin.is-${dir}`)!);
   expect(steppers()[0].getAttribute('aria-disabled')).toBe('true');
-  expect(host.querySelector('.h-track-help')!.textContent).toContain('Ctrl+V');
+  expect(host.querySelector('.h-track-help')!.textContent).toContain(modKey('V'));
 
   await click(at(30, 64, 4));
   expect(which()).toBe('E3 of Kalimba');
@@ -403,7 +406,7 @@ test('the inspector shows and edits one selected note or several together', asyn
   await click(spin(2, 'up'));
   expect(plain(KALIMBA)[1]).toEqual([54, 36, 64]);
 
-  await userEvent.keyboard('{Control>}a{/Control}');
+  await userEvent.keyboard(`{${MOD}>}a{/${MOD}}`);
   expect(which()).toBe('2 notes of Kalimba');
   await click(spin(0, 'up'));
   expect(plain(KALIMBA).map((n) => n[2])).toEqual([61, 65]);
@@ -416,10 +419,10 @@ test('the inspector shows and edits one selected note or several together', asyn
   // Typed values: a length in steps (following a 1/32 snap) and a start as bar.beat.sixteenth.
   useRoll.setState({ snap: 12 });
   await userEvent.dblClick(steppers()[1].querySelector('.h-stepper-readout')!);
-  await userEvent.keyboard('{Control>}a{/Control}1.5{Enter}');
+  await userEvent.keyboard(`{${MOD}>}a{/${MOD}}1.5{Enter}`);
   expect(plain(KALIMBA).map((n) => n[1])).toEqual([36, 48]);
   await userEvent.dblClick(steppers()[2].querySelector('.h-stepper-readout')!);
-  await userEvent.keyboard('{Control>}a{/Control}1.2.1{Enter}');
+  await userEvent.keyboard(`{${MOD}>}a{/${MOD}}1.2.1{Enter}`);
   expect(plain(KALIMBA).map((n) => n[0])).toEqual([96, 150]);
 });
 
@@ -451,7 +454,7 @@ test('notes cannot leave the block, and a note drawn at its end is cut there', a
   useRoll.setState({ length: 96 });
   await click(at(BLOCK - 24, 62));
   expect(plain(KALIMBA)).toContainEqual([BLOCK - 24, 24, 62]);
-  await userEvent.keyboard('{Control>}a{/Control}{ArrowRight}');
+  await userEvent.keyboard(`{${MOD}>}a{/${MOD}}{ArrowRight}`);
   expect(plain(KALIMBA).map((n) => n[0] + n[1])).toEqual([BLOCK, BLOCK]);
 });
 
@@ -479,7 +482,7 @@ test('a block of 32 bars with 300 notes opens, scrolls and edits quickly', async
   scroller().scrollLeft = scroller().scrollWidth;
   scroller().scrollTop = 0;
   await new Promise(requestAnimationFrame);
-  await userEvent.keyboard('{Control>}a{/Control}{ArrowUp}');
+  await userEvent.keyboard(`{${MOD}>}a{/${MOD}}{ArrowUp}`);
   expect(notesOf(KALIMBA).every((n, i) => n.note === notes[i].note + 1)).toBe(true);
   expect(performance.now() - started).toBeLessThan(3000);
 });

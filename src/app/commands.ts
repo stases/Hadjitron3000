@@ -206,7 +206,7 @@ export async function dropFiles(files: File[]): Promise<void> {
   }
 }
 
-/** A file handed over by the system (Finder, the dock icon) or dropped: open a project, add anything else. */
+/** A file handed over by the system (Finder, Explorer, the dock icon) or dropped: open a project, add anything else. */
 export async function openFile(file: OpenedFile): Promise<void> {
   const ext = extension(file.name);
   if (ext === PROJECT_EXT) {

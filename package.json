@@ -3,6 +3,7 @@
   "productName": "Hadjitron 3000",
   "version": "0.1.0",
   "description": "A small retro music machine: build sounds in the Factory, put them on the Track grid.",
+  "author": "Hadjitron 3000",
   "private": true,
   "type": "module",
   "main": "electron/main.cjs",
@@ -16,7 +17,9 @@
     "test:browser": "vitest run --project browser",
     "test:e2e": "playwright test",
     "app": "node scripts/install-app.mjs",
-    "dist": "vite build && electron-builder --mac"
+    "dist": "vite build && electron-builder --publish never",
+    "icon": "node scripts/make-icon.mjs",
+    "release": "node scripts/release.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.0",
@@ -36,5 +39,8 @@
     "vitest": "^5.1.0",
     "wasm-media-encoders": "^0.7.0",
     "zustand": "^5.1.0"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
   }
 }

@@ -1,0 +1,3 @@
+# Text files keep LF line endings in every checkout, Windows included, so the factory material, the tests and
+# the scripts are the same bytes on every system.
+* text=auto eol=lf

@@ -1,0 +1,60 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Acid Square",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "square",
+        "pitch": -12
+      }
+    },
+    "play": {
+      "mode": "legato",
+      "glide": 0.06
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 320,
+      "reso": 0.78,
+      "slope": "24",
+      "drive": 0.3,
+      "key": 0.3,
+      "vel": 0.4
+    },
+    "amp": {
+      "attack": 0.002,
+      "decay": 0.3,
+      "sustain": 0.5,
+      "release": 0.05
+    },
+    "chain": [],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.16,
+          "sustain": 0,
+          "release": 0.08,
+          "vel": 0.6
+        },
+        "per": "note",
+        "target": {
+          "module": "filter",
+          "param": "cutoff"
+        },
+        "amount": 0.65
+      }
+    ],
+    "out": {
+      "level": -9,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

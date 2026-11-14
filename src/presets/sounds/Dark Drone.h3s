@@ -1,0 +1,89 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Dark Drone",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sawtooth",
+        "pitch": -12,
+        "fine": -6,
+        "wave2": "sawtooth",
+        "fine2": 6,
+        "mix2": 0.5,
+        "sub": 0.5
+      }
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 260,
+      "reso": 0.35,
+      "slope": "24",
+      "drive": 0.4
+    },
+    "amp": {
+      "attack": 2,
+      "decay": 1,
+      "sustain": 1,
+      "release": 4
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "drive",
+        "params": {
+          "shape": "soft",
+          "amount": 0.3,
+          "tone": 5000
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "reverb",
+        "params": {
+          "size": 6,
+          "tone": 2000,
+          "mix": 0.3
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "lfo",
+        "params": {
+          "wave": "sine",
+          "sync": "4bar"
+        },
+        "per": "sound",
+        "target": {
+          "module": "filter",
+          "param": "cutoff"
+        },
+        "amount": 0.25
+      },
+      {
+        "id": "mod2",
+        "type": "drift",
+        "params": {
+          "rate": 0.2,
+          "smooth": 1
+        },
+        "per": "note",
+        "target": {
+          "module": "source",
+          "param": "pitch"
+        },
+        "amount": 0.001
+      }
+    ],
+    "out": {
+      "level": -14.5,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

@@ -1,0 +1,82 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Arp Pluck",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sawtooth",
+        "voices": 3,
+        "spread": 14,
+        "width": 0.7
+      }
+    },
+    "play": {
+      "arp": "up",
+      "rate": "1/16",
+      "octaves": 2,
+      "gate": 0.4
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 500,
+      "reso": 0.3,
+      "key": 0.5
+    },
+    "amp": {
+      "attack": 0.001,
+      "decay": 0.25,
+      "sustain": 0,
+      "release": 0.15
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "delay",
+        "params": {
+          "sync": "1/8d",
+          "feedback": 0.35,
+          "tone": 3500,
+          "mix": 0.2,
+          "pingpong": true
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "reverb",
+        "params": {
+          "size": 1.6,
+          "tone": 5000,
+          "mix": 0.15
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.15,
+          "sustain": 0,
+          "release": 0.1,
+          "vel": 0.4
+        },
+        "per": "note",
+        "target": {
+          "module": "filter",
+          "param": "cutoff"
+        },
+        "amount": 0.5
+      }
+    ],
+    "out": {
+      "level": -12,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

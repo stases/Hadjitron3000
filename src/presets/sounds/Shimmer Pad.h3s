@@ -1,0 +1,65 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Shimmer Pad",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "triangle",
+        "voices": 3,
+        "spread": 14,
+        "width": 0.8,
+        "wave2": "sine",
+        "pitch2": 12,
+        "mix2": 0.3
+      }
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 2500,
+      "reso": 0.1
+    },
+    "amp": {
+      "attack": 2,
+      "decay": 2,
+      "sustain": 0.8,
+      "release": 5
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "space",
+        "params": {
+          "size": 12,
+          "tone": 6000,
+          "mix": 0.5,
+          "shimmer": 0.6
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "drift",
+        "params": {
+          "rate": 0.05,
+          "smooth": 1
+        },
+        "per": "sound",
+        "target": {
+          "module": "out",
+          "param": "pan"
+        },
+        "amount": 0.3
+      }
+    ],
+    "out": {
+      "level": -10,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

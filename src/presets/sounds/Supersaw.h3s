@@ -1,0 +1,64 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Supersaw",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sawtooth",
+        "voices": 7,
+        "spread": 38,
+        "width": 1,
+        "wave2": "sawtooth",
+        "pitch2": 12,
+        "mix2": 0.25
+      }
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 7000,
+      "reso": 0.1
+    },
+    "amp": {
+      "attack": 0.015,
+      "decay": 0.5,
+      "sustain": 0.85,
+      "release": 0.35
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "eq",
+        "params": {
+          "lowcut": 150
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "chorus",
+        "params": {
+          "depth": 0.3,
+          "mix": 0.3
+        }
+      },
+      {
+        "id": "fx3",
+        "type": "reverb",
+        "params": {
+          "size": 2.2,
+          "tone": 6000,
+          "mix": 0.22
+        }
+      }
+    ],
+    "mods": [],
+    "out": {
+      "level": -3,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

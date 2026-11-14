@@ -1,0 +1,89 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Fog Pad",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sine",
+        "voices": 2,
+        "spread": 10,
+        "width": 0.8,
+        "wave2": "triangle",
+        "pitch2": 12,
+        "mix2": 0.2
+      }
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 700,
+      "reso": 0.2
+    },
+    "amp": {
+      "attack": 5,
+      "decay": 3,
+      "sustain": 0.85,
+      "release": 9
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "tape",
+        "params": {
+          "wow": 0.15,
+          "flutter": 0.05,
+          "hiss": 0.08,
+          "sat": 0.1,
+          "age": 0.6
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "reverb",
+        "params": {
+          "size": 7,
+          "tone": 3000,
+          "mix": 0.45
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "drift",
+        "params": {
+          "rate": 0.25,
+          "smooth": 1
+        },
+        "per": "note",
+        "target": {
+          "module": "source",
+          "param": "pitch"
+        },
+        "amount": 0.0025
+      },
+      {
+        "id": "mod2",
+        "type": "drift",
+        "params": {
+          "rate": 0.04,
+          "smooth": 1
+        },
+        "per": "sound",
+        "target": {
+          "module": "filter",
+          "param": "cutoff"
+        },
+        "amount": 0.25
+      }
+    ],
+    "out": {
+      "level": -13,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

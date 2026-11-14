@@ -1,0 +1,93 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Hoover",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sawtooth",
+        "voices": 7,
+        "spread": 45,
+        "width": 0.9,
+        "wave2": "square",
+        "pitch2": -12,
+        "mix2": 0.5,
+        "pw": 0.3
+      }
+    },
+    "play": {
+      "mode": "mono",
+      "glide": 0.15
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 3500,
+      "reso": 0.2
+    },
+    "amp": {
+      "attack": 0.01,
+      "decay": 0.4,
+      "sustain": 0.85,
+      "release": 0.3
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "chorus",
+        "params": {
+          "depth": 0.6,
+          "mix": 0.5
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "drive",
+        "params": {
+          "shape": "soft",
+          "amount": 0.25,
+          "tone": 8000
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.18,
+          "sustain": 0,
+          "release": 0.1
+        },
+        "per": "note",
+        "target": {
+          "module": "source",
+          "param": "pitch"
+        },
+        "amount": -0.03
+      },
+      {
+        "id": "mod2",
+        "type": "lfo",
+        "params": {
+          "wave": "sine",
+          "rate": 3
+        },
+        "per": "sound",
+        "target": {
+          "module": "source",
+          "param": "pw"
+        },
+        "amount": 0.4
+      }
+    ],
+    "out": {
+      "level": 0,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

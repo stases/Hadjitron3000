@@ -1,0 +1,105 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Drift Lead",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sawtooth",
+        "wave2": "triangle",
+        "fine2": 7,
+        "mix2": 0.5
+      }
+    },
+    "play": {
+      "mode": "mono",
+      "glide": 0.07
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 1600,
+      "reso": 0.25,
+      "key": 0.4
+    },
+    "amp": {
+      "attack": 0.02,
+      "decay": 0.5,
+      "sustain": 0.7,
+      "release": 0.4
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "delay",
+        "params": {
+          "sync": "1/4",
+          "feedback": 0.3,
+          "tone": 3000,
+          "mix": 0.15
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "reverb",
+        "params": {
+          "size": 2,
+          "tone": 5000,
+          "mix": 0.2
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "drift",
+        "params": {
+          "rate": 1.2,
+          "smooth": 1
+        },
+        "per": "note",
+        "target": {
+          "module": "source",
+          "param": "pitch"
+        },
+        "amount": 0.002
+      },
+      {
+        "id": "mod2",
+        "type": "drift",
+        "params": {
+          "rate": 0.3,
+          "smooth": 1
+        },
+        "per": "sound",
+        "target": {
+          "module": "filter",
+          "param": "cutoff"
+        },
+        "amount": 0.12
+      },
+      {
+        "id": "mod3",
+        "type": "lfo",
+        "params": {
+          "wave": "sine",
+          "rate": 5,
+          "fade": 0.6
+        },
+        "per": "sound",
+        "target": {
+          "module": "source",
+          "param": "pitch"
+        },
+        "amount": 0.0015
+      }
+    ],
+    "out": {
+      "level": -8,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

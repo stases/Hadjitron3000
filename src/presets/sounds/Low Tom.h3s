@@ -1,0 +1,45 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Low Tom",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sine",
+        "pitch": -12
+      }
+    },
+    "amp": {
+      "attack": 0.001,
+      "decay": 0.45,
+      "sustain": 0,
+      "release": 0.15
+    },
+    "chain": [],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.08,
+          "sustain": 0,
+          "release": 0.05
+        },
+        "per": "sound",
+        "target": {
+          "module": "source",
+          "param": "pitch"
+        },
+        "amount": 0.2
+      }
+    ],
+    "out": {
+      "level": -10.5,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

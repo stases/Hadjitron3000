@@ -2,6 +2,7 @@
 
 import { PATTERN_NAMES } from '../core/defaults';
 import { platform } from '../platform';
+import { EXAMPLES } from '../presets/examples';
 import {
   addPattern, clearPattern, duplicateChannel, duplicatePattern, redo, removeChannel, removePattern, setPlaying,
   setScope, setView, undo,
@@ -9,8 +10,8 @@ import {
 import type { AppState } from '../state/store';
 import type { MenuItem } from '../ui/kit';
 import {
-  addBlock, addSound, checkForUpdates, exportAudio, exportSound, importAudio, newProject, openProject, replaceSound,
-  saveBlockAs, saveBlockToLibrary, saveProject, saveProjectAs, saveSoundAs, saveSoundToLibrary, showAbout,
+  addBlock, addSound, checkForUpdates, exportAudio, exportSound, importAudio, newProject, openExample, openProject,
+  replaceSound, saveBlockAs, saveBlockToLibrary, saveProject, saveProjectAs, saveSoundAs, saveSoundToLibrary, showAbout,
   showShortcuts,
 } from './commands';
 import { fitSelectionToScale, openRandomise } from '../ui/track/tools';
@@ -41,6 +42,11 @@ export function buildMenus(
       items: [
         { label: 'New Project', shortcut: modKey('N'), onSelect: () => void newProject() },
         { label: 'Open Project…', shortcut: modKey('O'), onSelect: () => void openProject() },
+        {
+          label: 'Open Example',
+          hint: 'Opens a short song of one kind of music as a new project, to listen to and take apart.',
+          items: EXAMPLES.map(({ name, project }) => ({ label: name, onSelect: () => void openExample(project) })),
+        },
         { label: 'Save Project', shortcut: modKey('S'), onSelect: () => void saveProject() },
         { label: 'Save Project As…', shortcut: modKey('S', true), onSelect: () => void saveProjectAs() },
         'separator',

@@ -1,0 +1,46 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Wood Block",
+    "source": {
+      "id": "source",
+      "type": "fm",
+      "params": {
+        "pitch": 19,
+        "ratio": 2.76,
+        "amount": 0.8
+      }
+    },
+    "amp": {
+      "attack": 0.0005,
+      "decay": 0.07,
+      "sustain": 0,
+      "release": 0.04
+    },
+    "chain": [],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.015,
+          "sustain": 0,
+          "release": 0.02
+        },
+        "per": "sound",
+        "target": {
+          "module": "source",
+          "param": "amount"
+        },
+        "amount": 0.3
+      }
+    ],
+    "out": {
+      "level": -10,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

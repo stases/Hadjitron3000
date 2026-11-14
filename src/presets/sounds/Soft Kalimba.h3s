@@ -1,0 +1,64 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Soft Kalimba",
+    "source": {
+      "id": "source",
+      "type": "fm",
+      "params": {
+        "ratio": 7,
+        "amount": 0.25
+      }
+    },
+    "amp": {
+      "attack": 0.003,
+      "decay": 0.8,
+      "sustain": 0,
+      "release": 0.5
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "filter",
+        "params": {
+          "mode": "lowpass",
+          "cutoff": 2500,
+          "reso": 0.05
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "reverb",
+        "params": {
+          "size": 2.2,
+          "tone": 6000,
+          "mix": 0.2
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.06,
+          "sustain": 0,
+          "release": 0.05
+        },
+        "per": "sound",
+        "target": {
+          "module": "source",
+          "param": "amount"
+        },
+        "amount": 0.18
+      }
+    ],
+    "out": {
+      "level": -11.5,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

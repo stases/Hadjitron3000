@@ -1,0 +1,74 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Crushed Snare",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "triangle",
+        "pitch": -3,
+        "noise": 0.7
+      }
+    },
+    "amp": {
+      "attack": 0.001,
+      "decay": 0.16,
+      "sustain": 0,
+      "release": 0.08
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "filter",
+        "params": {
+          "mode": "highpass",
+          "cutoff": 200,
+          "reso": 0.1
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "crusher",
+        "params": {
+          "bits": 4,
+          "rate": 7000,
+          "mix": 0.9
+        }
+      },
+      {
+        "id": "fx3",
+        "type": "reverb",
+        "params": {
+          "size": 0.6,
+          "tone": 6000,
+          "mix": 0.1
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.03,
+          "sustain": 0,
+          "release": 0.05
+        },
+        "per": "sound",
+        "target": {
+          "module": "source",
+          "param": "pitch"
+        },
+        "amount": 0.15
+      }
+    ],
+    "out": {
+      "level": -1,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

@@ -1,0 +1,41 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Sub Pulse",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sine",
+        "pitch": -24,
+        "wave2": "sine",
+        "pitch2": 12,
+        "mix2": 0.15
+      }
+    },
+    "amp": {
+      "attack": 0.015,
+      "decay": 0.9,
+      "sustain": 0,
+      "release": 0.6
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "reverb",
+        "params": {
+          "size": 5,
+          "tone": 1200,
+          "mix": 0.35
+        }
+      }
+    ],
+    "mods": [],
+    "out": {
+      "level": -8,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

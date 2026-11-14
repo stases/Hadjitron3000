@@ -1,0 +1,84 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Wind",
+    "source": {
+      "id": "source",
+      "type": "noise",
+      "params": {
+        "color": "pink"
+      }
+    },
+    "filter": {
+      "on": true,
+      "mode": "bandpass",
+      "cutoff": 700,
+      "reso": 0.3
+    },
+    "amp": {
+      "attack": 3,
+      "decay": 1,
+      "sustain": 1,
+      "release": 5
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "width",
+        "params": {
+          "width": 1.6
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "drift",
+        "params": {
+          "rate": 0.15,
+          "smooth": 1
+        },
+        "per": "sound",
+        "target": {
+          "module": "filter",
+          "param": "cutoff"
+        },
+        "amount": 0.35
+      },
+      {
+        "id": "mod2",
+        "type": "drift",
+        "params": {
+          "rate": 0.05,
+          "smooth": 1
+        },
+        "per": "sound",
+        "target": {
+          "module": "out",
+          "param": "pan"
+        },
+        "amount": 0.5
+      },
+      {
+        "id": "mod3",
+        "type": "lfo",
+        "params": {
+          "wave": "sine",
+          "rate": 0.07
+        },
+        "per": "sound",
+        "target": {
+          "module": "out",
+          "param": "level"
+        },
+        "amount": 0.3
+      }
+    ],
+    "out": {
+      "level": 2,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

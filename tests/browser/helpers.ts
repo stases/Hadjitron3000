@@ -72,6 +72,55 @@ export function amplitudeAt(d: Float32Array, f: number, sr = SR): number {
   return (2 * Math.hypot(re, im)) / wsum;
 }
 
+/** In-place radix-2 FFT of a power-of-two length. */
+function fft(re: Float64Array, im: Float64Array): void {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      [re[i], re[j]] = [re[j], re[i]];
+      [im[i], im[j]] = [im[j], im[i]];
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const step = (-2 * Math.PI) / len;
+    for (let i = 0; i < n; i += len) {
+      for (let k = 0; k < len / 2; k++) {
+        const [wr, wi] = [Math.cos(step * k), Math.sin(step * k)];
+        const [a, b] = [i + k, i + k + len / 2];
+        const xr = re[b] * wr - im[b] * wi;
+        const xi = re[b] * wi + im[b] * wr;
+        [re[b], im[b]] = [re[a] - xr, im[a] - xi];
+        re[a] += xr;
+        im[a] += xi;
+      }
+    }
+  }
+}
+
+/** The spectral centroid in hertz: the power-weighted mean frequency over Hann-windowed frames of 4096 samples. */
+export function centroid(d: Float32Array, sr = SR): number {
+  const n = 4096;
+  const padded = new Float32Array(Math.max(n, d.length));
+  padded.set(d);
+  let power = 0;
+  let moment = 0;
+  for (let start = 0; start + n <= padded.length; start += n / 2) {
+    const hann = (i: number) => 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / n);
+    const re = Float64Array.from({ length: n }, (_, i) => padded[start + i] * hann(i));
+    const im = new Float64Array(n);
+    fft(re, im);
+    for (let k = 1; k < n / 2; k++) {
+      const p = re[k] * re[k] + im[k] * im[k];
+      power += p;
+      moment += (p * k * sr) / n;
+    }
+  }
+  return moment / power;
+}
+
 /** First time (seconds) at or after `from` where the signal exceeds `threshold`, or -1. */
 export function onset(d: Float32Array, from: number, threshold = 1e-4, sr = SR): number {
   for (let i = frame(from, sr); i < d.length; i++) if (Math.abs(d[i]) > threshold) return i / sr;

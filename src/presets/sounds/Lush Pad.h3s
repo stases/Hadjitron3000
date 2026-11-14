@@ -1,0 +1,83 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Lush Pad",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sawtooth",
+        "voices": 7,
+        "spread": 25,
+        "width": 0.9,
+        "wave2": "sawtooth",
+        "pitch2": 12,
+        "fine2": 5,
+        "mix2": 0.3
+      }
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 1800,
+      "reso": 0.1
+    },
+    "amp": {
+      "attack": 1.5,
+      "decay": 2,
+      "sustain": 0.85,
+      "release": 3
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "chorus",
+        "params": {
+          "depth": 0.5,
+          "mix": 0.5
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "phaser",
+        "params": {
+          "rate": 0.08,
+          "depth": 0.6,
+          "feedback": 0.3,
+          "mix": 0.35
+        }
+      },
+      {
+        "id": "fx3",
+        "type": "reverb",
+        "params": {
+          "size": 5,
+          "tone": 5000,
+          "mix": 0.35
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "drift",
+        "params": {
+          "rate": 0.3,
+          "smooth": 1
+        },
+        "per": "note",
+        "target": {
+          "module": "source",
+          "param": "pitch"
+        },
+        "amount": 0.002
+      }
+    ],
+    "out": {
+      "level": -2,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

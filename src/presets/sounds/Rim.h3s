@@ -1,0 +1,38 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Rim",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "triangle",
+        "pitch": 26,
+        "noise": 0.25
+      }
+    },
+    "amp": {
+      "attack": 0.0005,
+      "decay": 0.03,
+      "sustain": 0,
+      "release": 0.02
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "eq",
+        "params": {
+          "high": 4,
+          "lowcut": 400
+        }
+      }
+    ],
+    "mods": [],
+    "out": {
+      "level": -5,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

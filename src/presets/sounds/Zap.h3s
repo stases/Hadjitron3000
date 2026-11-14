@@ -1,0 +1,62 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Zap",
+    "source": {
+      "id": "source",
+      "type": "fm",
+      "params": {
+        "pitch": 24,
+        "ratio": 1.5,
+        "amount": 3
+      }
+    },
+    "amp": {
+      "attack": 0.0005,
+      "decay": 0.09,
+      "sustain": 0,
+      "release": 0.03
+    },
+    "chain": [],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.05,
+          "sustain": 0,
+          "release": 0.03
+        },
+        "per": "sound",
+        "target": {
+          "module": "source",
+          "param": "pitch"
+        },
+        "amount": 0.5
+      },
+      {
+        "id": "mod2",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.05,
+          "sustain": 0,
+          "release": 0.03
+        },
+        "per": "sound",
+        "target": {
+          "module": "source",
+          "param": "amount"
+        },
+        "amount": 0.3
+      }
+    ],
+    "out": {
+      "level": -9.5,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

@@ -131,7 +131,16 @@ input.h-app-bpm::selection {
 }
 
 .h-app-library-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   width: 230px;
+}
+
+.h-app-library-show {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .h-app-library-buttons {

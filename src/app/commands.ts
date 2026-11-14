@@ -12,13 +12,13 @@ import { barOf } from '../core/meter';
 import { playsSample } from '../core/modules';
 import { sliceNotes } from '../core/slices';
 import { encodeWav } from '../core/wav';
-import type { Block, SampleData } from '../core/types';
+import type { Block, Project, SampleData } from '../core/types';
 import type { FileFilter, Library, OpenedFile, SavedFile } from '../platform/api';
 import { platform } from '../platform';
 import { starterProject } from '../presets/projects';
 import {
   addChannel, addSampleChannel, insertBlock, markSaved, openProject as loadProject, replaceRow, setSample,
-  setSourceType, useApp,
+  setSourceType, setView, useApp,
 } from '../state/store';
 import type { AppState } from '../state/store';
 import { ask, fail, openDialog, reason } from './dialogStore';
@@ -63,6 +63,13 @@ export async function newProject(): Promise<boolean> {
   if (!(await confirmDiscard())) return false;
   loadProject(starterProject(), null);
   return true;
+}
+
+/** Open an example song as a new, unsaved project in the Song view, after offering to save unsaved changes. */
+export async function openExample(example: () => Project): Promise<void> {
+  if (!(await confirmDiscard())) return;
+  loadProject(example(), null);
+  setView('song');
 }
 
 /** Ask for a project file and open it, after offering to save unsaved changes. */

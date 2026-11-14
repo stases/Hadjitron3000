@@ -1,0 +1,45 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Warm Sub",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "triangle",
+        "pitch": -24
+      }
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 220,
+      "reso": 0,
+      "key": 0.5
+    },
+    "amp": {
+      "attack": 0.01,
+      "decay": 0.4,
+      "sustain": 0.8,
+      "release": 0.15
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "drive",
+        "params": {
+          "shape": "soft",
+          "amount": 0.1,
+          "tone": 3000
+        }
+      }
+    ],
+    "mods": [],
+    "out": {
+      "level": -4,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

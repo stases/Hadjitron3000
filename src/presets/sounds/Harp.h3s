@@ -1,0 +1,63 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Harp",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "triangle",
+        "wave2": "sawtooth",
+        "mix2": 0.25
+      }
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 1200,
+      "reso": 0.1,
+      "key": 0.6
+    },
+    "amp": {
+      "attack": 0.002,
+      "decay": 1.6,
+      "sustain": 0,
+      "release": 1.2
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "reverb",
+        "params": {
+          "size": 2.8,
+          "tone": 6000,
+          "mix": 0.3
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.25,
+          "sustain": 0,
+          "release": 0.2
+        },
+        "per": "note",
+        "target": {
+          "module": "filter",
+          "param": "cutoff"
+        },
+        "amount": 0.35
+      }
+    ],
+    "out": {
+      "level": -12,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

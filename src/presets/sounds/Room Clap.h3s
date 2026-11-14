@@ -1,0 +1,57 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Room Clap",
+    "source": {
+      "id": "source",
+      "type": "noise",
+      "params": {
+        "color": "white"
+      }
+    },
+    "amp": {
+      "attack": 0.002,
+      "decay": 0.18,
+      "sustain": 0,
+      "release": 0.1
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "filter",
+        "params": {
+          "mode": "bandpass",
+          "cutoff": 1150,
+          "reso": 0.35
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "delay",
+        "params": {
+          "sync": "free",
+          "time": 0.011,
+          "feedback": 0.6,
+          "tone": 8000,
+          "mix": 0.75
+        }
+      },
+      {
+        "id": "fx3",
+        "type": "reverb",
+        "params": {
+          "size": 1.8,
+          "tone": 5000,
+          "mix": 0.45
+        }
+      }
+    ],
+    "mods": [],
+    "out": {
+      "level": 1,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

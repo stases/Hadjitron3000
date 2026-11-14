@@ -1,0 +1,46 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Glitch Hit",
+    "source": {
+      "id": "source",
+      "type": "noise",
+      "params": {
+        "color": "white"
+      }
+    },
+    "amp": {
+      "attack": 0.0005,
+      "decay": 0.015,
+      "sustain": 0,
+      "release": 0.01
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "crusher",
+        "params": {
+          "bits": 3,
+          "rate": 2500,
+          "mix": 1
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "filter",
+        "params": {
+          "mode": "highpass",
+          "cutoff": 800,
+          "reso": 0.1
+        }
+      }
+    ],
+    "mods": [],
+    "out": {
+      "level": -1.5,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

@@ -1,0 +1,57 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Rolling Bass",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sawtooth",
+        "pitch": -12,
+        "sub": 0.4
+      }
+    },
+    "play": {
+      "mode": "mono"
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 500,
+      "reso": 0.25,
+      "slope": "24",
+      "key": 0.3
+    },
+    "amp": {
+      "attack": 0.002,
+      "decay": 0.25,
+      "sustain": 0.3,
+      "release": 0.05
+    },
+    "chain": [],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.12,
+          "sustain": 0,
+          "release": 0.05
+        },
+        "per": "note",
+        "target": {
+          "module": "filter",
+          "param": "cutoff"
+        },
+        "amount": 0.25
+      }
+    ],
+    "out": {
+      "level": -6,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

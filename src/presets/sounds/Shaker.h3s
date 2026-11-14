@@ -1,0 +1,37 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Shaker",
+    "source": {
+      "id": "source",
+      "type": "noise",
+      "params": {
+        "color": "white"
+      }
+    },
+    "amp": {
+      "attack": 0.012,
+      "decay": 0.07,
+      "sustain": 0,
+      "release": 0.04
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "filter",
+        "params": {
+          "mode": "bandpass",
+          "cutoff": 6500,
+          "reso": 0.25
+        }
+      }
+    ],
+    "mods": [],
+    "out": {
+      "level": -1.5,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

@@ -1,0 +1,81 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Acid Squelch",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sawtooth",
+        "pitch": -12
+      }
+    },
+    "play": {
+      "mode": "legato",
+      "glide": 0.05
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 200,
+      "reso": 0.86,
+      "slope": "24",
+      "drive": 0.7,
+      "key": 0.3,
+      "vel": 0.5
+    },
+    "amp": {
+      "attack": 0.002,
+      "decay": 0.3,
+      "sustain": 0.6,
+      "release": 0.05
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "drive",
+        "params": {
+          "shape": "soft",
+          "amount": 0.5,
+          "tone": 5000,
+          "mix": 0.6
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "delay",
+        "params": {
+          "sync": "1/8d",
+          "feedback": 0.25,
+          "tone": 3000,
+          "mix": 0.15
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.12,
+          "sustain": 0,
+          "release": 0.08,
+          "vel": 0.7
+        },
+        "per": "note",
+        "target": {
+          "module": "filter",
+          "param": "cutoff"
+        },
+        "amount": 0.8
+      }
+    ],
+    "out": {
+      "level": -9,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

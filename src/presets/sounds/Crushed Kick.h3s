@@ -1,0 +1,64 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Crushed Kick",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sine",
+        "pitch": -19
+      }
+    },
+    "amp": {
+      "attack": 0.001,
+      "decay": 0.3,
+      "sustain": 0,
+      "release": 0.08
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "crusher",
+        "params": {
+          "bits": 5,
+          "rate": 6000,
+          "mix": 1
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "filter",
+        "params": {
+          "mode": "lowpass",
+          "cutoff": 3500,
+          "reso": 0.1
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.07,
+          "sustain": 0,
+          "release": 0.05
+        },
+        "per": "sound",
+        "target": {
+          "module": "source",
+          "param": "pitch"
+        },
+        "amount": 0.5
+      }
+    ],
+    "out": {
+      "level": -5.5,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

@@ -1,0 +1,44 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Long Hat",
+    "source": {
+      "id": "source",
+      "type": "noise",
+      "params": {
+        "color": "white"
+      }
+    },
+    "amp": {
+      "attack": 0.002,
+      "decay": 0.7,
+      "sustain": 0,
+      "release": 0.2
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "filter",
+        "params": {
+          "mode": "bandpass",
+          "cutoff": 8500,
+          "reso": 0.3
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "eq",
+        "params": {
+          "high": 3
+        }
+      }
+    ],
+    "mods": [],
+    "out": {
+      "level": -7.5,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

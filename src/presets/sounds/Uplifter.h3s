@@ -1,0 +1,87 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Uplifter",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sawtooth",
+        "voices": 7,
+        "spread": 40,
+        "width": 1,
+        "noise": 0.4
+      }
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 400,
+      "reso": 0.3
+    },
+    "amp": {
+      "attack": 6,
+      "decay": 1,
+      "sustain": 1,
+      "release": 1
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "width",
+        "params": {
+          "width": 1.5
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "reverb",
+        "params": {
+          "size": 3,
+          "tone": 6000,
+          "mix": 0.3
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 8,
+          "decay": 0,
+          "sustain": 1,
+          "release": 1
+        },
+        "per": "note",
+        "target": {
+          "module": "source",
+          "param": "pitch"
+        },
+        "amount": 0.25
+      },
+      {
+        "id": "mod2",
+        "type": "env",
+        "params": {
+          "attack": 8,
+          "decay": 0,
+          "sustain": 1,
+          "release": 1
+        },
+        "per": "note",
+        "target": {
+          "module": "filter",
+          "param": "cutoff"
+        },
+        "amount": 0.8
+      }
+    ],
+    "out": {
+      "level": -9,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

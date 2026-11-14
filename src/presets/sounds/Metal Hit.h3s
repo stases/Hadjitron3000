@@ -1,0 +1,73 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Metal Hit",
+    "source": {
+      "id": "source",
+      "type": "fm",
+      "params": {
+        "pitch": 7,
+        "ratio": 3.17,
+        "amount": 4
+      }
+    },
+    "amp": {
+      "attack": 0.001,
+      "decay": 0.35,
+      "sustain": 0,
+      "release": 0.2
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "ring",
+        "params": {
+          "freq": 1370,
+          "mix": 0.5
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "filter",
+        "params": {
+          "mode": "highpass",
+          "cutoff": 400,
+          "reso": 0.1
+        }
+      },
+      {
+        "id": "fx3",
+        "type": "reverb",
+        "params": {
+          "size": 1,
+          "tone": 8000,
+          "mix": 0.15
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.1,
+          "sustain": 0,
+          "release": 0.1
+        },
+        "per": "sound",
+        "target": {
+          "module": "source",
+          "param": "amount"
+        },
+        "amount": 0.4
+      }
+    ],
+    "out": {
+      "level": -12,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

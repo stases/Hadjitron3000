@@ -1,0 +1,68 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Minor Stab",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sawtooth",
+        "voices": 3,
+        "spread": 10,
+        "width": 0.6,
+        "wave2": "sawtooth",
+        "pitch2": 3,
+        "mix2": 0.5
+      }
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 900,
+      "reso": 0.3,
+      "key": 0.4
+    },
+    "amp": {
+      "attack": 0.002,
+      "decay": 0.25,
+      "sustain": 0,
+      "release": 0.2
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "reverb",
+        "params": {
+          "size": 1.5,
+          "tone": 5000,
+          "mix": 0.2
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.14,
+          "sustain": 0,
+          "release": 0.1,
+          "vel": 0.5
+        },
+        "per": "note",
+        "target": {
+          "module": "filter",
+          "param": "cutoff"
+        },
+        "amount": 0.4
+      }
+    ],
+    "out": {
+      "level": -10,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

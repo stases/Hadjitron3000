@@ -1,0 +1,35 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Draw Buzz",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "draw",
+        "shape": "-Y-Y-Y-Y-Y-Y-YzIgZObO-PhQEQnRKRtSQSzTWT6UdVAVjWGWpXMXvYSY2ZZZ8afbCblcIcrrLrLrLcWbma2aGZWYmX2XGWWVmU2UGTWSmR2RGQWPmO2OGNWMmL2LGKW"
+      }
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 3000,
+      "reso": 0.3,
+      "key": 0.3
+    },
+    "amp": {
+      "attack": 0.003,
+      "decay": 0.3,
+      "sustain": 0.7,
+      "release": 0.1
+    },
+    "chain": [],
+    "mods": [],
+    "out": {
+      "level": -5.5,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

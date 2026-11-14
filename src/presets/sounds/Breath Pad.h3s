@@ -1,0 +1,70 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Breath Pad",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "triangle",
+        "voices": 3,
+        "spread": 12,
+        "width": 0.7,
+        "noise": 0.3
+      }
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 1400,
+      "reso": 0.1
+    },
+    "amp": {
+      "attack": 1.2,
+      "decay": 1,
+      "sustain": 0.85,
+      "release": 2
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "chorus",
+        "params": {
+          "depth": 0.4,
+          "mix": 0.4
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "reverb",
+        "params": {
+          "size": 4,
+          "tone": 5000,
+          "mix": 0.35
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "lfo",
+        "params": {
+          "wave": "sine",
+          "rate": 0.12
+        },
+        "per": "sound",
+        "target": {
+          "module": "filter",
+          "param": "cutoff"
+        },
+        "amount": 0.08
+      }
+    ],
+    "out": {
+      "level": -7.5,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

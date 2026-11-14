@@ -15,6 +15,8 @@ import { extractBlock } from '../../src/core/block';
 import { emptyProject, newSound } from '../../src/core/defaults';
 import { parseBlock, parseProject, serializeBlock } from '../../src/core/fileformat';
 import { platform } from '../../src/platform';
+import { PRESET_GROUPS } from '../../src/presets';
+import { EXAMPLES } from '../../src/presets/examples';
 import { demoProject, factoryBlocks, starterProject } from '../../src/presets/projects';
 import * as store from '../../src/state/store';
 import { stepsOf } from '../support/steps';
@@ -125,7 +127,8 @@ test('the title bar buttons control the window when there is one', async () => {
 test('the menus list their commands and follow the store', async () => {
   renderApp();
   expect(labels(await openMenu('File'))).toEqual([
-    'New Project', 'Open Project…', 'Save Project', 'Save Project As…', 'Import Audio…', 'Export Audio…',
+    'New Project', 'Open Project…', 'Open Example', 'Save Project', 'Save Project As…', 'Import Audio…',
+    'Export Audio…',
   ]);
   let edit = await openMenu('Edit');
   expect(labels(edit)).toEqual(['Undo', 'Redo']);
@@ -486,6 +489,29 @@ test('New asks to save unsaved changes first', async () => {
   expect(state().dirty).toBe(false);
 });
 
+test('Open Example opens each example as a new project in the Song view after offering to save', async () => {
+  renderApp();
+  store.setBpm(100);
+  await openMenu('File');
+  await userEvent.hover($$('.h-menu-item').find((el) => el.textContent === 'Open Example')!);
+  await expect.poll(() => $$('.h-menu').length).toBe(2);
+  expect(labels([...$$('.h-menu')[1].querySelectorAll<HTMLElement>('.h-menu-item')])).toEqual(
+    EXAMPLES.map((e) => e.name),
+  );
+  await userEvent.click($$('.h-menu-item').find((el) => el.textContent === 'Techno')!);
+  expect(await messageText()).toBe('Save changes to Welcome?');
+  await userEvent.click(messageButton("Don't Save"));
+  await expect.poll(() => state().project.name).toBe('Techno');
+  expect(state().file).toBeNull();
+  expect(state().dirty).toBe(false);
+  expect(state().view).toBe('song');
+  for (const { name, project } of EXAMPLES) {
+    await commands.openExample(project);
+    expect(state().project.name).toBe(name);
+    await expect.poll(title).toBe(`${name} - Hadjitron 3000`);
+  }
+});
+
 test('the Sound Library lists new, factory and saved sounds and adds one', async () => {
   vi.spyOn(platform.library, 'list').mockResolvedValue(['My Bell']);
   renderApp();
@@ -496,9 +522,20 @@ test('the Sound Library lists new, factory and saved sounds and adds one', async
   expect(rows.slice(0, 4)).toEqual(['Oscillator', 'FM Pair', 'Noise', 'Sampler']);
   expect(rows).toEqual(expect.arrayContaining(['Kick', 'Sub Bass', 'Kalimba', 'Warm Pad']));
   expect($$('.h-list-header').map((h) => h.textContent)).toEqual([
-    'New', 'Factory · Drums', 'Factory · Bass', 'Factory · Keys', 'Factory · Pads', 'My Sounds',
+    'New', 'Factory · Drums', 'Factory · Percussion', 'Factory · Bass', 'Factory · Keys', 'Factory · Leads',
+    'Factory · Pads', 'Factory · Textures', 'Factory · Risers', 'My Sounds',
   ]);
   expect((button('Delete') as HTMLButtonElement).disabled).toBe(true);
+
+  // Show narrows the list to one group and picks its first sound when the selection is not in it.
+  await userEvent.click($('.h-app-library-show .h-select'));
+  await userEvent.click($$('.h-select-option').find((o) => o.textContent === 'Factory · Leads')!);
+  expect($$('.h-list-header').map((h) => h.textContent)).toEqual(['Factory · Leads']);
+  expect($$('.h-list-row').map((r) => r.textContent)).toEqual(PRESET_GROUPS.find((g) => g.label === 'Leads')!.names);
+  expect($('.h-list-row.is-selected').textContent).toBe('Square Lead');
+  await userEvent.click($('.h-app-library-show .h-select'));
+  await userEvent.click($$('.h-select-option').find((o) => o.textContent === 'All sounds')!);
+  expect($('.h-list-row.is-selected').textContent).toBe('Square Lead');
 
   const snare = $$('.h-list-row').find((r) => r.textContent === 'Snare')!;
   await userEvent.dblClick(snare);
@@ -529,11 +566,13 @@ test('the Block Library lists factory and saved blocks, auditions them and adds 
   commands.addBlock();
   await expect.poll(() => $$('.h-list-row').map((r) => r.textContent)).toContain('My Groove');
   expect($('.h-dialog').getAttribute('aria-label')).toBe('Block Library');
-  expect($$('.h-list-header').map((h) => h.textContent)).toEqual(['Factory', 'My Blocks']);
-  expect(factoryBlocks().map((b) => b.name)).toEqual([
-    'Beat', 'Bass', 'Keys', 'Pads', 'Break', 'Bass up', 'Keys up', 'Pads up',
+  expect($$('.h-list-header').map((h) => h.textContent)).toEqual([
+    'Factory · Welcome', 'Factory · Techno', 'Factory · Trance', 'Factory · Acid', 'Factory · Experimental',
+    'Factory · Organic', 'Factory · Ambient', 'My Blocks',
   ]);
-  expect($$('.h-list-row').map((r) => r.textContent)).toEqual([...factoryBlocks().map((b) => b.name), 'My Groove']);
+  expect($$('.h-list-row').map((r) => r.textContent)).toEqual([
+    ...factoryBlocks().flatMap((g) => g.blocks.map((b) => b.name)), 'My Groove',
+  ]);
   expect(row('Pads').querySelector('.h-chip')!.getAttribute('style')).toContain('--c5');
   expect((button('Delete') as HTMLButtonElement).disabled).toBe(true);
 

@@ -9,13 +9,25 @@ import { PRESET_GROUPS, preset, presetSamples } from '../presets';
 import { factorySample } from '../presets/samples';
 import { factoryBlocks } from '../presets/projects';
 import { addChannel, replaceSound } from '../state/store';
-import { Button, Dialog, ListBox } from '../ui/kit';
+import { Button, Dialog, ListBox, Select } from '../ui/kit';
 import type { IconName, ListItem } from '../ui/kit';
 import { audition, auditionBlock, endAudition } from './audio';
 import { addBlockToProject, fileProblem, importAudio, loadSample } from './commands';
 import { ask, closeDialog, fail, reason } from './dialogStore';
 
 const USER = 'user:';
+const ALL = '';
+
+/** A list cut at its headers: each header with the rows under it. */
+function sections(items: ListItem[]): ListItem[][] {
+  return items.reduce<ListItem[][]>((out, item) => {
+    if ('header' in item || out.length === 0) out.push([item]);
+    else out[out.length - 1].push(item);
+    return out;
+  }, []);
+}
+
+const headerOf = (section: ListItem[]) => ('header' in section[0] ? section[0].header : ALL);
 
 interface LibraryProps {
   title: string;
@@ -33,6 +45,7 @@ interface LibraryProps {
 function LibraryDialog({ title, noun, library, factory, initial, action, canPlay, play, choose }: LibraryProps) {
   const [mine, setMine] = useState<string[]>([]);
   const [selected, setSelected] = useState<string | null>(initial);
+  const [show, setShow] = useState(ALL);
   const Noun = noun === 'sound' ? 'Sound' : 'Block';
 
   const refresh = async () => {
@@ -69,21 +82,41 @@ function LibraryDialog({ title, noun, library, factory, initial, action, canPlay
     await refresh();
   };
 
-  const items: ListItem[] = [
+  const groups = sections([
     ...factory,
     { header: `My ${Noun}s` },
     ...mine.map((name) => ({ id: USER + name, label: name, icon: 'floppy' as const })),
-  ];
+  ]);
+  const shown = (header: string) => groups.filter((g) => header === ALL || headerOf(g) === header).flat();
+  const ids = (items: ListItem[]) => items.flatMap((item) => ('id' in item ? [item.id] : []));
+  const showGroup = (header: string) => {
+    setShow(header);
+    const rows = ids(shown(header));
+    if (!rows.includes(selected ?? '')) setSelected(rows[0] ?? null);
+  };
   return (
     <Dialog title={title} onClose={closeDialog}>
       <div className="h-app-library">
         <div className="h-app-library-list">
+          <div className="h-app-library-show">
+            <span>Show:</span>
+            <Select
+              value={show}
+              options={[
+                { value: ALL, label: `All ${noun}s` },
+                ...groups.map((g) => ({ value: headerOf(g), label: headerOf(g) })),
+              ]}
+              onChange={showGroup}
+              width={186}
+              hint={`Lists one group of ${noun}s, or all of them.`}
+            />
+          </div>
           <ListBox
-            items={items}
+            items={shown(show)}
             value={selected}
             onChange={setSelected}
             onActivate={(id) => canPlay(id) && void play(id)}
-            height={318}
+            height={290}
           />
         </div>
         <div className="h-app-library-buttons">
@@ -183,7 +216,10 @@ export function BlockLibraryDialog() {
   const [factory] = useState(factoryBlocks);
 
   const load = async (id: string): Promise<Block | null> => {
-    if (!id.startsWith(USER)) return factory[Number(id.slice('factory:'.length))];
+    if (!id.startsWith(USER)) {
+      const [group, index] = id.slice('factory:'.length).split(':').map(Number);
+      return factory[group].blocks[index];
+    }
     const name = id.slice(USER.length);
     try {
       return parseBlock(new TextDecoder().decode(await platform.blocks.read(name)));
@@ -208,11 +244,11 @@ export function BlockLibraryDialog() {
       title="Block Library"
       noun="block"
       library={platform.blocks}
-      factory={[
-        { header: 'Factory' },
-        ...factory.map((block, i) => ({ id: `factory:${i}`, label: block.name, color: block.color })),
-      ]}
-      initial="factory:0"
+      factory={factory.flatMap((group, g) => [
+        { header: `Factory · ${group.label}` },
+        ...group.blocks.map((block, i) => ({ id: `factory:${g}:${i}`, label: block.name, color: block.color })),
+      ])}
+      initial="factory:0:0"
       action="Add to Project"
       canPlay={() => true}
       play={play}

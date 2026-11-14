@@ -1,0 +1,62 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Soft Mallet",
+    "source": {
+      "id": "source",
+      "type": "fm",
+      "params": {
+        "ratio": 4,
+        "amount": 0.5
+      }
+    },
+    "amp": {
+      "attack": 0.002,
+      "decay": 0.5,
+      "sustain": 0,
+      "release": 0.4
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "eq",
+        "params": {
+          "high": -4
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "reverb",
+        "params": {
+          "size": 1.5,
+          "tone": 6000,
+          "mix": 0.15
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.04,
+          "sustain": 0,
+          "release": 0.05
+        },
+        "per": "note",
+        "target": {
+          "module": "source",
+          "param": "amount"
+        },
+        "amount": 0.25
+      }
+    ],
+    "out": {
+      "level": -9,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

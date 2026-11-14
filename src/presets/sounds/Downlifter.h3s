@@ -1,0 +1,60 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Downlifter",
+    "source": {
+      "id": "source",
+      "type": "noise",
+      "params": {
+        "color": "white"
+      }
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 300,
+      "reso": 0.3
+    },
+    "amp": {
+      "attack": 0.01,
+      "decay": 4,
+      "sustain": 0,
+      "release": 1
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "reverb",
+        "params": {
+          "size": 3,
+          "tone": 6000,
+          "mix": 0.35
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 4,
+          "sustain": 0,
+          "release": 1
+        },
+        "per": "note",
+        "target": {
+          "module": "filter",
+          "param": "cutoff"
+        },
+        "amount": 0.8
+      }
+    ],
+    "out": {
+      "level": -4,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

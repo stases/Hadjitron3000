@@ -1,0 +1,65 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Ride",
+    "source": {
+      "id": "source",
+      "type": "fm",
+      "params": {
+        "pitch": 24,
+        "ratio": 3.73,
+        "amount": 6
+      }
+    },
+    "amp": {
+      "attack": 0.001,
+      "decay": 1.6,
+      "sustain": 0,
+      "release": 0.6
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "filter",
+        "params": {
+          "mode": "highpass",
+          "cutoff": 3500,
+          "reso": 0.2
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "reverb",
+        "params": {
+          "size": 1.2,
+          "tone": 9000,
+          "mix": 0.12
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.08,
+          "sustain": 0,
+          "release": 0.05
+        },
+        "per": "sound",
+        "target": {
+          "module": "source",
+          "param": "amount"
+        },
+        "amount": 0.15
+      }
+    ],
+    "out": {
+      "level": -26,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

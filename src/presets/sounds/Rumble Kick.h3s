@@ -1,0 +1,91 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Rumble Kick",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sine",
+        "pitch": -24
+      }
+    },
+    "amp": {
+      "attack": 0.001,
+      "decay": 0.42,
+      "sustain": 0,
+      "release": 0.1
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "drive",
+        "params": {
+          "shape": "soft",
+          "amount": 0.4,
+          "tone": 6000
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "reverb",
+        "params": {
+          "size": 2.2,
+          "tone": 1500,
+          "mix": 0.7
+        }
+      },
+      {
+        "id": "fx3",
+        "type": "filter",
+        "params": {
+          "mode": "lowpass",
+          "cutoff": 190,
+          "reso": 0.25
+        }
+      },
+      {
+        "id": "fx4",
+        "type": "compressor",
+        "params": {
+          "threshold": -26,
+          "ratio": 10,
+          "attack": 0.002,
+          "release": 0.2,
+          "makeup": 8
+        }
+      },
+      {
+        "id": "fx5",
+        "type": "width",
+        "params": {
+          "width": 0.5
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.06,
+          "sustain": 0,
+          "release": 0.05
+        },
+        "per": "sound",
+        "target": {
+          "module": "source",
+          "param": "pitch"
+        },
+        "amount": 0.6
+      }
+    ],
+    "out": {
+      "level": 2,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

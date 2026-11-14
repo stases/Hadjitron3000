@@ -1,0 +1,89 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Dub Chord",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sawtooth",
+        "voices": 2,
+        "spread": 10,
+        "wave2": "sawtooth",
+        "pitch2": 3,
+        "mix2": 0.5
+      }
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 550,
+      "reso": 0.15,
+      "key": 0.3
+    },
+    "amp": {
+      "attack": 0.004,
+      "decay": 0.5,
+      "sustain": 0.1,
+      "release": 0.4
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "tape",
+        "params": {
+          "wow": 0.25,
+          "flutter": 0.1,
+          "hiss": 0.1,
+          "sat": 0.4,
+          "age": 0.6
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "delay",
+        "params": {
+          "sync": "1/4",
+          "feedback": 0.65,
+          "tone": 2000,
+          "lowcut": 600,
+          "mix": 0.35,
+          "pingpong": true
+        }
+      },
+      {
+        "id": "fx3",
+        "type": "reverb",
+        "params": {
+          "size": 3,
+          "tone": 2500,
+          "mix": 0.3
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.3,
+          "sustain": 0,
+          "release": 0.2
+        },
+        "per": "note",
+        "target": {
+          "module": "filter",
+          "param": "cutoff"
+        },
+        "amount": 0.25
+      }
+    ],
+    "out": {
+      "level": -12,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

@@ -1,0 +1,37 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Tight Hat",
+    "source": {
+      "id": "source",
+      "type": "noise",
+      "params": {
+        "color": "white"
+      }
+    },
+    "amp": {
+      "attack": 0.001,
+      "decay": 0.025,
+      "sustain": 0,
+      "release": 0.015
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "filter",
+        "params": {
+          "mode": "bandpass",
+          "cutoff": 10000,
+          "reso": 0.45
+        }
+      }
+    ],
+    "mods": [],
+    "out": {
+      "level": 1.5,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

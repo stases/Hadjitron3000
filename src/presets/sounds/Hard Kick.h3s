@@ -1,0 +1,77 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Hard Kick",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sine",
+        "pitch": -24
+      }
+    },
+    "amp": {
+      "attack": 0.001,
+      "decay": 0.3,
+      "sustain": 0,
+      "release": 0.08
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "drive",
+        "params": {
+          "shape": "soft",
+          "amount": 0.65,
+          "tone": 7000
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "eq",
+        "params": {
+          "low": 3,
+          "mid": -2,
+          "freq": 320,
+          "high": 4,
+          "lowcut": 28
+        }
+      },
+      {
+        "id": "fx3",
+        "type": "compressor",
+        "params": {
+          "threshold": -18,
+          "ratio": 6,
+          "attack": 0.004,
+          "release": 0.1,
+          "makeup": 6
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 0,
+          "decay": 0.045,
+          "sustain": 0,
+          "release": 0.05
+        },
+        "per": "sound",
+        "target": {
+          "module": "source",
+          "param": "pitch"
+        },
+        "amount": 0.75
+      }
+    ],
+    "out": {
+      "level": -4,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

@@ -1,0 +1,80 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Choir Pad",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sawtooth",
+        "voices": 5,
+        "spread": 14,
+        "width": 0.7
+      }
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 3500,
+      "reso": 0.05
+    },
+    "amp": {
+      "attack": 0.8,
+      "decay": 1,
+      "sustain": 0.9,
+      "release": 1.8
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "eq",
+        "params": {
+          "low": -4,
+          "mid": 12,
+          "freq": 750,
+          "high": -9
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "chorus",
+        "params": {
+          "depth": 0.5,
+          "mix": 0.5
+        }
+      },
+      {
+        "id": "fx3",
+        "type": "reverb",
+        "params": {
+          "size": 4,
+          "tone": 5000,
+          "mix": 0.35
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "lfo",
+        "params": {
+          "wave": "sine",
+          "rate": 4.5,
+          "fade": 1
+        },
+        "per": "sound",
+        "target": {
+          "module": "source",
+          "param": "pitch"
+        },
+        "amount": 0.001
+      }
+    ],
+    "out": {
+      "level": -13,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

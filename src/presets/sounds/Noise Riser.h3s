@@ -1,0 +1,67 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Noise Riser",
+    "source": {
+      "id": "source",
+      "type": "noise",
+      "params": {
+        "color": "white"
+      }
+    },
+    "filter": {
+      "on": true,
+      "mode": "lowpass",
+      "cutoff": 250,
+      "reso": 0.4
+    },
+    "amp": {
+      "attack": 8,
+      "decay": 1,
+      "sustain": 1,
+      "release": 1.5
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "eq",
+        "params": {
+          "lowcut": 150
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "reverb",
+        "params": {
+          "size": 3,
+          "tone": 6000,
+          "mix": 0.3
+        }
+      }
+    ],
+    "mods": [
+      {
+        "id": "mod1",
+        "type": "env",
+        "params": {
+          "attack": 8,
+          "decay": 0,
+          "sustain": 1,
+          "release": 1
+        },
+        "per": "note",
+        "target": {
+          "module": "filter",
+          "param": "cutoff"
+        },
+        "amount": 0.9
+      }
+    ],
+    "out": {
+      "level": -8,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

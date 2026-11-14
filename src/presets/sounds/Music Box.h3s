@@ -1,0 +1,56 @@
+{
+  "format": "hadjitron3000/sound",
+  "version": 3,
+  "sound": {
+    "name": "Music Box",
+    "source": {
+      "id": "source",
+      "type": "osc",
+      "params": {
+        "wave": "sine",
+        "pitch": 12,
+        "voices": 2,
+        "spread": 8,
+        "width": 0.7,
+        "wave2": "sine",
+        "pitch2": 24,
+        "fine2": 8,
+        "mix2": 0.25
+      }
+    },
+    "amp": {
+      "attack": 0.001,
+      "decay": 1.4,
+      "sustain": 0,
+      "release": 0.8
+    },
+    "chain": [
+      {
+        "id": "fx1",
+        "type": "tape",
+        "params": {
+          "wow": 0.3,
+          "flutter": 0.2,
+          "hiss": 0.05,
+          "sat": 0.2,
+          "age": 0.4
+        }
+      },
+      {
+        "id": "fx2",
+        "type": "reverb",
+        "params": {
+          "size": 2.5,
+          "tone": 7000,
+          "mix": 0.25
+        }
+      }
+    ],
+    "mods": [],
+    "out": {
+      "level": -8,
+      "pan": 0
+    }
+  },
+  "samples": {}
+}

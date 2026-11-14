@@ -58,7 +58,8 @@ interface Voice {
   gateEnd: number; // when the key goes up, Infinity while held
   stopAt: number;
   slot: Slot;
-  links: [AudioNode, AudioParam][];
+  /** Takes the modulators of the whole sound out of the voice. */
+  unlink: (() => void)[];
   mods: NoteMod[];
   bend: Bend | null;
   done: boolean;
@@ -188,10 +189,24 @@ export class ChannelGraph {
       if (!byTarget.has(key)) byTarget.set(key, { ...inst.target, depths: [] });
       byTarget.get(key)!.depths.push(depth);
     }
+    // Chromium runs only the nodes that something pulls, and an oscillator or a buffer it does not run stands still,
+    // so a modulator of the whole sound that moves a parameter inside the voices moves on only while a voice pulls
+    // it. An oscillator or a sampler does so exactly while it plays. The voice filter and the grains processor go on
+    // for a while after their note, until the page or Chromium's main thread lets them go, which the load of the
+    // machine makes sooner or later; through them alone an LFO would stand still for a different time in every
+    // render. Those modulators are kept running all the time by a silent path into the output.
+    const steady = (module: string) => module === 'filter' || sound.source.type === 'grains';
+    let keep: GainNode | undefined;
     for (const [key, { module, param, depths }] of byTarget) {
       const sum = mix(ctx, depths);
-      if (inVoice(module)) this.voiceMods.set(key, sum);
-      else for (const target of this.moduleTargets(module)![param]) sum.connect(target);
+      if (!inVoice(module)) {
+        for (const target of this.moduleTargets(module)![param]) sum.connect(target);
+        continue;
+      }
+      this.voiceMods.set(key, sum);
+      if (!steady(module)) continue;
+      if (!keep) (keep = new GainNode(ctx, { gain: 0 })).connect(this.tremolo);
+      sum.connect(keep);
     }
     const now = ctx.currentTime;
     for (const [module, param, curve] of this.auto.entries()) {
@@ -394,21 +409,15 @@ export class ChannelGraph {
     (fader ? out.connect(fader) : out).connect(gain).connect(slot.input);
     const targets = (module: string, param: string) =>
       (module === 'source' ? src.targets : filter?.targets)?.[param] ?? [];
-    const links: [AudioNode, AudioParam][] = [];
-    for (const [key, sum] of this.voiceMods) {
-      const [module, param] = key.split('.');
-      for (const target of targets(module, param)) {
-        sum.connect(target);
-        links.push([sum, target]);
-      }
-    }
+    const inputs = new Map<string, AudioNode[]>();
     const mods = this.noteMods.map(({ inst, depthPerAmount }): NoteMod => {
       const share = inst.params.vel as number;
       const scale = 1 - share + share * vel;
       const src = modSource(this.ctx, inst.type, inst.params, this.bpm, { t0: t, perNote: true, seed: this.serial });
       const depth = new GainNode(this.ctx, { gain: inst.amount * depthPerAmount * scale });
       src.output.connect(depth);
-      for (const target of targets(inst.target!.module, inst.target!.param)) depth.connect(target);
+      const key = `${inst.target!.module}.${inst.target!.param}`;
+      inputs.set(key, [...(inputs.get(key) ?? []), depth]);
       const mod: NoteMod = { inst, src, depth, depthPerAmount, scale };
       if (src.level) {
         mod.env = { t0: t, scale: 1, segs: envelopeSegments(adsrOf(inst.params), length), param: src.level };
@@ -416,10 +425,24 @@ export class ChannelGraph {
       }
       return mod;
     });
+    // A parameter adds each connection to its own value in turn, in an order that changes from run to run, so with
+    // two or more the last bits differ between renders. What moves a parameter of the voice, the note's modulators
+    // and the summed ones of the whole sound, is added up first (see mix.ts) and connected once.
+    const unlink: (() => void)[] = [];
+    for (const key of new Set([...inputs.keys(), ...this.voiceMods.keys()])) {
+      const [module, param] = key.split('.');
+      const params = targets(module, param);
+      const shared = this.voiceMods.get(key);
+      if (params.length === 0) continue;
+      const into = mix(this.ctx, [...(inputs.get(key) ?? []), ...(shared ? [shared] : [])]);
+      for (const target of params) into.connect(target);
+      if (shared === into) unlink.push(() => params.forEach((target) => shared.disconnect(target)));
+      else if (shared) unlink.push(() => shared.disconnect(into));
+    }
     const held = length === Infinity;
     const voice: Voice = {
       note, root: note, src, filter, gain, env, fader, adsr, held, gateEnd: t + length, stopAt: Infinity, slot,
-      links, mods, bend: null, done: false, locks: own,
+      unlink, mods, bend: null, done: false, locks: own,
     };
     if (glideTime > 0 && from !== null && from !== note) this.bend(voice, t, from, note, glideTime);
     if (!voice.held) this.scheduleStop(voice);
@@ -529,7 +552,7 @@ export class ChannelGraph {
     if (v.done) return;
     v.done = true;
     v.gain.disconnect();
-    for (const [sum, param] of v.links) sum.disconnect(param);
+    for (const undo of v.unlink) undo();
     this.voices = this.voices.filter((x) => x !== v);
   }
 

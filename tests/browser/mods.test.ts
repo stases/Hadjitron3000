@@ -190,3 +190,49 @@ test('drift in each note wanders its own way', async () => {
   const b = pitches(1.05);
   expect(Math.max(...a.map((f, i) => Math.abs(f / b[i] - 1)))).toBeGreaterThan(0.01);
 });
+
+/** A saw through the voice filter, its cutoff moved by `mods`; the filter follows the key, so its detune is not 0. */
+const filtered = (mods: ModInst[], filter: Params = {}): Sound => {
+  const s = sound('osc', { wave: 'sawtooth' }, { amp: adsr(0.002, 0.1, 0.5, 0.02), mods, out: { level: -6 } });
+  return { ...s, filter: { ...s.filter, on: true, cutoff: 600, key: 0.5, ...filter } };
+};
+const cutoff = { module: 'filter', param: 'cutoff' };
+
+test('a render does not depend on when the page hears that a note has ended', async () => {
+  // The browser tells the page that a source has ended a while after it has, sooner or later with the load of the
+  // machine. Here the page hears it at once or a second later, and an lfo of the whole sound in the voices, which a
+  // resonant filter goes on pulling after its note, must not notice when the next note comes.
+  const s = filtered([mod('lfo', cutoff, 0.5, { rate: 3 })], { cutoff: 200, reso: 0.8 });
+  const proto = AudioScheduledSourceNode.prototype;
+  const real = Object.getOwnPropertyDescriptor(proto, 'onended')!;
+  const render = async (heardAt: number) => {
+    const heard: (() => void)[] = [];
+    Object.defineProperty(proto, 'onended', {
+      configurable: true,
+      get: () => null,
+      set(this: AudioScheduledSourceNode, handler: (e: Event) => void) {
+        heard.push(() => handler.call(this, new Event('ended')));
+      },
+    });
+    try {
+      return await notes(s, [[45, 0, 0.1]], 2, {
+        live: [[heardAt, () => heard.forEach((f) => f())], [1.2, (e) => e.play('a', 45, 1, 1.5, 0.3)]],
+      });
+    } finally {
+      Object.defineProperty(proto, 'onended', real);
+    }
+  };
+  const soon = await render(0.13);
+  const late = await render(1.13);
+  expect(peak(slice(soon, 1.5, 2)), 'the second note plays').toBeGreaterThan(0.05);
+  expect(peak(soon.map((v, i) => v - late[i]))).toBe(0);
+});
+
+test('modulators of the whole sound and of the note on one parameter render the same every time', async () => {
+  // The filter's detune is its own value plus each connection, added in an order that changes from run to run.
+  const env = { ...mod('env', cutoff, 0.4, adsr(0, 0.15, 0, 0.1)), per: 'note' as const };
+  const s = filtered([mod('lfo', cutoff, 0.3, { rate: 2 }), env]);
+  const chord: [number, number, number][] = [[57, 0, 0.3], [60, 0, 0.3], [64, 0, 0.3], [55, 0.5, 0.3], [62, 0.5, 0.3]];
+  const [first, ...more] = await Promise.all([0, 1, 2, 3].map(() => notes(s, chord, 1, { sampleRate: 22050 })));
+  for (const d of more) expect(peak(d.map((v, i) => v - first[i]))).toBe(0);
+});

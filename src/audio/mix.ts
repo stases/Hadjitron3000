@@ -1,6 +1,7 @@
 // Chromium adds up the connections into a node in an order that changes from run to run, and
 // float addition gives the same result in any order only for two terms. So that two renders are
-// bit-identical, every summing point in the engine has at most two inputs that are not silent.
+// bit-identical, every summing point in the engine has at most two inputs that are not silent. An AudioParam adds
+// its connections to its own value, which counts as one of the two, so a parameter that is not 0 gets one connection.
 
 /** The sum of several nodes, added one at a time. */
 export function mix(ctx: BaseAudioContext, nodes: AudioNode[]): AudioNode {

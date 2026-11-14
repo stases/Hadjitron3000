@@ -227,7 +227,8 @@ test('every recipe loads at each checkpoint, and its finished track is as loud a
     const p = loudest(a);
     expect(p, piece.example.title).toBeGreaterThan(0.3);
     expect(p, piece.example.title).toBeLessThan(0.8);
-    // The same to a hundred decibels below full scale: the browser's own compressors can differ in the last bits.
-    expect(peak(a.channels[0].map((v, i) => v - b.channels[0][i])), piece.example.title).toBeLessThan(1e-5);
+    for (const [c, d] of a.channels.entries()) {
+      expect(peak(d.map((v, i) => v - b.channels[c][i])), piece.example.title).toBe(0);
+    }
   }
 }, 60_000);
